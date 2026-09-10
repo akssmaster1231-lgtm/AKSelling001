@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profiles",
+      "description": "User profiles, addresses, and account details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "language": { "type": "string" },
+        "notificationEnabled": { "type": "boolean" },
+        "addresses": { "type": "array" },
+        "savedCards": { "type": "array" },
+        "devices": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "products": {
+      "title": "Product Catalog",
+      "description": "Store products for all categories and sellers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "mrp": { "type": "number" },
+        "discount": { "type": "number" },
+        "category": { "type": "string" },
+        "images": { "type": "array" },
+        "rating": { "type": "number" },
+        "ratingCount": { "type": "number" },
+        "brand": { "type": "string" },
+        "inStock": { "type": "boolean" },
+        "delivery": { "type": "string" }
+      },
+      "required": ["id", "title", "price", "category"]
+    },
+    "orders": {
+      "title": "Customer Orders",
+      "description": "Placed orders and their fulfillment status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "deliveryAddress": { "type": "object" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "razorpayOrderId": { "type": "string" },
+        "razorpayPaymentId": { "type": "string" },
+        "orderStatus": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "totalAmount", "paymentMethod"]
+    },
+    "banners": {
+      "title": "Promotional Banners",
+      "description": "Carousels and home banners",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "imageUrl"]
+    },
+    "sellers": {
+      "title": "Sellers and Suppliers",
+      "description": "Registered sellers, catalog info and verification details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" },
+        "phone": { "type": "string" },
+        "gstin": { "type": "string" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestoreRules": "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}"
+}

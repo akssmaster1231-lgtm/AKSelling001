@@ -1,0 +1,11 @@
+{
+  "name": "AKSelling",
+  "description": "An e-commerce online shopping and 00 Seller Diamond supplier hub application with product categories, lightning deals, full banner control, video reels shorts studio, cart, checkout, orders tracking, and supplier portal.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
