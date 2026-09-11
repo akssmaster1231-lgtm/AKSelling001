@@ -16,11 +16,13 @@ import SellerDashboard from '@/pages/SellerDashboard';
 import BuyNowCheckout from '@/pages/BuyNowCheckout';
 import OrdersPage from '@/pages/OrdersPage';
 import AdminPanel from '@/pages/AdminPanel';
+import SellerLockedModal from '@/components/SellerLockedModal';
+import { isWhitelistedSellerEmail } from '@/utils/sellerWhitelist';
 import type { Product } from '@/types';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
-  const { authInitialized } = useAuth();
+  const { user, authInitialized } = useAuth();
   const [appMode, setAppMode] = useState<'buying' | 'selling'>(() => {
     try {
       const saved = localStorage.getItem('akselling_app_mode');
@@ -40,6 +42,7 @@ function AppContent() {
   const [initialCategory, setInitialCategory] = useState<string | undefined>(undefined);
   const [showAuth, setShowAuth] = useState(false);
   const [showSellerReg, setShowSellerReg] = useState(false);
+  const [showSellerLockedModal, setShowSellerLockedModal] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [buyNowProduct, setBuyNowProduct] = useState<Product | null>(null);
@@ -61,6 +64,12 @@ function AppContent() {
   };
 
   const handleOpenSellerMode = () => {
+    const isWhitelisted = isWhitelistedSellerEmail(user?.email);
+    if (!isWhitelisted) {
+      setShowSellerLockedModal(true);
+      return;
+    }
+
     try {
       const isSeller = localStorage.getItem('akselling_is_seller');
       const active = localStorage.getItem('akselling_active_seller');
@@ -68,7 +77,7 @@ function AppContent() {
       if (isSeller === 'true' && active) {
         handleSwitchMode('selling');
       } else {
-        // Must complete Flipkart-style registration and document verification first!
+        // Must complete registration and document verification first
         setShowSellerReg(true);
       }
     } catch {
@@ -157,7 +166,7 @@ function AppContent() {
             searchQuery={searchQuery}
             onProductClick={handleProductClick}
             onCategoryClick={handleCategoryClick}
-            onBecomeSeller={() => setShowSellerReg(true)}
+            onBecomeSeller={handleOpenSellerMode}
           />
         )}
         {activeTab === 'play' && <PlayPage onProductClick={handleProductClick} />}
@@ -172,7 +181,7 @@ function AppContent() {
             onLogout={() => setActiveTab('home')}
             onLogin={() => setShowAuth(true)}
             onSwitchToSeller={handleOpenSellerMode}
-            onSellOnAKSelling={() => setShowSellerReg(true)}
+            onSellOnAKSelling={handleOpenSellerMode}
             onSellerDashboard={handleOpenSellerMode}
             onOrders={() => setShowOrders(true)}
             onAdminPanel={() => setShowAdmin(true)}
@@ -234,6 +243,14 @@ function AppContent() {
           }}
         />
       )}
+
+      <SellerLockedModal
+        isOpen={showSellerLockedModal}
+        onClose={() => setShowSellerLockedModal(false)}
+        currentUserEmail={user?.email}
+        onLoginPrompt={() => setShowAuth(true)}
+        onSwitchAccount={() => setShowAuth(true)}
+      />
 
       {showOrders && (
         <OrdersPage onBack={() => setShowOrders(false)} />

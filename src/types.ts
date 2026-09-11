@@ -65,3 +65,15 @@ export interface Banner {
   image: string;
   gradient: string;
 }
+
+export type OrderTrackingStepId = 'ordered' | 'shipped' | 'out_for_delivery' | 'delivered';
+
+export interface OrderTrackingCheckpoint {
+  id: string;
+  stepId: OrderTrackingStepId;
+  title: string;
+  location: string;
+  time: string;
+  completed: boolean;
+  active?: boolean;
+}

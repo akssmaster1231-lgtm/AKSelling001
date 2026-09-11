@@ -37,13 +37,19 @@ type State = 'form' | 'processing' | 'success';
 
 export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }: BuyNowCheckoutProps) {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { user, addAddress } = useAuth();
   const [step, setStep] = useState<Step>('address');
   const [state, setState] = useState<State>('form');
   const [error, setError] = useState('');
   const [orderId, setOrderId] = useState('');
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [pincodeSuccess, setPincodeSuccess] = useState('');
+
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(() => {
+    return user?.addresses && user.addresses.length > 0 ? user.addresses[0].id : null;
+  });
+  const [isAddingNewAddress, setIsAddingNewAddress] = useState(false);
+  const [saveAddressToProfile, setSaveAddressToProfile] = useState(true);
 
   const [form, setForm] = useState({
     name: user?.name || '',
@@ -61,17 +67,21 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
   // Pre-fill primary address if available from user profile
   useEffect(() => {
     if (user?.addresses && user.addresses.length > 0) {
-      const primary = user.addresses[0];
-      setForm((prev) => ({
-        ...prev,
-        name: prev.name || primary.name || user.name || '',
-        phone: prev.phone || primary.phone || user.phone || '',
-        street: prev.street || primary.address || '',
-        city: prev.city || primary.city || '',
-        pincode: prev.pincode || primary.pincode || '',
-      }));
+      const active = (selectedAddressId && user.addresses.find(a => a.id === selectedAddressId)) || user.addresses[0];
+      if (active) {
+        setSelectedAddressId(active.id);
+        setForm((prev) => ({
+          ...prev,
+          name: active.name || prev.name || user.name || '',
+          phone: active.phone || prev.phone || user.phone || '',
+          street: active.address || prev.street || '',
+          city: active.city || prev.city || '',
+          pincode: active.pincode || prev.pincode || '',
+          addressType: (active.label as 'Home' | 'Work' | 'Other') || 'Home',
+        }));
+      }
     }
-  }, [user]);
+  }, [user, selectedAddressId]);
 
   // Smart 6-digit Pincode Auto-Fill
   const handlePincodeChange = async (pincodeVal: string) => {
@@ -213,6 +223,22 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
         created_at: new Date().toISOString(),
       };
 
+      // 0. Auto-save fresh delivery address to user's real profile
+      if (saveAddressToProfile && (isAddingNewAddress || !selectedAddressId) && addAddress && user) {
+        try {
+          await addAddress({
+            label: form.addressType,
+            name: form.name.trim(),
+            phone: form.phone.trim(),
+            address: [form.houseNo, form.street, form.landmark].filter(Boolean).join(', '),
+            city: form.city.trim(),
+            pincode: form.pincode.trim(),
+          });
+        } catch {
+          // silent
+        }
+      }
+
       // 1. Record in Firebase Firestore in real-time
       await saveOrderToFirestore(orderPayload);
 
@@ -339,145 +365,257 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5 mb-1.5">
-                  <User size={14} className="text-gray-400" /> {t('fullName')} *
-                </label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  placeholder="Recipient full name"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5 mb-1.5">
-                  <Phone size={14} className="text-gray-400" /> {t('phoneNumber')} *
-                </label>
-                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-flipkart-500">
-                  <span className="px-2.5 py-2.5 bg-gray-50 text-xs font-semibold text-gray-600 border-r border-gray-200">+91</span>
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={e => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                    placeholder="10-digit mobile number"
-                    maxLength={10}
-                    className="w-full px-3 py-2.5 text-sm outline-none bg-white"
-                  />
+            {/* Real Saved Addresses from User Profile */}
+            {user?.addresses && user.addresses.length > 0 && (
+              <div className="space-y-2.5 pb-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-700">Saved Addresses in Your Profile</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingNewAddress(true);
+                      setSelectedAddressId(null);
+                    }}
+                    className={`text-xs font-semibold ${isAddingNewAddress ? 'text-gray-400' : 'text-flipkart-600 hover:underline'}`}
+                  >
+                    + Add Different Address
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {user.addresses.map((addr) => {
+                    const isSelected = selectedAddressId === addr.id && !isAddingNewAddress;
+                    return (
+                      <div
+                        key={addr.id}
+                        onClick={() => {
+                          setSelectedAddressId(addr.id);
+                          setIsAddingNewAddress(false);
+                          setForm((prev) => ({
+                            ...prev,
+                            name: addr.name || prev.name,
+                            phone: addr.phone || prev.phone,
+                            street: addr.address || prev.street,
+                            city: addr.city || prev.city,
+                            pincode: addr.pincode || prev.pincode,
+                            addressType: (addr.label as 'Home' | 'Work' | 'Other') || 'Home',
+                          }));
+                        }}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-flipkart-500 bg-flipkart-50/40 ring-1 ring-flipkart-500 shadow-sm'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                isSelected ? 'border-flipkart-600 bg-flipkart-600' : 'border-gray-300'
+                              }`}
+                            >
+                              {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </div>
+                            <span className="text-xs font-bold text-gray-900">{addr.name}</span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase">
+                              {addr.label || 'Home'}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500 font-medium">+91 {addr.phone}</span>
+                        </div>
+                        <p className="text-xs text-gray-600 pl-6 line-clamp-2">
+                          {addr.address}, {addr.city} - {addr.pincode}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Smart Pincode Lookup Field */}
-            <div>
-              <label className="text-xs font-medium text-gray-600 flex items-center justify-between mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <Navigation size={14} className="text-gray-400" /> Delivery Pincode *
-                </span>
-                {pincodeLoading && (
-                  <span className="text-[11px] text-flipkart-600 flex items-center gap-1">
-                    <Loader2 size={12} className="animate-spin" /> Detecting city & state...
-                  </span>
+            {/* Address Input Form (Shown when adding a new address OR if no saved address exists) */}
+            {(!user?.addresses?.length || isAddingNewAddress) && (
+              <div className="space-y-3 pt-1 border-t border-gray-100">
+                {user?.addresses && user.addresses.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-800">Enter New Delivery Address</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewAddress(false);
+                        if (user.addresses[0]) {
+                          setSelectedAddressId(user.addresses[0].id);
+                          setForm((prev) => ({
+                            ...prev,
+                            name: user.addresses[0].name || prev.name,
+                            phone: user.addresses[0].phone || prev.phone,
+                            street: user.addresses[0].address || prev.street,
+                            city: user.addresses[0].city || prev.city,
+                            pincode: user.addresses[0].pincode || prev.pincode,
+                            addressType: (user.addresses[0].label as 'Home' | 'Work' | 'Other') || 'Home',
+                          }));
+                        }
+                      }}
+                      className="text-xs font-semibold text-flipkart-600 hover:underline"
+                    >
+                      Use Saved Address
+                    </button>
+                  </div>
                 )}
-                {pincodeSuccess && (
-                  <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-                    <CheckCircle2 size={12} /> Auto-filled: {pincodeSuccess}
-                  </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5 mb-1.5">
+                      <User size={14} className="text-gray-400" /> {t('fullName')} *
+                    </label>
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={e => setForm({ ...form, name: e.target.value })}
+                      placeholder="Recipient full name"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5 mb-1.5">
+                      <Phone size={14} className="text-gray-400" /> {t('phoneNumber')} *
+                    </label>
+                    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-flipkart-500">
+                      <span className="px-2.5 py-2.5 bg-gray-50 text-xs font-semibold text-gray-600 border-r border-gray-200">+91</span>
+                      <input
+                        type="tel"
+                        value={form.phone}
+                        onChange={e => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                        placeholder="10-digit mobile number"
+                        maxLength={10}
+                        className="w-full px-3 py-2.5 text-sm outline-none bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Smart Pincode Lookup Field */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 flex items-center justify-between mb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <Navigation size={14} className="text-gray-400" /> Delivery Pincode *
+                    </span>
+                    {pincodeLoading && (
+                      <span className="text-[11px] text-flipkart-600 flex items-center gap-1">
+                        <Loader2 size={12} className="animate-spin" /> Detecting city & state...
+                      </span>
+                    )}
+                    {pincodeSuccess && (
+                      <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Auto-filled: {pincodeSuccess}
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    value={form.pincode}
+                    onChange={e => handlePincodeChange(e.target.value)}
+                    placeholder="Enter 6-digit delivery pincode (e.g. 110001)"
+                    maxLength={6}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 font-medium tracking-wide bg-white"
+                  />
+                </div>
+
+                {/* City & State Auto-populated */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1.5 block">City / District *</label>
+                    <input
+                      type="text"
+                      value={form.city}
+                      onChange={e => setForm({ ...form, city: e.target.value })}
+                      placeholder="City"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1.5 block">State *</label>
+                    <input
+                      type="text"
+                      value={form.state}
+                      onChange={e => setForm({ ...form, state: e.target.value })}
+                      placeholder="State"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* House No / Building & Street */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5 mb-1.5">
+                      <Building size={14} className="text-gray-400" /> Flat / House / Building *
+                    </label>
+                    <input
+                      type="text"
+                      value={form.houseNo}
+                      onChange={e => setForm({ ...form, houseNo: e.target.value })}
+                      placeholder="e.g. Flat 302, Royal Apt"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1.5 block">Street / Road / Colony *</label>
+                    <input
+                      type="text"
+                      value={form.street}
+                      onChange={e => setForm({ ...form, street: e.target.value })}
+                      placeholder="e.g. MG Road, Sector 14"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1.5 block">Famous Landmark (Optional)</label>
+                  <input
+                    type="text"
+                    value={form.landmark}
+                    onChange={e => setForm({ ...form, landmark: e.target.value })}
+                    placeholder="e.g. Near City Hospital / Metro Station"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
+                  />
+                </div>
+
+                {/* Address Type */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1.5 block">Address Type</label>
+                  <div className="flex gap-2">
+                    {(['Home', 'Work', 'Other'] as const).map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setForm({ ...form, addressType: type })}
+                        className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all ${
+                          form.addressType === type
+                            ? 'border-flipkart-500 bg-flipkart-50 text-flipkart-700'
+                            : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {user && (
+                  <label className="flex items-center gap-2 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={saveAddressToProfile}
+                      onChange={e => setSaveAddressToProfile(e.target.checked)}
+                      className="w-4 h-4 rounded text-flipkart-600 focus:ring-flipkart-500 border-gray-300"
+                    />
+                    <span className="text-xs text-gray-700 font-medium">Save this address to my profile for future orders</span>
+                  </label>
                 )}
-              </label>
-              <input
-                type="text"
-                value={form.pincode}
-                onChange={e => handlePincodeChange(e.target.value)}
-                placeholder="Enter 6-digit delivery pincode (e.g. 110001)"
-                maxLength={6}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 font-medium tracking-wide bg-white"
-              />
-            </div>
-
-            {/* City & State Auto-populated */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1.5 block">City / District *</label>
-                <input
-                  type="text"
-                  value={form.city}
-                  onChange={e => setForm({ ...form, city: e.target.value })}
-                  placeholder="City"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
-                />
               </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1.5 block">State *</label>
-                <input
-                  type="text"
-                  value={form.state}
-                  onChange={e => setForm({ ...form, state: e.target.value })}
-                  placeholder="State"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
-                />
-              </div>
-            </div>
-
-            {/* House No / Building & Street */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5 mb-1.5">
-                  <Building size={14} className="text-gray-400" /> Flat / House / Building *
-                </label>
-                <input
-                  type="text"
-                  value={form.houseNo}
-                  onChange={e => setForm({ ...form, houseNo: e.target.value })}
-                  placeholder="e.g. Flat 302, Royal Apt"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1.5 block">Street / Road / Colony *</label>
-                <input
-                  type="text"
-                  value={form.street}
-                  onChange={e => setForm({ ...form, street: e.target.value })}
-                  placeholder="e.g. MG Road, Sector 14"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1.5 block">Famous Landmark (Optional)</label>
-              <input
-                type="text"
-                value={form.landmark}
-                onChange={e => setForm({ ...form, landmark: e.target.value })}
-                placeholder="e.g. Near City Hospital / Metro Station"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
-              />
-            </div>
-
-            {/* Address Type */}
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1.5 block">Address Type</label>
-              <div className="flex gap-2">
-                {(['Home', 'Work', 'Other'] as const).map(type => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setForm({ ...form, addressType: type })}
-                    className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all ${
-                      form.addressType === type
-                        ? 'border-flipkart-500 bg-flipkart-50 text-flipkart-700'
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
 
             {error && <p className="text-sm text-error-500 bg-error-50 rounded-lg px-3 py-2">{error}</p>}
             <button

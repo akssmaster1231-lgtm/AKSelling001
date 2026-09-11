@@ -27,6 +27,7 @@ export default function AuthPage({ onClose, onSuccess, isStrictGate = false }: A
     sendPhoneOTP,
     confirmPhoneOTP,
     signInWithGoogle,
+    signInWithDirectCredentials,
   } = useAuth();
 
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
@@ -336,6 +337,38 @@ export default function AuthPage({ onClose, onSuccess, isStrictGate = false }: A
                 )}
                 <span>Continue with Google Account</span>
               </button>
+
+              {/* Authorized Partner Direct Sign In */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setError('');
+                    setIsSendingOtp(true);
+                    try {
+                      const res = await signInWithDirectCredentials(
+                        'Anoj Kumar Yadav',
+                        '9893598920',
+                        'anojkumaryadav7290@gmail.com'
+                      );
+                      if (res.error) {
+                        setError(res.error);
+                      } else {
+                        onSuccess();
+                      }
+                    } catch {
+                      setError('Failed to sign in as authorized partner.');
+                    } finally {
+                      setIsSendingOtp(false);
+                    }
+                  }}
+                  disabled={isAnyLoading}
+                  className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-bold text-xs py-3 px-4 rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <ShieldCheck size={16} className="text-amber-400 shrink-0" />
+                  <span>Sign In as Authorized Seller (anojkumaryadav7290@gmail.com)</span>
+                </button>
+              </div>
             </div>
           ) : (
             /* OTP Verification Screen */

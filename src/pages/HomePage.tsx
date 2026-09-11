@@ -90,6 +90,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
   const trendingProducts = [...allProducts].sort((a, b) => b.ratingCount - a.ratingCount).slice(0, 6);
   const topDeals = [...allProducts].sort((a, b) => b.discount - a.discount).slice(0, 6);
+  const minPrice = allProducts.length > 0 ? Math.min(...allProducts.map(p => p.price)) : 0;
 
   if (loading) {
     return (
@@ -151,6 +152,48 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
             </div>
           )}
         </section>
+      ) : allProducts.length === 0 ? (
+        <div className="mt-4 px-3 space-y-4">
+          <div className="bg-white rounded-xl shadow-card p-6 text-center">
+            <div className="w-14 h-14 bg-flipkart-50 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Gift size={26} className="text-flipkart-500" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900">Welcome to AKSelling</h3>
+            <p className="text-xs text-gray-500 mt-1.5 max-w-xs mx-auto leading-relaxed">
+              India's trusted marketplace. Real verified sellers are onboarding! Are you a manufacturer, distributor, or artisan?
+            </p>
+            <button
+              onClick={onBecomeSeller}
+              className="mt-4 inline-flex items-center gap-2 bg-flipkart-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl hover:bg-flipkart-600 transition-colors shadow-xs cursor-pointer"
+            >
+              Start Selling Today →
+            </button>
+          </div>
+
+          <div
+            onClick={onBecomeSeller}
+            className="bg-gradient-to-r from-accent-400 to-accent-600 rounded-xl p-4 flex items-center gap-3 shadow-card cursor-pointer hover:opacity-95 transition-opacity"
+          >
+            <div className="bg-white/20 rounded-full p-2 shrink-0">
+              <Gift size={24} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold text-sm">{t('becomeSeller')}</p>
+              <p className="text-white/80 text-xs truncate">Instant GST & Bank verified seller onboarding</p>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onBecomeSeller?.();
+              }}
+              className="bg-white text-flipkart-700 text-xs font-bold px-4 py-2 rounded-full shadow-xs hover:bg-slate-50 active:scale-95 transition-all shrink-0 cursor-pointer"
+              id="home-join-seller-btn"
+            >
+              Join Now
+            </button>
+          </div>
+        </div>
       ) : (
         <>
           <div className="mt-4 px-3">
@@ -249,15 +292,17 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
             </div>
           </div>
 
-          <div className="mt-4 px-3">
-            <div className="bg-white rounded-xl shadow-card p-4 text-center">
-              <p className="text-xs text-gray-400 mb-1">Top deals starting from</p>
-              <p className="text-2xl font-extrabold text-flipkart-600">
-                {formatPrice(Math.min(...allProducts.map(p => p.price)))}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Shop from our widest collection</p>
+          {minPrice > 0 && (
+            <div className="mt-4 px-3">
+              <div className="bg-white rounded-xl shadow-card p-4 text-center">
+                <p className="text-xs text-gray-400 mb-1">Top deals starting from</p>
+                <p className="text-2xl font-extrabold text-flipkart-600">
+                  {formatPrice(minPrice)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Shop from our widest collection</p>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </div>

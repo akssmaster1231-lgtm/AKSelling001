@@ -95,6 +95,20 @@ export default function PlayPage({ onProductClick }: PlayPageProps) {
     setTimeout(() => setSharedReel(null), 2500);
   };
 
+  if (reels.length === 0) {
+    return (
+      <div className="fixed inset-0 z-40 bg-gray-950 flex flex-col items-center justify-center p-6 text-center text-white">
+        <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-4">
+          <Play size={28} className="text-pink-400 ml-1" />
+        </div>
+        <h2 className="text-lg font-bold">No Video Reels Yet</h2>
+        <p className="text-sm text-gray-400 mt-2 max-w-xs leading-relaxed">
+          Sellers can create and upload high-converting video reels directly from the Seller Dashboard!
+        </p>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black overflow-y-auto snap-y snap-mandatory no-scrollbar">
@@ -324,38 +338,40 @@ function ReelItem({
           <p className="text-white text-sm font-bold mb-1">{reel.title}</p>
           <p className="text-white/80 text-xs mb-3 line-clamp-2">{reel.description}</p>
 
-          <button
-            onClick={onProductClick}
-            className="flex items-center gap-3 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-2xl p-2.5 w-full max-w-xs border border-white/20 transition-colors"
-          >
-            <img
-              src={reel.product.images[0] || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'}
-              alt=""
-              className="w-12 h-12 rounded-xl object-cover shrink-0 border border-white/20"
-            />
-            <div className="flex-1 text-left min-w-0">
-              <p className="text-white text-xs font-bold truncate">{reel.product.title}</p>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-amber-300 text-sm font-black">{formatPrice(reel.product.price)}</span>
-                <span className="text-white/60 text-xs line-through">{formatPrice(reel.product.mrp)}</span>
-              </div>
-            </div>
-            <div
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAddToCart();
-              }}
-              className={`shrink-0 rounded-xl p-2 transition-colors ${
-                showAdded ? 'bg-emerald-500' : 'bg-[#9f2089]'
-              }`}
+          {reel.product && (
+            <button
+              onClick={onProductClick}
+              className="flex items-center gap-3 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-2xl p-2.5 w-full max-w-xs border border-white/20 transition-colors"
             >
-              {showAdded ? (
-                <span className="text-white text-xs font-bold px-1">Added!</span>
-              ) : (
-                <ShoppingBag size={18} className="text-white" />
-              )}
-            </div>
-          </button>
+              <img
+                src={reel.product.images?.[0] || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'}
+                alt=""
+                className="w-12 h-12 rounded-xl object-cover shrink-0 border border-white/20"
+              />
+              <div className="flex-1 text-left min-w-0">
+                <p className="text-white text-xs font-bold truncate">{reel.product.title}</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-amber-300 text-sm font-black">{formatPrice(reel.product.price)}</span>
+                  <span className="text-white/60 text-xs line-through">{formatPrice(reel.product.mrp)}</span>
+                </div>
+              </div>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddToCart();
+                }}
+                className={`shrink-0 rounded-xl p-2 transition-colors ${
+                  showAdded ? 'bg-emerald-500' : 'bg-[#9f2089]'
+                }`}
+              >
+                {showAdded ? (
+                  <span className="text-white text-xs font-bold px-1">Added!</span>
+                ) : (
+                  <ShoppingBag size={18} className="text-white" />
+                )}
+              </div>
+            </button>
+          )}
         </div>
       </div>
     </div>

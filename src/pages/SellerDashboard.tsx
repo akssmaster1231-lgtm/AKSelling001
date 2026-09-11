@@ -45,137 +45,10 @@ import {
   subscribeOrders,
 } from '@/firebase';
 
-// Initial Mock Catalogs
-const INITIAL_PRODUCTS: SellerProduct[] = [
-  {
-    id: 'sp_1',
-    catalogId: 'CAT-98421',
-    sku: 'AK-BOULT-Z40',
-    title: 'Boult Audio AirBass Z40 Wireless Earbuds (60H Playtime)',
-    description: 'Ultra-low latency gaming mode, 60 hours playback, ENC quad mic, IPX5 water resistant.',
-    price: 1299,
-    mrp: 3999,
-    discount: 68,
-    category: 'electronics',
-    images: [
-      'https://images.pexels.com/photos/3780681/pexels-photo-3780681.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    ],
-    stock: 45,
-    brand: 'Boult',
-    status: 'live',
-    salesCount: 0,
-    views: 0,
-    rating: 0.0,
-  },
-  {
-    id: 'sp_2',
-    catalogId: 'CAT-89302',
-    sku: 'AK-FASTRACK-BEAT',
-    title: 'Fastrack Reflex Beat+ 1.69" UltraVU Display Smartwatch',
-    description: 'Heart rate tracker, 60+ sports modes, 100+ cloud watch faces, 5ATM water resistance.',
-    price: 1799,
-    mrp: 4995,
-    discount: 64,
-    category: 'watches',
-    images: [
-      'https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    ],
-    stock: 18,
-    brand: 'Fastrack',
-    status: 'live',
-    salesCount: 0,
-    views: 0,
-    rating: 0.0,
-  },
-  {
-    id: 'sp_3',
-    catalogId: 'CAT-74910',
-    sku: 'AK-DENNIS-OLIVE',
-    title: 'Dennis Lingo Men Slim Fit Casual Cotton Shirt - Olive Green',
-    description: '100% premium breathable cotton, full sleeve, button down collar, regular machine wash.',
-    price: 649,
-    mrp: 1849,
-    discount: 65,
-    category: 'fashion',
-    images: [
-      'https://images.pexels.com/photos/297933/pexels-photo-297933.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    ],
-    stock: 25,
-    brand: 'Dennis Lingo',
-    status: 'live',
-    salesCount: 0,
-    views: 0,
-    rating: 0.0,
-    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-    fabric: '100% Pure Cotton',
-  },
-  {
-    id: 'sp_4',
-    catalogId: 'CAT-62914',
-    sku: 'AK-PUMA-RUNNER',
-    title: 'Puma Men Running & Walking Lightweight Shoes',
-    description: 'SoftFoam+ sockliner for superior cushioning and optimal comfort for everyday running.',
-    price: 2199,
-    mrp: 4999,
-    discount: 56,
-    category: 'footwear',
-    images: [
-      'https://images.pexels.com/photos/1598505/pexels-photo-1598505.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    ],
-    stock: 4, // low stock
-    brand: 'Puma',
-    status: 'live',
-    salesCount: 0,
-    views: 0,
-    rating: 0.0,
-  },
-  {
-    id: 'sp_5',
-    catalogId: 'CAT-51928',
-    sku: 'AK-ROADSTER-TEE',
-    title: 'Roadster Pure Cotton Solid Round Neck Regular T-Shirt',
-    description: 'High-density 180 GSM combed cotton fabric, bio-washed for ultra-soft handfeel.',
-    price: 399,
-    mrp: 999,
-    discount: 60,
-    category: 'fashion',
-    images: [
-      'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    ],
-    stock: 50,
-    brand: 'Roadster',
-    status: 'live',
-    salesCount: 0,
-    views: 0,
-    rating: 0.0,
-    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-    fabric: '100% Pure Cotton',
-  },
-  {
-    id: 'sp_6',
-    catalogId: 'CAT-41092',
-    sku: 'AK-USPA-POLO',
-    title: 'U.S. Polo Assn. Men Solid Pure Cotton Polo Collar T-Shirt',
-    description: 'Signature ribbed collar, 2-button placket, breathable piqué honeycomb cotton knit.',
-    price: 899,
-    mrp: 1999,
-    discount: 55,
-    category: 'fashion',
-    images: [
-      'https://images.pexels.com/photos/1232459/pexels-photo-1232459.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    ],
-    stock: 0, // out of stock
-    brand: 'U.S. Polo Assn.',
-    status: 'out_of_stock',
-    salesCount: 0,
-    views: 0,
-    rating: 0.0,
-    sizes: ['M', 'L', 'XL', 'XXL'],
-    fabric: 'Cotton Blend',
-  },
-];
+// Initial Catalogs (Default Clean Slate 00 for Public Launch)
+const INITIAL_PRODUCTS: SellerProduct[] = [];
 
-// Initial Mock Orders (Default 00 Clean Slate for Public Launch)
+// Initial Orders (Default 00 Clean Slate for Public Launch)
 const INITIAL_ORDERS: SellerOrder[] = [];
 
 // Initial Returns (Default 00 Clean Slate for Public Launch)
@@ -242,11 +115,25 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
     }
   };
 
-  // State initialization with localStorage fallback
+  // State initialization with localStorage fallback (strictly filtering out any legacy dummy items)
   const [products, setProducts] = useState<SellerProduct[]>(() => {
     try {
-      const saved = safeLocalStorageGetItem('akselling_seller_products');
-      if (saved) return JSON.parse(saved);
+      const saved = safeLocalStorageGetItem('akselling_seller_products') || localStorage.getItem('akselling_seller_products');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (p: SellerProduct) =>
+              !p.id?.startsWith('sp_') &&
+              p.catalogId !== 'CAT-98421' &&
+              p.catalogId !== 'CAT-89302' &&
+              p.catalogId !== 'CAT-74910' &&
+              p.catalogId !== 'CAT-62914' &&
+              p.catalogId !== 'CAT-51928' &&
+              p.catalogId !== 'CAT-41092'
+          );
+        }
+      }
     } catch {
       // fallback
     }

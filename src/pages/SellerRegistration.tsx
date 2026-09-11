@@ -34,10 +34,14 @@ import {
   type SellerVerificationAudit,
 } from '@/firebase';
 import type { ConfirmationResult } from 'firebase/auth';
+import { useAuth } from '@/auth-context';
 import { safeLocalStorageSetItem } from '@/utils/storageHelper';
 import { parseFirebaseAuthError } from '@/utils/authErrorHelper';
-
-const OFFICIAL_SUPPORT_EMAIL = 'support.akselling@gmail.com';
+import {
+  isWhitelistedSellerEmail,
+  WHITELISTED_SELLER_EMAIL,
+  OFFICIAL_SUPPORT_EMAIL,
+} from '@/utils/sellerWhitelist';
 
 interface SellerRegistrationProps {
   onBack: () => void;
@@ -100,6 +104,9 @@ const IFSC_BANK_MAP: Record<string, string> = {
 };
 
 export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRegistrationProps) {
+  const { user } = useAuth();
+  const isWhitelisted = isWhitelistedSellerEmail(user?.email);
+
   // Step 1: Identification & Docs | Step 2: Mobile OTP | Step 3: Bank Details & Verification | Step 4: Approved & Hub Entry
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [regType, setRegType] = useState<RegType>('gst');
@@ -109,12 +116,18 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
 
   // Form Fields - Path A & B
   const [businessName, setBusinessName] = useState('');
-  const [ownerName, setOwnerName] = useState('');
+  const [ownerName, setOwnerName] = useState(() => (isWhitelisted ? 'Anoj Kumar Yadav' : ''));
   const [gstNumber, setGstNumber] = useState('');
   const [panNumber, setPanNumber] = useState('');
   const [aadharNumber, setAadharNumber] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
-  const [email, setEmail] = useState('');
+  const [mobileNumber, setMobileNumber] = useState(() => user?.phone?.replace(/\D/g, '').slice(-10) || '');
+  const [email, setEmail] = useState(() => (isWhitelisted ? (user?.email || WHITELISTED_SELLER_EMAIL) : (user?.email || '')));
+
+  useEffect(() => {
+    if (user?.email) {
+      setEmail(user.email);
+    }
+  }, [user?.email]);
 
   // Warehouse / Pickup Address
   const [pincode, setPincode] = useState('');
@@ -234,14 +247,22 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
   const isAccountMatched = accountNumber.length >= 8 && accountNumber === confirmAccountNumber;
   const isIfscValid = /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode.toUpperCase().trim());
 
-  // Real-time backend GST validation trigger
+  // Real-time backend GST validation trigger (instant & smooth autofill)
   useEffect(() => {
     const cleanGst = gstNumber.trim().toUpperCase();
     if (cleanGst.length === 15 && isGstValid) {
+      const controller = new AbortController();
       fetch('/api/seller/validate-gstin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gstin: cleanGst }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || WHITELISTED_SELLER_EMAIL,
+        },
+        body: JSON.stringify({
+          gstin: cleanGst,
+          userEmail: user?.email || WHITELISTED_SELLER_EMAIL,
+        }),
+        signal: controller.signal,
       })
         .then(res => res.json())
         .then(data => {
@@ -256,29 +277,39 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
               provider: data.provider,
               message: data.message,
             });
-            // Auto-fill business display name if empty
-            if (data.tradeName && !businessName) {
-              setBusinessName(data.tradeName);
+            // Auto-fill business display name and owner name if not yet entered
+            if (data.tradeName) {
+              setBusinessName(prev => (prev.trim() ? prev : data.tradeName));
             }
-            if (data.legalName && !ownerName) {
-              setOwnerName(data.legalName);
+            if (data.legalName) {
+              setOwnerName(prev => (prev.trim() ? prev : data.legalName));
             }
           }
         })
         .catch(() => {});
+      return () => controller.abort();
     } else {
       setGstFeedback(null);
     }
-  }, [gstNumber, isGstValid, businessName, ownerName]);
+  }, [gstNumber, isGstValid, user?.email]);
 
   // Real-time backend PAN validation trigger
   useEffect(() => {
     const cleanPan = panNumber.trim().toUpperCase();
     if (cleanPan.length === 10 && isPanValid) {
+      const controller = new AbortController();
       fetch('/api/seller/validate-pan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pan: cleanPan, name: ownerName }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || WHITELISTED_SELLER_EMAIL,
+        },
+        body: JSON.stringify({
+          pan: cleanPan,
+          name: ownerName,
+          userEmail: user?.email || WHITELISTED_SELLER_EMAIL,
+        }),
+        signal: controller.signal,
       })
         .then(res => res.json())
         .then(data => {
@@ -291,24 +322,33 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
               provider: data.provider,
               message: data.message,
             });
-            if (data.registeredName && !ownerName) {
-              setOwnerName(data.registeredName);
+            if (data.registeredName) {
+              setOwnerName(prev => (prev.trim() ? prev : data.registeredName));
             }
           }
         })
         .catch(() => {});
+      return () => controller.abort();
     } else {
       setPanFeedback(null);
     }
-  }, [panNumber, isPanValid, ownerName]);
+  }, [panNumber, isPanValid, ownerName, user?.email]);
 
   // Real-time backend Aadhaar validation trigger
   useEffect(() => {
     if (rawAadhar.length === 12 && isAadharValid) {
+      const controller = new AbortController();
       fetch('/api/seller/validate-aadhaar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aadhaar: rawAadhar }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || WHITELISTED_SELLER_EMAIL,
+        },
+        body: JSON.stringify({
+          aadhaar: rawAadhar,
+          userEmail: user?.email || WHITELISTED_SELLER_EMAIL,
+        }),
+        signal: controller.signal,
       })
         .then(res => res.json())
         .then(data => {
@@ -321,10 +361,11 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
           }
         })
         .catch(() => {});
+      return () => controller.abort();
     } else {
       setAadharFeedback(null);
     }
-  }, [rawAadhar, isAadharValid]);
+  }, [rawAadhar, isAadharValid, user?.email]);
 
   // Auto-detect bank from IFSC & backend Penny-Drop validation
   useEffect(() => {
@@ -338,15 +379,21 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
       }
     }
     if (code.length === 11 && isIfscValid) {
+      const controller = new AbortController();
       fetch('/api/seller/validate-bank', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || WHITELISTED_SELLER_EMAIL,
+        },
         body: JSON.stringify({
           accountNumber,
           confirmAccountNumber,
           ifsc: code,
           beneficiaryName: bankBeneficiary,
+          userEmail: user?.email || WHITELISTED_SELLER_EMAIL,
         }),
+        signal: controller.signal,
       })
         .then(res => res.json())
         .then(data => {
@@ -359,18 +406,19 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
               provider: data.provider,
             });
             if (data.bankName) setBankName(data.bankName);
-            if (data.beneficiaryName && !bankBeneficiary) {
-              setBankBeneficiary(data.beneficiaryName);
+            if (data.beneficiaryName) {
+              setBankBeneficiary(prev => (prev.trim() ? prev : data.beneficiaryName));
             }
           }
         })
         .catch(() => {
           setBankFeedback({ valid: true, bankName });
         });
+      return () => controller.abort();
     } else {
       setBankFeedback(null);
     }
-  }, [ifscCode, isIfscValid, accountNumber, confirmAccountNumber, bankBeneficiary, bankName]);
+  }, [ifscCode, isIfscValid, accountNumber, confirmAccountNumber, bankBeneficiary, bankName, user?.email]);
 
   // Auto-detect state / city from Pincode
   const handlePincodeChange = (pin: string) => {
@@ -418,7 +466,7 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
       setGstNumber('07AAAAA0000A1Z5');
       setPanNumber('AAAAA0000A');
       setMobileNumber('9876543210');
-      setEmail('balajifashions@akselling.in');
+      setEmail(WHITELISTED_SELLER_EMAIL);
       setPincode('110001');
       setCity('New Delhi');
       setStateName('Delhi');
@@ -438,7 +486,7 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
       setPanNumber('ABCDE1234F');
       setAadharNumber('5489 1234 8901');
       setMobileNumber('9876543210');
-      setEmail('artisan.crafts@akselling.in');
+      setEmail(WHITELISTED_SELLER_EMAIL);
       setPincode('221001');
       setCity('Varanasi');
       setStateName('Uttar Pradesh');
@@ -457,6 +505,11 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
 
   // Quick 1-Tap Hub Activation for verified merchant access
   const handleQuickActivate = () => {
+    if (!isWhitelistedSellerEmail(user?.email || email)) {
+      setError('Public seller registrations are temporarily locked. Merchant registration is restricted to authorized partners.');
+      return;
+    }
+
     const generatedId = `SLR-DIA-${Math.floor(10000 + Math.random() * 90000)}`;
     const sellerRecord: SellerKycRecord = {
       id: generatedId,
@@ -469,7 +522,7 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
       aadhar_masked: 'XXXX-XXXX-8920',
       mobile_number: mobileNumber.trim() || '9893598920',
       is_mobile_verified: true,
-      email: email.trim() || 'support.akselling@gmail.com',
+      email: WHITELISTED_SELLER_EMAIL,
       support_email: OFFICIAL_SUPPORT_EMAIL,
       pickup_address: 'Khasra 42, Okhla Phase 3 Industrial Area',
       city: 'New Delhi',
@@ -705,6 +758,11 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
       return;
     }
 
+    if (!isWhitelistedSellerEmail(user?.email || email)) {
+      setError('Public seller registrations are temporarily locked. Merchant onboarding is restricted to authorized partners (anojkumaryadav7290@gmail.com).');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const generatedId = `SLR-DIA-${Math.floor(10000 + Math.random() * 90000)}`;
@@ -734,7 +792,7 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
       aadhar_masked: safeAadharMasked,
       mobile_number: mobileNumber.trim(),
       is_mobile_verified: true,
-      email: email.trim() || `${businessName.toLowerCase().replace(/[^a-z0-9]/g, '')}@akselling.com`,
+      email: (user?.email || email || WHITELISTED_SELLER_EMAIL).trim(),
       support_email: OFFICIAL_SUPPORT_EMAIL,
       pickup_address: fullAddress.trim(),
       city: city || 'New Delhi',
@@ -848,6 +906,67 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
     }
   };
 
+  if (!isWhitelisted) {
+    return (
+      <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto">
+        <div className="bg-white rounded-3xl max-w-[480px] w-full overflow-hidden shadow-2xl flex flex-col p-6 animate-scale-up border border-slate-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+              <Lock size={22} className="stroke-[2.2]" />
+            </div>
+            <div>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider">
+                Authorized Onboarding Only
+              </span>
+              <h2 className="text-base font-bold text-gray-900 mt-0.5">
+                Public Seller Registrations Temporarily Locked
+              </h2>
+            </div>
+          </div>
+
+          <div className="space-y-3 text-xs text-gray-600 leading-relaxed">
+            <p>
+              Merchant registration and real KYC document submission are currently restricted exclusively to pre-authorized partners. Public registrations are locked.
+            </p>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-left">
+              <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+                Current Logged-in Account
+              </span>
+              <div className="flex items-center justify-between text-gray-900 font-medium">
+                <span className="truncate">{user?.email || 'Guest / Not Signed In'}</span>
+                <span className="text-rose-600 font-bold text-[11px] bg-rose-50 px-2 py-0.5 rounded border border-rose-200 shrink-0 ml-2">
+                  Not Whitelisted
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-500">
+              Only authorized partner (<strong className="text-gray-900">{WHITELISTED_SELLER_EMAIL}</strong>) is permitted to register new catalogs, manage live inventory, and submit KYC credentials via Cashfree verification APIs.
+            </p>
+            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-slate-600 flex items-center gap-2">
+              <BellRing size={14} className="text-slate-400 shrink-0" />
+              <p className="text-[11px]">
+                For merchant inquiries or onboarding access, contact vendor support at{' '}
+                <a href={`mailto:${OFFICIAL_SUPPORT_EMAIL}`} className="font-bold text-[#2874f0] underline">
+                  {OFFICIAL_SUPPORT_EMAIL}
+                </a>
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="w-full bg-[#2874f0] hover:bg-[#1a65dc] text-white font-bold text-xs py-3 px-4 rounded-xl shadow-xs transition-colors cursor-pointer text-center"
+            >
+              Back to Store
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-3 overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-[480px] w-full overflow-hidden shadow-2xl flex flex-col max-h-[96vh] my-auto animate-scale-up border border-slate-200">
@@ -882,6 +1001,17 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
             <ShieldCheck size={14} className="text-yellow-300" />
             <span className="font-bold">Govt. Verified</span>
           </div>
+        </div>
+
+        {/* Whitelisted Partner Verified Banner */}
+        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 flex items-center justify-between text-xs shrink-0">
+          <div className="flex items-center gap-1.5 font-bold text-emerald-800">
+            <ShieldCheck size={16} className="text-emerald-600" />
+            <span>Authorized Merchant: {WHITELISTED_SELLER_EMAIL}</span>
+          </div>
+          <span className="bg-emerald-600 text-white font-black text-[10px] px-2 py-0.5 rounded-full shadow-2xs">
+            Live KYC Unlocked
+          </span>
         </div>
 
         {/* Multi-Step Indicator Bar */}
