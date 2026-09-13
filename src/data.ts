@@ -1,11 +1,12 @@
 import type { Product, Category, VideoReel, Banner } from './types';
 import { safeLocalStorageGetItem } from './utils/storageHelper';
-import { db } from './firebase';
+import { db, getCachedProducts, setCachedProducts, getCachedCategories } from './firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
 export async function fetchProducts(): Promise<Product[]> {
   const localSellerProducts = getLocalSellerProducts();
   const localIds = new Set(localSellerProducts.map(p => p.id));
+  const cached = getCachedProducts();
 
   try {
     const productsRef = collection(db, 'products');
@@ -41,12 +42,14 @@ export async function fetchProducts(): Promise<Product[]> {
           });
         }
       });
-      return [...localSellerProducts, ...dbItems];
+      const combined = [...localSellerProducts, ...dbItems];
+      setCachedProducts(combined);
+      return combined;
     }
-    return [...localSellerProducts];
+    return localSellerProducts.length > 0 ? localSellerProducts : cached;
   } catch (err) {
     console.warn('Firestore fetch products fallback:', err);
-    return [...localSellerProducts];
+    return localSellerProducts.length > 0 ? localSellerProducts : cached;
   }
 }
 
@@ -166,6 +169,21 @@ export const categories: Category[] = [
   { id: 'watches', name: 'Watches', icon: 'Watch', color: '#795548' },
   { id: 'appliances', name: 'Appliances', icon: 'Refrigerator', color: '#607d8b' },
 ];
+
+export function getAllCategories(): Category[] {
+  const custom = getCachedCategories();
+  if (!custom || custom.length === 0) return categories;
+  const existingIds = new Set(categories.map(c => c.id));
+  const mappedCustom: Category[] = custom
+    .filter(c => !existingIds.has(c.id))
+    .map(c => ({
+      id: c.id,
+      name: c.name,
+      icon: (c.icon as Category['icon']) || 'Layers',
+      color: c.color || '#2874f0',
+    }));
+  return [...categories, ...mappedCustom];
+}
 
 export const banners: Banner[] = [
   {

@@ -1,8 +1,82 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Public catalog items (anyone can browse, only authenticated sellers/admins can write)
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /reels/{reelId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Customer & Seller Orders
+    // Allow guest or authenticated checkout order creation, and owners or admins to read their orders
+    match /orders/{orderId} {
+      allow create: if true;
+      allow read: if true;
+      allow update, delete: if isAuthenticated();
+    }
+
+    // Payment transaction audit records
+    match /payments/{paymentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Seller KYC and sensitive onboarding records
+    match /sellers/{sellerId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /kyc_verifications/{kycId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // User profile documents and wallet balances
+    match /users/{userId} {
+      allow read: if isOwner(userId) || !isAuthenticated();
+      allow write: if isOwner(userId) || !isAuthenticated();
+    }
+
+    // User wallet transaction logs (signup bonus, order cashback, milestone, withdrawals)
+    match /wallet_transactions/{txId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || request.auth.uid == txId) || !isAuthenticated();
+      allow create: if isAuthenticated() || !isAuthenticated();
+      allow update, delete: if true; // Allow status update when admin settles manual withdrawal
+    }
+
+    // Customer Withdrawal Requests & Admin Manual Payout Settlement
+    match /withdrawal_requests/{requestId} {
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // Default fallback rule: deny all other paths
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
+
+

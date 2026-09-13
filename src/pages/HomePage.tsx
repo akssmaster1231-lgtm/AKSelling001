@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ChevronRight, Zap, TrendingUp, Gift, Loader2 } from 'lucide-react';
-import { products as fallbackProducts, banners as fallbackBanners, categories, fetchProducts, formatPrice } from '@/data';
+import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice } from '@/data';
 import { fetchBanners } from '@/banner-api';
-import { subscribeProducts, subscribeBanners } from '@/firebase';
+import { subscribeProducts, subscribeBanners, getCachedProducts, subscribeCategories } from '@/firebase';
 import { useI18n } from '@/i18n';
-import type { Product, Banner } from '@/types';
+import type { Product, Banner, Category } from '@/types';
 import BannerCarousel from '@/components/BannerCarousel';
 import ProductCard from '@/components/ProductCard';
 
@@ -17,9 +17,10 @@ interface HomePageProps {
 
 export default function HomePage({ searchQuery, onProductClick, onCategoryClick, onBecomeSeller }: HomePageProps) {
   const { t } = useI18n();
-  const [dbProducts, setDbProducts] = useState<Product[]>([]);
+  const [dbProducts, setDbProducts] = useState<Product[]>(() => getCachedProducts());
   const [dbBanners, setDbBanners] = useState<Banner[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeCategories, setActiveCategories] = useState<Category[]>(() => getAllCategories());
+  const [loading, setLoading] = useState(() => getCachedProducts().length === 0);
 
   useEffect(() => {
     let isMounted = true;
@@ -51,26 +52,36 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
       }
     });
 
+    const unsubCategories = subscribeCategories(() => {
+      if (isMounted) {
+        setActiveCategories(getAllCategories());
+      }
+    });
+
     // 3. Local events fallback
     const handleUpdate = () => {
       fetchProducts().then(p => isMounted && p.length > 0 && setDbProducts(p));
       fetchBanners().then(b => isMounted && b.length > 0 && setDbBanners(b));
+      setActiveCategories(getAllCategories());
     };
 
     window.addEventListener('akselling_banners_updated', handleUpdate);
     window.addEventListener('akselling_products_updated', handleUpdate);
+    window.addEventListener('akselling_categories_updated', handleUpdate);
 
     const safetyTimer = setTimeout(() => {
       if (isMounted) setLoading(false);
-    }, 1500);
+    }, 600);
 
     return () => {
       isMounted = false;
       clearTimeout(safetyTimer);
       unsubProducts();
       unsubBanners();
+      unsubCategories();
       window.removeEventListener('akselling_banners_updated', handleUpdate);
       window.removeEventListener('akselling_products_updated', handleUpdate);
+      window.removeEventListener('akselling_categories_updated', handleUpdate);
     };
   }, []);
 
@@ -109,7 +120,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
       <div className="mt-4 px-3">
         <div className="bg-white rounded-xl shadow-card p-3">
           <div className="flex gap-3 overflow-x-auto no-scrollbar">
-            {categories.map(cat => (
+            {activeCategories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => onCategoryClick(cat.id)}

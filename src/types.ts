@@ -26,6 +26,7 @@ export interface Product {
 }
 
 export interface CartItem {
+  id?: string;
   product: Product;
   quantity: number;
   savedForLater: boolean;

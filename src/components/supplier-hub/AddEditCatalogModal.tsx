@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import type { SellerProduct } from '@/types/supplier';
 import { compressImageFile } from '@/utils/imageCompressor';
-import { saveProductToFirestore } from '@/firebase';
+import { saveProductToFirestore, saveCategoryToFirestore, getCachedCategories } from '@/firebase';
 import {
   INDIAN_STATES_AND_UTS,
   POPULAR_COUNTRIES,
@@ -335,6 +335,31 @@ export default function AddEditCatalogModal({
     product?.brand || activeSellerObj?.business_name || 'Generic'
   );
   const [category, setCategory] = useState(product?.category || 'fashion');
+  const [customCategories, setCustomCategories] = useState<Array<{ id: string; label: string }>>(() => {
+    const cached = getCachedCategories();
+    return cached.map(c => ({ id: c.id, label: c.name }));
+  });
+  const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
+  const [newCatInput, setNewCatInput] = useState('');
+  const [isSavingCat, setIsSavingCat] = useState(false);
+
+  const handleCreateNewCategory = async () => {
+    const trimmed = newCatInput.trim();
+    if (!trimmed) return;
+    setIsSavingCat(true);
+    const newId = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    await saveCategoryToFirestore({
+      id: newId,
+      name: trimmed,
+      icon: 'Layers',
+      color: '#2874f0',
+    });
+    setCustomCategories(prev => [...prev.filter(c => c.id !== newId), { id: newId, label: trimmed }]);
+    setCategory(newId);
+    setNewCatInput('');
+    setShowNewCategoryModal(false);
+    setIsSavingCat(false);
+  };
   const [fitType, setFitType] = useState(product?.fitType || 'Regular Fit');
   const [subCategory, setSubCategory] = useState(
     product?.subCategory || "Men's Round Neck T-Shirts"
@@ -1458,12 +1483,60 @@ export default function AddEditCatalogModal({
 
               {/* Category Selection */}
               <div className="bg-gray-50/80 p-3 rounded-2xl border border-gray-200 space-y-2">
-                <label className="font-bold text-gray-800 text-xs flex items-center gap-1.5">
-                  <Layers size={15} className="text-[#2874f0]" />
-                  <span>Category (Konsi Category me daal rahe hain) *</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-gray-800 text-xs flex items-center gap-1.5">
+                    <Layers size={15} className="text-[#2874f0]" />
+                    <span>Category (Konsi Category me daal rahe hain) *</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCategoryModal(true)}
+                    className="text-[11px] font-bold text-[#2874f0] bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors"
+                  >
+                    <Plus size={13} />
+                    <span>+ Add Category</span>
+                  </button>
+                </div>
+
+                {/* Inline Add Category Creator */}
+                {showNewCategoryModal && (
+                  <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 space-y-2 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gray-800 text-xs">Nayi Category Create Karein:</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewCategoryModal(false)}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCatInput}
+                        onChange={e => setNewCatInput(e.target.value)}
+                        placeholder="e.g. Diamond & Fine Jewelry, Winter Woolens, Toys"
+                        className="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-semibold focus:border-[#2874f0] outline-none"
+                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleCreateNewCategory())}
+                      />
+                      <button
+                        type="button"
+                        disabled={isSavingCat || !newCatInput.trim()}
+                        onClick={handleCreateNewCategory}
+                        className="bg-[#2874f0] text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
+                      >
+                        {isSavingCat ? 'Saving...' : 'Save Category'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {CATEGORY_OPTIONS.map(cat => (
+                  {[
+                    ...CATEGORY_OPTIONS,
+                    ...customCategories.filter(cc => !CATEGORY_OPTIONS.some(o => o.id === cc.id)),
+                  ].map(cat => (
                     <button
                       key={cat.id}
                       type="button"
@@ -1475,8 +1548,8 @@ export default function AddEditCatalogModal({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span>{cat.label}</span>
-                        {category === cat.id && <Check size={12} />}
+                        <span className="truncate">{cat.label}</span>
+                        {category === cat.id && <Check size={12} className="shrink-0 ml-1" />}
                       </div>
                     </button>
                   ))}

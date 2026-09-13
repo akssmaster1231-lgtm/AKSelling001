@@ -23,11 +23,16 @@ import { useI18n } from '@/i18n';
 import { useAuth } from '@/auth-context';
 import { recordPlacedOrder } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
+import { awardOrderCashback } from '@/utils/walletService';
+import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
+import { ScratchCardModal } from '@/components/ScratchCardModal';
 import type { Product } from '@/types';
 
 interface BuyNowCheckoutProps {
   product: Product;
   quantity: number;
+  selectedSize?: string;
+  selectedColor?: string;
   onBack: () => void;
   onSuccess: () => void;
 }
@@ -35,7 +40,7 @@ interface BuyNowCheckoutProps {
 type Step = 'address' | 'payment' | 'review';
 type State = 'form' | 'processing' | 'success';
 
-export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }: BuyNowCheckoutProps) {
+export default function BuyNowCheckout({ product, quantity, selectedSize, selectedColor, onBack, onSuccess }: BuyNowCheckoutProps) {
   const { t } = useI18n();
   const { user, addAddress } = useAuth();
   const [step, setStep] = useState<Step>('address');
@@ -44,6 +49,14 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
   const [orderId, setOrderId] = useState('');
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [pincodeSuccess, setPincodeSuccess] = useState('');
+  const [earnedReward, setEarnedReward] = useState<{
+    cashback: number;
+    milestone: number;
+    newBalance: number;
+    message?: string;
+  } | null>(null);
+  const [showMilestoneModal, setShowMilestoneModal] = useState<boolean>(false);
+  const [showScratchCard, setShowScratchCard] = useState<boolean>(true);
 
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(() => {
     return user?.addresses && user.addresses.length > 0 ? user.addresses[0].id : null;
@@ -193,6 +206,8 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
         product_image: product.images[0],
         quantity,
         price: product.price,
+        size: selectedSize,
+        color: selectedColor,
       }];
 
       const parts = [
@@ -248,6 +263,44 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
       // 3. Record in customer local history AND dispatch to Seller Dashboard Orders Tab
       recordPlacedOrder(orderPayload);
 
+      // 4. Trigger automated instant email notifications (Seller alert to anojkumaryadav7290@gmail.com + Customer confirmation)
+      fetch('/api/notifications/send-order-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order: orderPayload,
+          customerEmail: user?.email || undefined,
+          sellerEmail: 'anojkumaryadav7290@gmail.com',
+        }),
+      }).catch((e) => console.warn('Email notification dispatch notice:', e));
+
+      // 5. Award Product-Based Cashback & 3rd Order Milestone to Firebase Wallet
+      try {
+        const rewardResult = await awardOrderCashback(
+          user?.id || 'guest',
+          generatedId,
+          [
+            {
+              id: product.id,
+              title: product.title,
+              price: product.price,
+              quantity,
+            },
+          ]
+        );
+        setEarnedReward({
+          cashback: rewardResult.cashbackEarned,
+          milestone: rewardResult.milestoneAwarded,
+          newBalance: rewardResult.newWalletBalance,
+          message: rewardResult.celebrationMessage,
+        });
+        if (rewardResult.milestoneAwarded > 0) {
+          setShowMilestoneModal(true);
+        }
+      } catch (rErr) {
+        console.warn('Cashback award notice:', rErr);
+      }
+
       setOrderId(generatedId);
       setState('success');
     } catch (err) {
@@ -260,6 +313,23 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
   if (state === 'success') {
     return (
       <div className="fixed inset-0 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-[480px] sm:w-full z-[65] bg-white flex flex-col items-center justify-center animate-fade-in px-4 sm:shadow-2xl sm:border-x sm:border-gray-200">
+        {/* Order-Linked Scratch Card (Strictly on confirmed paid order) */}
+        <ScratchCardModal
+          isOpen={showScratchCard}
+          cashbackAmount={earnedReward?.cashback ?? 30}
+          milestoneAmount={earnedReward?.milestone ?? 0}
+          orderId={orderId}
+          onDismiss={() => setShowScratchCard(false)}
+        />
+
+        {showMilestoneModal && (
+          <MilestoneCelebrationModal
+            isOpen={showMilestoneModal}
+            onClose={() => setShowMilestoneModal(false)}
+            milestoneBonus={earnedReward?.milestone}
+            message={earnedReward?.message}
+          />
+        )}
         <div className="w-20 h-20 rounded-full bg-success-500 flex items-center justify-center mb-4 animate-scale-in">
           <CheckCircle2 size={48} className="text-white" />
         </div>
@@ -270,13 +340,41 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
         {orderId && (
           <p className="text-xs text-gray-400 mt-1">Order ID: {orderId.slice(0, 8).toUpperCase()}</p>
         )}
-        <div className="mt-4 bg-flipkart-50 rounded-xl px-4 py-3 text-center">
+
+        {/* Real-time Cashback Earned Announcement Card */}
+        {earnedReward && (earnedReward.cashback > 0 || earnedReward.milestone > 0) && (
+          <div className="mt-4 w-full max-w-sm rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 p-4 text-white shadow-lg border border-indigo-700/40 text-left">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-yellow-300">
+                Cashback Earned!
+              </span>
+              <span className="text-[10px] font-semibold bg-emerald-500 text-white px-2 py-0.5 rounded-full">
+                CREDITED TO WALLET
+              </span>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-3xl font-black text-emerald-400">
+                +₹{earnedReward.cashback + earnedReward.milestone}
+              </span>
+              <span className="text-xs text-blue-200">
+                (New Balance: ₹{earnedReward.newBalance})
+              </span>
+            </div>
+            <p className="text-[11px] text-blue-200 mt-1">
+              {earnedReward.milestone > 0
+                ? `Includes ₹${earnedReward.cashback} order cashback and ₹${earnedReward.milestone} 3rd order milestone reward!`
+                : 'Available for immediate automated UPI or Bank withdrawal.'}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-4 bg-flipkart-50 rounded-xl px-4 py-3 text-center w-full max-w-sm">
           <p className="text-xs text-gray-500">{t('estimatedDelivery')}</p>
           <p className="text-sm font-bold text-flipkart-600">3-5 Business Days</p>
         </div>
         <button
           onClick={onSuccess}
-          className="mt-6 bg-flipkart-500 text-white font-bold text-sm px-8 py-3 rounded-xl hover:bg-flipkart-600 transition-colors"
+          className="mt-6 bg-flipkart-500 text-white font-bold text-sm px-8 py-3 rounded-xl hover:bg-flipkart-600 transition-colors shadow-md"
         >
           {t('continueShopping')}
         </button>
@@ -349,6 +447,16 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
               <span className="text-xs font-bold text-success-500">{product.discount}% off</span>
             </div>
             <p className="text-xs text-gray-400 mt-0.5">{t('qty')}: {quantity}</p>
+            {(selectedSize || selectedColor) && (
+              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-600">
+                {selectedSize && (
+                  <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">Size: {selectedSize}</span>
+                )}
+                {selectedColor && (
+                  <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">Color: {selectedColor}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -383,11 +491,11 @@ export default function BuyNowCheckout({ product, quantity, onBack, onSuccess }:
                 </div>
 
                 <div className="space-y-2">
-                  {user.addresses.map((addr) => {
+                  {user.addresses.map((addr, addrIdx) => {
                     const isSelected = selectedAddressId === addr.id && !isAddingNewAddress;
                     return (
                       <div
-                        key={addr.id}
+                        key={addr.id || `addr_${addrIdx}`}
                         onClick={() => {
                           setSelectedAddressId(addr.id);
                           setIsAddingNewAddress(false);

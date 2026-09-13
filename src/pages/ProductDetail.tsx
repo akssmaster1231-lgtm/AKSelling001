@@ -21,7 +21,7 @@ import { calculateProductDynamicRating } from '@/utils/orderSync';
 interface ProductDetailProps {
   product: Product;
   onBack: () => void;
-  onBuyNow: () => void;
+  onBuyNow: (product: Product, size?: string, color?: string) => void;
   onGoToCart: () => void;
 }
 
@@ -57,8 +57,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
       setTimeout(() => setSizeAlert(false), 2500);
       return;
     }
-    addToCart(product, 1, selectedSize, selectedColor);
-    onBuyNow();
+    onBuyNow(product, selectedSize, selectedColor);
   };
 
   return (

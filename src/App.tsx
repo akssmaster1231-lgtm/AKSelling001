@@ -18,6 +18,7 @@ import OrdersPage from '@/pages/OrdersPage';
 import AdminPanel from '@/pages/AdminPanel';
 import SellerLockedModal from '@/components/SellerLockedModal';
 import { isWhitelistedSellerEmail } from '@/utils/sellerWhitelist';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import type { Product } from '@/types';
 import { Loader2 } from 'lucide-react';
 
@@ -148,17 +149,18 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-slate-100 flex justify-center overflow-x-hidden w-full">
       <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-gray-200 flex flex-col overflow-x-hidden">
-        <Header
-          onSearch={handleSearch}
-        onCartClick={() => setActiveTab('cart')}
-        onAccountClick={() => setActiveTab('account')}
-        onSwitchToSeller={handleOpenSellerMode}
-        onNavigateHome={() => {
-          setActiveTab('home');
-          setSearchQuery('');
-          setSelectedProduct(null);
-        }}
-      />
+        {activeTab !== 'play' && (
+          <Header
+            onSearch={handleSearch}
+            onCartClick={() => setActiveTab('cart')}
+            onAccountClick={() => setActiveTab('account')}
+            onNavigateHome={() => {
+              setActiveTab('home');
+              setSearchQuery('');
+              setSelectedProduct(null);
+            }}
+          />
+        )}
 
       <main className="pb-16 min-h-[calc(100vh-60px)]">
         {activeTab === 'home' && (
@@ -188,10 +190,13 @@ function AppContent() {
           />
         )}
         {activeTab === 'cart' && (
-          <CartPage
-            onProductClick={handleProductClick}
-            onContinueShopping={() => setActiveTab('home')}
-          />
+          <ErrorBoundary fallbackTitle="Unable to load Cart">
+            <CartPage
+              onProductClick={handleProductClick}
+              onContinueShopping={() => setActiveTab('home')}
+              onBuyNow={(prod) => setBuyNowProduct(prod)}
+            />
+          </ErrorBoundary>
         )}
       </main>
 

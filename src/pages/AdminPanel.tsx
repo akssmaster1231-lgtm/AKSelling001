@@ -13,8 +13,10 @@ import {
   Sparkles,
   CheckCircle2,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react';
 import { fetchAllBanners, addBanner, deleteBanner, updateBanner } from '@/banner-api';
+import { AdminWithdrawalManager } from '@/components/AdminWithdrawalManager';
 
 interface AdminPanelProps {
   onBack: () => void;
@@ -59,6 +61,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   });
   const [showChangePin, setShowChangePin] = useState(false);
   const [newPin, setNewPin] = useState('');
+  const [adminTab, setAdminTab] = useState<'payouts' | 'banners'>('payouts');
 
   // Banner State
   const [banners, setBanners] = useState<Record<string, unknown>[]>([]);
@@ -259,13 +262,13 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
           </button>
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="text-sm sm:text-base font-black text-gray-900">Owner Banner Manager</h1>
+              <h1 className="text-sm sm:text-base font-black text-gray-900">AKSelling Admin Control</h1>
               <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.2 rounded flex items-center gap-0.5">
                 <ShieldCheck size={10} /> OWNER SECURED
               </span>
             </div>
             <p className="text-[11px] text-gray-500 font-medium">
-              Full control over Homepage carousel banners & deals
+              Rewards Cashouts, Manual Payouts & Banners
             </p>
           </div>
         </div>
@@ -291,6 +294,34 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
             <span>Lock</span>
           </button>
         </div>
+      </div>
+
+      {/* Admin Tab Switcher */}
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2 sticky top-[57px] z-10 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setAdminTab('payouts')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            adminTab === 'payouts'
+              ? 'bg-amber-400 text-stone-950 shadow-xs'
+              : 'text-stone-600 hover:bg-stone-100'
+          }`}
+        >
+          <Wallet size={14} />
+          <span>Withdrawals & Parchis</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setAdminTab('banners')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            adminTab === 'banners'
+              ? 'bg-stone-900 text-white shadow-xs'
+              : 'text-stone-600 hover:bg-stone-100'
+          }`}
+        >
+          <ImageIcon size={14} />
+          <span>Banner Studio</span>
+        </button>
       </div>
 
       {/* Floating toast notification */}
@@ -330,7 +361,9 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
           </div>
         )}
 
-        {loading ? (
+        {adminTab === 'payouts' ? (
+          <AdminWithdrawalManager />
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center py-16 space-y-2">
             <Loader2 size={32} className="animate-spin text-[#9f2089]" />
             <p className="text-xs text-gray-500">Loading master banners...</p>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Loader2 } from 'lucide-react';
-import { categories, products as fallbackProducts, fetchProductsByCategory } from '@/data';
-import type { Product } from '@/types';
+import { categories as defaultCategories, getAllCategories, products as fallbackProducts, fetchProductsByCategory } from '@/data';
+import { subscribeCategories } from '@/firebase';
+import type { Product, Category } from '@/types';
 import ProductCard from '@/components/ProductCard';
 
 interface CategoriesPageProps {
@@ -10,10 +11,25 @@ interface CategoriesPageProps {
 }
 
 export default function CategoriesPage({ onProductClick, initialCategory }: CategoriesPageProps) {
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory || categories[0].id);
+  const [allCategories, setAllCategories] = useState<Category[]>(() => getAllCategories());
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory || allCategories[0]?.id || defaultCategories[0]?.id || 'fashion');
   const [search, setSearch] = useState('');
   const [dbProducts, setDbProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = subscribeCategories(() => {
+      setAllCategories(getAllCategories());
+    });
+    const handleUpdate = () => {
+      setAllCategories(getAllCategories());
+    };
+    window.addEventListener('akselling_categories_updated', handleUpdate);
+    return () => {
+      unsub();
+      window.removeEventListener('akselling_categories_updated', handleUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +68,7 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
     return result;
   }, [allProducts, search]);
 
-  const currentCategory = categories.find(c => c.id === selectedCategory);
+  const currentCategory = allCategories.find(c => c.id === selectedCategory) || allCategories[0];
 
   return (
     <div className="pb-4">
@@ -71,7 +87,7 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
 
       <div className="mt-3 px-3">
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {categories.map(cat => (
+          {allCategories.map(cat => (
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
@@ -126,7 +142,7 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
             <h2 className="text-base font-bold text-gray-800">All Categories</h2>
           </div>
           <div className="grid grid-cols-3 gap-2 p-3">
-            {categories.map(cat => (
+            {allCategories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}

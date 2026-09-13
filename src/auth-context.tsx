@@ -17,6 +17,7 @@ import {
   verifyFirebasePhoneOtp,
 } from '@/firebase';
 import { parseFirebaseAuthError, type ParsedAuthError } from '@/utils/authErrorHelper';
+import { initializeUserWallet } from '@/utils/walletService';
 
 export interface UserProfile {
   id: string;
@@ -29,6 +30,11 @@ export interface UserProfile {
   addresses: AddressEntry[];
   savedCards: CardEntry[];
   devices: DeviceEntry[];
+  walletBalance?: number;
+  totalCashbackEarned?: number;
+  signupBonusClaimed?: boolean;
+  successfulOrdersCount?: number;
+  milestoneBonusClaimed?: boolean;
 }
 
 export interface AddressEntry {
@@ -85,6 +91,11 @@ const defaultProfileTemplate: UserProfile = {
   devices: [
     { id: 'd1', name: 'Web Browser', lastActive: 'Active now' },
   ],
+  walletBalance: 20,
+  totalCashbackEarned: 20,
+  signupBonusClaimed: true,
+  successfulOrdersCount: 0,
+  milestoneBonusClaimed: false,
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -181,6 +192,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUser(resolvedProfile);
         saveLocalUser(resolvedProfile);
+
+        // Initialize Firestore wallet with guaranteed ₹20 signup bonus
+        initializeUserWallet(resolvedProfile.id, {
+          name: resolvedProfile.name,
+          phone: resolvedProfile.phone,
+          email: resolvedProfile.email,
+        }).catch((wErr) => console.warn('Wallet init notice:', wErr));
       } else {
         // Only clear if not in an active custom session
         try {
@@ -284,6 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(profile);
       saveLocalUser(profile);
+      initializeUserWallet(profile.id, { name: profile.name, phone: profile.phone, email: profile.email }).catch(() => {});
       setIsAuthenticating(false);
       return { error: null, user: profile };
     } catch (err: unknown) {
@@ -339,6 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await saveUserProfileToFirestore(realGoogleProfile);
       setUser(realGoogleProfile);
       saveLocalUser(realGoogleProfile);
+      initializeUserWallet(realGoogleProfile.id, { name: realGoogleProfile.name, phone: realGoogleProfile.phone, email: realGoogleProfile.email }).catch(() => {});
       setIsAuthenticating(false);
       return { error: null, user: realGoogleProfile };
     } catch (err: unknown) {
@@ -384,6 +404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await saveUserProfileToFirestore(profile);
       setUser(profile);
       saveLocalUser(profile);
+      initializeUserWallet(profile.id, { name: profile.name, phone: profile.phone, email: profile.email }).catch(() => {});
       setIsAuthenticating(false);
       return { error: null, user: profile };
     } catch (err) {

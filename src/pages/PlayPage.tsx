@@ -3,7 +3,8 @@ import { Heart, MessageCircle, Share2, ShoppingBag, Play, Volume2, VolumeX, Send
 import { formatCount, formatPrice } from '@/data';
 import type { VideoReel, Product } from '@/types';
 import { useCart } from '@/cart-context';
-import { getAllReels } from '@/utils/reelsHelper';
+import { getAllReels, getCustomReels } from '@/utils/reelsHelper';
+import { subscribeReelsFromFirestore } from '@/firebase';
 
 interface PlayPageProps {
   onProductClick: (product: Product) => void;
@@ -33,11 +34,25 @@ export default function PlayPage({ onProductClick }: PlayPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const unsub = subscribeReelsFromFirestore((remoteReels) => {
+      if (Array.isArray(remoteReels) && remoteReels.length > 0) {
+        const custom = getCustomReels();
+        const mappedRemote = remoteReels as unknown as VideoReel[];
+        const combined = [...custom, ...mappedRemote.filter(r => !custom.some(c => c.id === r.id))];
+        if (combined.length > 0) {
+          setReels(combined);
+        }
+      }
+    });
+
     const handleReelsUpdated = () => {
       setReels(getAllReels());
     };
     window.addEventListener('akselling_reels_updated', handleReelsUpdated);
-    return () => window.removeEventListener('akselling_reels_updated', handleReelsUpdated);
+    return () => {
+      unsub();
+      window.removeEventListener('akselling_reels_updated', handleReelsUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -220,6 +235,18 @@ function ReelItem({
 
   useEffect(() => {
     if (videoRef.current) {
+      videoRef.current.muted = muted;
+      if (!muted) {
+        videoRef.current.volume = 1.0;
+        if (isActive) {
+          videoRef.current.play().catch(() => {});
+        }
+      }
+    }
+  }, [muted, isActive]);
+
+  useEffect(() => {
+    if (videoRef.current) {
       if (isActive) {
         videoRef.current.play().catch(() => {});
       } else {
@@ -227,6 +254,18 @@ function ReelItem({
       }
     }
   }, [isActive]);
+
+  const handleVideoClick = () => {
+    if (muted) {
+      onToggleMute();
+    } else if (videoRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play().catch(() => {});
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  };
 
   const handleAddToCart = () => {
     addToCart(reel.product);
@@ -243,7 +282,7 @@ function ReelItem({
       data-index={index}
       className="h-full w-full snap-start relative flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-black overflow-hidden"
     >
-      <div className="relative w-full h-full">
+      <div className="relative w-full h-full cursor-pointer" onClick={handleVideoClick}>
         {reel.videoUrl ? (
           <video
             ref={videoRef}
@@ -261,19 +300,38 @@ function ReelItem({
             className="w-full h-full object-cover opacity-90"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/75" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/75 pointer-events-none" />
 
         {!reel.videoUrl && isActive && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
             <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 animate-pulse">
               <Play size={32} className="text-white fill-white" />
             </div>
           </div>
         )}
 
+        {/* Floating Sound Notice when muted */}
+        {muted && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleMute();
+            }}
+            className="absolute top-4 left-4 bg-black/65 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 z-20 border border-white/20 shadow-lg animate-pulse"
+          >
+            <VolumeX size={14} className="text-amber-400 shrink-0" />
+            <span>Tap to turn on sound</span>
+          </button>
+        )}
+
         <button
-          onClick={onToggleMute}
-          className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm rounded-full p-2 text-white hover:bg-black/70 transition-colors z-10"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMute();
+          }}
+          className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm rounded-full p-2 text-white hover:bg-black/70 transition-colors z-20"
         >
           {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
         </button>

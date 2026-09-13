@@ -237,13 +237,48 @@ export function handleFirestoreError(err: unknown, operationName: string): void 
 }
 
 // -------------------------------------------------------------
-// PRODUCTS FIRESTORE REAL-TIME SYNC
+// PRODUCTS FIRESTORE REAL-TIME SYNC & INSTANT CACHING
 // -------------------------------------------------------------
+
+const PRODUCTS_CACHE_KEY = 'akselling_firestore_products_cache';
+
+export function getCachedProducts(): Product[] {
+  try {
+    const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return [];
+}
+
+export function setCachedProducts(products: Product[]): void {
+  try {
+    if (Array.isArray(products) && products.length > 0) {
+      localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(products));
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export function subscribeProducts(
   callback: (products: Product[]) => void,
   categoryFilter?: string
 ): () => void {
+  // 1. Emit cached products synchronously for 0ms initial load
+  if (!categoryFilter || categoryFilter === 'all') {
+    const cached = getCachedProducts();
+    if (cached.length > 0) {
+      callback(cached);
+    }
+  }
+
   try {
     const productsRef = collection(db, 'products');
     let q = query(productsRef);
@@ -283,6 +318,9 @@ export function subscribeProducts(
               dimensions: data.dimensions,
             });
           });
+          if (!categoryFilter || categoryFilter === 'all') {
+            setCachedProducts(items);
+          }
           callback(items);
         } else {
           callback([]);
@@ -338,6 +376,29 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
 
     const dataToSave = sanitizeForFirestore(rawData);
     await setDoc(docRef, dataToSave, { merge: true });
+
+    // Update local cache so it reflects immediately
+    const current = getCachedProducts();
+    const normalizedProd: Product = {
+      id: prodId,
+      title: rawData.title as string,
+      description: rawData.description as string,
+      price: rawData.price as number,
+      mrp: rawData.mrp as number,
+      discount: rawData.discount as number,
+      category: rawData.category as string,
+      images: rawData.images as string[],
+      rating: rawData.rating as number,
+      ratingCount: rawData.ratingCount as number,
+      brand: rawData.brand as string,
+      inStock: rawData.inStock as boolean,
+      delivery: rawData.delivery as string,
+    };
+    const nextCached = current.some(p => p.id === prodId)
+      ? current.map(p => p.id === prodId ? normalizedProd : p)
+      : [normalizedProd, ...current];
+    setCachedProducts(nextCached);
+    window.dispatchEvent(new CustomEvent('akselling_products_updated'));
   } catch (err) {
     handleFirestoreError(err, 'saveProductToFirestore');
   }
@@ -769,4 +830,182 @@ export async function deductProductInventory(
     handleFirestoreError(err, 'deductProductInventory');
   }
 }
+
+// -------------------------------------------------------------
+// DYNAMIC CATEGORIES FIRESTORE SYNC & PERSISTENCE
+// -------------------------------------------------------------
+
+export interface FirestoreCategory {
+  id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+  createdAt?: string;
+}
+
+const CATEGORIES_STORAGE_KEY = 'akselling_custom_categories';
+
+export function getCachedCategories(): FirestoreCategory[] {
+  try {
+    const raw = localStorage.getItem(CATEGORIES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // fallback
+  }
+  return [];
+}
+
+export function subscribeCategories(
+  callback: (categories: FirestoreCategory[]) => void
+): () => void {
+  try {
+    const cached = getCachedCategories();
+    if (cached.length > 0) {
+      callback(cached);
+    }
+
+    const categoriesRef = collection(db, 'categories');
+    return onSnapshot(
+      categoriesRef,
+      (snapshot) => {
+        const items: FirestoreCategory[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          items.push({
+            id: docSnap.id,
+            name: data.name || docSnap.id,
+            icon: data.icon || 'Layers',
+            color: data.color || '#2874f0',
+            createdAt: data.createdAt,
+          });
+        });
+        if (items.length > 0) {
+          localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(items));
+          callback(items);
+        }
+      },
+      (err) => {
+        handleFirestoreError(err, 'subscribeCategories');
+      }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'subscribeCategories');
+    return () => {};
+  }
+}
+
+export async function saveCategoryToFirestore(cat: {
+  id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+}): Promise<void> {
+  if (isQuotaExhausted()) return;
+  try {
+    const docRef = doc(db, 'categories', cat.id);
+    const cleaned = sanitizeForFirestore({
+      ...cat,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(docRef, cleaned, { merge: true });
+
+    // Update local cache
+    const current = getCachedCategories();
+    const exists = current.some((c) => c.id === cat.id);
+    const updated = exists
+      ? current.map((c) => (c.id === cat.id ? { ...c, ...cat } : c))
+      : [...current, cat];
+    localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('akselling_categories_updated'));
+  } catch (err) {
+    handleFirestoreError(err, 'saveCategoryToFirestore');
+  }
+}
+
+// -------------------------------------------------------------
+// SECURE RAZORPAY PAYMENT LOGGING TO FIRESTORE
+// -------------------------------------------------------------
+
+export interface PaymentTransactionRecord {
+  id: string;
+  order_id?: string;
+  payment_id: string;
+  signature?: string;
+  amount: number;
+  currency: string;
+  customer_name?: string;
+  customer_phone?: string;
+  status: 'captured' | 'authorized' | 'verified';
+  gateway: 'razorpay' | 'cashfree' | 'simulated';
+  recorded_at: string;
+}
+
+export async function logPaymentTransactionToFirestore(
+  log: Omit<PaymentTransactionRecord, 'recorded_at'> & { recorded_at?: string }
+): Promise<void> {
+  if (isQuotaExhausted()) return;
+  try {
+    const docId = log.payment_id || log.id || `pay_${Date.now()}`;
+    const docRef = doc(db, 'payments', docId);
+    await setDoc(
+      docRef,
+      sanitizeForFirestore({
+        ...log,
+        recorded_at: log.recorded_at || new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'logPaymentTransactionToFirestore');
+  }
+}
+
+// -------------------------------------------------------------
+// VIDEO REELS FIRESTORE SYNC & PERSISTENCE
+// -------------------------------------------------------------
+
+export function subscribeReelsFromFirestore(
+  callback: (reels: unknown[]) => void
+): () => void {
+  try {
+    const reelsRef = collection(db, 'reels');
+    return onSnapshot(
+      reelsRef,
+      (snapshot) => {
+        const items: unknown[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({
+            ...docSnap.data(),
+            id: docSnap.id,
+          });
+        });
+        callback(items);
+      },
+      (err) => {
+        handleFirestoreError(err, 'subscribeReelsFromFirestore');
+      }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'subscribeReelsFromFirestore');
+    return () => {};
+  }
+}
+
+export async function saveReelToFirestore(reel: Record<string, unknown> & { id: string }): Promise<void> {
+  if (isQuotaExhausted()) return;
+  try {
+    if (!reel.id) return;
+    const docRef = doc(db, 'reels', reel.id);
+    await setDoc(docRef, sanitizeForFirestore({
+      ...reel,
+      updatedAt: new Date().toISOString(),
+    }), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, 'saveReelToFirestore');
+  }
+}
+
 

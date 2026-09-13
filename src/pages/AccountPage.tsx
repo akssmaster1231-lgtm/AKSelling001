@@ -33,11 +33,14 @@ import {
   Mail,
   User as UserIcon,
   ShieldCheck,
+  Wallet,
+  ArrowUpRight,
 } from 'lucide-react';
 import { useAuth, type AddressEntry, type CardEntry } from '@/auth-context';
 import { useCart } from '@/cart-context';
 import { useI18n, type Language } from '@/i18n';
 import { getCleanSellerStoreName } from '@/utils/storageHelper';
+import { WalletPage } from '@/pages/WalletPage';
 
 interface AccountPageProps {
   onLogout: () => void;
@@ -51,6 +54,7 @@ interface AccountPageProps {
 
 type SubScreen =
   | null
+  | 'wallet'
   | 'devices'
   | 'editProfile'
   | 'cards'
@@ -143,6 +147,15 @@ export default function AccountPage({
     onLogout();
   };
 
+  if (subScreen === 'wallet') {
+    return (
+      <WalletPage
+        onBack={() => setSubScreen(null)}
+        onNavigateToOrders={onOrders}
+      />
+    );
+  }
+
   if (subScreen) {
     return (
       <SubScreenRenderer
@@ -226,8 +239,59 @@ export default function AccountPage({
         </div>
       </div>
 
+      {/* Prominent AKSelling Rewards Wallet Card */}
+      <div className="px-3 mt-3">
+        <button
+          onClick={() => setSubScreen('wallet')}
+          className="w-full text-left bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 rounded-2xl p-4 shadow-md text-white hover:opacity-95 active:scale-[0.99] transition-all border border-indigo-700/40 relative overflow-hidden group"
+        >
+          {/* Subtle Ambient Glow */}
+          <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 bg-blue-500/20 rounded-full blur-xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 -ml-6 -mb-6 w-32 h-32 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
+
+          <div className="relative z-10 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-300 text-amber-950 flex items-center justify-center font-bold shadow-md shrink-0">
+                <Wallet size={24} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-200">
+                    AKSelling Rewards Wallet
+                  </span>
+                  <span className="bg-yellow-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded shadow-xs">
+                    ORDER-LINKED CASHBACK
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-2xl font-black text-white">₹{user?.walletBalance ?? 0}</span>
+                  <span className="text-xs text-blue-200">verified cash balance</span>
+                </div>
+                <p className="text-[11px] text-blue-200/90 mt-0.5 truncate">
+                  Earn up to ₹60 per paid order + ₹20 3rd order milestone
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <div className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1">
+                <span>Withdraw</span>
+                <ArrowUpRight size={14} />
+              </div>
+              <span className="text-[10px] text-blue-200">Instant UPI / Bank</span>
+            </div>
+          </div>
+        </button>
+      </div>
+
       {/* Account Settings Section */}
       <Section title="Account Settings">
+        <SettingItem
+          icon={<Wallet size={19} className="text-amber-600" />}
+          label="AKSelling Rewards Wallet & Cashout"
+          value={`₹${user?.walletBalance ?? 0} Available`}
+          onClick={() => setSubScreen('wallet')}
+        />
         <SettingItem icon={<Smartphone size={19} />} label={t('manageDevices')} onClick={() => setSubScreen('devices')} />
         <SettingItem icon={<UserPen size={19} />} label={t('editProfile')} onClick={() => setSubScreen('editProfile')} />
         <SettingItem icon={<CreditCard size={19} />} label={t('savedCards')} value={`${profile.savedCards.length} saved`} onClick={() => setSubScreen('cards')} />

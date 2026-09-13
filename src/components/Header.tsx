@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { Search, Mic, Camera, ShoppingCart, X, Loader2, Store } from 'lucide-react';
+import { Search, Mic, Camera, ShoppingCart, X, Loader2 } from 'lucide-react';
 import { useCart } from '@/cart-context';
 import { useAuth } from '@/auth-context';
 import { useI18n } from '@/i18n';
@@ -9,10 +9,9 @@ interface HeaderProps {
   onCartClick: () => void;
   onNavigateHome: () => void;
   onAccountClick?: () => void;
-  onSwitchToSeller?: () => void;
 }
 
-export default function Header({ onSearch, onCartClick, onNavigateHome, onAccountClick, onSwitchToSeller }: HeaderProps) {
+export default function Header({ onSearch, onCartClick, onNavigateHome, onAccountClick }: HeaderProps) {
   const { t } = useI18n();
   const { user } = useAuth();
   const [query, setQuery] = useState('');
@@ -165,18 +164,6 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
             </button>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              {onSwitchToSeller && (
-                <button
-                  onClick={onSwitchToSeller}
-                  className="shrink-0 flex items-center gap-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 px-2 py-1 rounded-md text-[11px] font-black shadow-xs transition-colors cursor-pointer"
-                  title="Open Seller Dashboard"
-                  id="header-seller-hub-btn"
-                >
-                  <Store size={13} />
-                  <span className="hidden min-[360px]:inline">Seller Hub</span>
-                </button>
-              )}
-
               {onAccountClick && (
                 <button
                   onClick={onAccountClick}

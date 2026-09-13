@@ -1,4 +1,5 @@
-import { supabase, isSupabaseConfigured } from '@/supabase-client';
+import { db } from '@/firebase';
+import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { banners as defaultBanners } from '@/data';
 import type { Banner } from '@/types';
 
@@ -34,7 +35,7 @@ export function saveLocalMasterBanners(bannersList: MasterBanner[]): void {
 }
 
 export async function fetchBanners(): Promise<Banner[]> {
-  // First check local master banners
+  // First check local cached banners for 0ms load
   const local = getLocalBanners();
   if (local.length > 0) {
     const active = local.filter(b => b.active !== false);
@@ -43,27 +44,34 @@ export async function fetchBanners(): Promise<Banner[]> {
     }
   }
 
-  // Next try Supabase ONLY if legitimately configured
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase
-        .from('banners')
-        .select('*')
-        .eq('active', true)
-        .order('display_order', { ascending: true });
-      if (!error && data && data.length > 0) {
-        return data.map((row: Record<string, unknown>) => ({
-          id: row.id as string,
-          title: row.title as string,
-          subtitle: row.subtitle as string,
-          cta: row.cta as string,
-          image: row.image as string,
-          gradient: (row.gradient as string) || 'from-blue-600 to-indigo-800',
-        }));
+  // Next fetch from Firebase Firestore 'banners' collection
+  try {
+    const bannersCol = collection(db, 'banners');
+    const snap = await getDocs(bannersCol);
+    if (!snap.empty) {
+      const items: MasterBanner[] = [];
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          title: (d.title as string) || '',
+          subtitle: (d.subtitle as string) || '',
+          cta: (d.cta as string) || 'Shop Now',
+          image: (d.image as string) || (d.imageUrl as string) || '',
+          gradient: (d.gradient as string) || 'from-blue-600 to-indigo-800',
+          active: d.active !== false && d.isActive !== false,
+          display_order: Number(d.display_order || d.order || 1),
+          category: d.category as string,
+        });
+      });
+      saveLocalMasterBanners(items);
+      const activeItems = items.filter(b => b.active !== false);
+      if (activeItems.length > 0) {
+        return activeItems.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
       }
-    } catch {
-      // ignore
     }
+  } catch (err) {
+    console.warn('Firestore fetch banners notice:', err);
   }
 
   return defaultBanners;
@@ -75,30 +83,32 @@ export async function fetchAllMasterBanners(): Promise<MasterBanner[]> {
     return local.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
   }
 
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase
-        .from('banners')
-        .select('*')
-        .order('display_order', { ascending: true });
-      if (!error && data && data.length > 0) {
-        return data.map((row: Record<string, unknown>, idx: number) => ({
-          id: (row.id as string) || `b_${idx}`,
-          title: (row.title as string) || '',
-          subtitle: (row.subtitle as string) || '',
-          cta: (row.cta as string) || 'Shop Now',
-          image: (row.image as string) || '',
-          gradient: (row.gradient as string) || 'from-blue-600 to-indigo-800',
-          active: row.active !== false,
-          display_order: Number(row.display_order) || idx + 1,
-        }));
-      }
-    } catch {
-      // ignore
+  try {
+    const bannersCol = collection(db, 'banners');
+    const snap = await getDocs(bannersCol);
+    if (!snap.empty) {
+      const items: MasterBanner[] = [];
+      snap.forEach((docSnap, idx) => {
+        const d = docSnap.data();
+        items.push({
+          id: docSnap.id || `b_${idx}`,
+          title: (d.title as string) || '',
+          subtitle: (d.subtitle as string) || '',
+          cta: (d.cta as string) || 'Shop Now',
+          image: (d.image as string) || (d.imageUrl as string) || '',
+          gradient: (d.gradient as string) || 'from-blue-600 to-indigo-800',
+          active: d.active !== false && d.isActive !== false,
+          display_order: Number(d.display_order || d.order || idx + 1),
+          category: d.category as string,
+        });
+      });
+      saveLocalMasterBanners(items);
+      return items.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     }
+  } catch (err) {
+    console.warn('Firestore fetch all banners notice:', err);
   }
 
-  // Fallback to default mapped with active true
   const initialMaster: MasterBanner[] = defaultBanners.map((b, idx) => ({
     ...b,
     active: true,
@@ -120,21 +130,24 @@ export async function addMasterBanner(banner: Omit<MasterBanner, 'id'>): Promise
   const updated = [newBanner, ...current];
   saveLocalMasterBanners(updated);
 
-  if (isSupabaseConfigured) {
-    try {
-      await supabase.from('banners').insert({
-        id: newBanner.id,
-        title: newBanner.title,
-        subtitle: newBanner.subtitle,
-        cta: newBanner.cta,
-        image: newBanner.image,
-        gradient: newBanner.gradient,
-        display_order: newBanner.display_order,
-        active: newBanner.active,
-      });
-    } catch {
-      // ignore
-    }
+  try {
+    const docRef = doc(db, 'banners', newBanner.id);
+    await setDoc(docRef, {
+      id: newBanner.id,
+      title: newBanner.title,
+      subtitle: newBanner.subtitle,
+      cta: newBanner.cta,
+      image: newBanner.image,
+      imageUrl: newBanner.image,
+      gradient: newBanner.gradient,
+      display_order: newBanner.display_order,
+      active: newBanner.active,
+      isActive: newBanner.active,
+      category: newBanner.category || null,
+      createdAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore add banner error:', err);
   }
 
   return { banner: newBanner, error: null };
@@ -145,12 +158,17 @@ export async function updateMasterBanner(id: string, updates: Partial<MasterBann
   const updated = current.map(b => (b.id === id ? { ...b, ...updates } : b));
   saveLocalMasterBanners(updated);
 
-  if (isSupabaseConfigured) {
-    try {
-      await supabase.from('banners').update(updates).eq('id', id);
-    } catch {
-      // ignore
-    }
+  try {
+    const docRef = doc(db, 'banners', id);
+    const firestoreUpdates: Record<string, unknown> = {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    if (updates.image) firestoreUpdates.imageUrl = updates.image;
+    if (updates.active !== undefined) firestoreUpdates.isActive = updates.active;
+    await updateDoc(docRef, firestoreUpdates);
+  } catch (err) {
+    console.warn('Firestore update banner error:', err);
   }
 
   return { error: null };
@@ -161,24 +179,25 @@ export async function deleteMasterBanner(id: string): Promise<{ error: string | 
   const updated = current.filter(b => b.id !== id);
   saveLocalMasterBanners(updated);
 
-  if (isSupabaseConfigured) {
-    try {
-      await supabase.from('banners').delete().eq('id', id);
-    } catch {
-      // ignore
-    }
+  try {
+    const docRef = doc(db, 'banners', id);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn('Firestore delete banner error:', err);
   }
 
   return { error: null };
 }
 
 export async function trackProductView(productId: string): Promise<void> {
-  if (isSupabaseConfigured) {
-    try {
-      await supabase.from('product_views').insert({ product_id: productId });
-    } catch {
-      // ignore
-    }
+  try {
+    const viewRef = doc(collection(db, 'product_views'));
+    await setDoc(viewRef, {
+      productId,
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    // silent
   }
 }
 
@@ -187,6 +206,3 @@ export const fetchAllBanners = fetchAllMasterBanners;
 export const addBanner = addMasterBanner;
 export const updateBanner = updateMasterBanner;
 export const deleteBanner = deleteMasterBanner;
-
-
-

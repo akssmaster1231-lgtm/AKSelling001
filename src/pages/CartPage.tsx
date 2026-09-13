@@ -6,6 +6,7 @@ import {
   Tag,
   ShoppingCart,
   ChevronDown,
+  ChevronRight,
   CheckCircle2,
   Package,
   Loader2,
@@ -23,17 +24,21 @@ import { initiateRazorpayPayment } from '@/razorpay';
 import { saveOrderToFirestore, deductProductInventory, type FirestoreOrder } from '@/firebase';
 import { recordPlacedOrder } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
+import { awardOrderCashback } from '@/utils/walletService';
+import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
+import { ScratchCardModal } from '@/components/ScratchCardModal';
 import type { Product, CartItem } from '@/types';
 
 interface CartPageProps {
   onProductClick: (product: Product) => void;
   onContinueShopping: () => void;
+  onBuyNow?: (product: Product, size?: string, color?: string) => void;
 }
 
 type CheckoutState = 'cart' | 'checkout' | 'processing' | 'success';
 
-export default function CartPage({ onProductClick, onContinueShopping }: CartPageProps) {
-  const { items, removeFromCart, updateQuantity, saveForLater, moveToCart, cartTotal, cartCount, savedItems, clearCart } = useCart();
+export default function CartPage({ onProductClick, onContinueShopping, onBuyNow }: CartPageProps) {
+  const { items, removeFromCart, updateQuantity, saveForLater, moveToCart, cartCount, savedItems, clearCart } = useCart();
   const { user, addAddress } = useAuth();
   const [checkoutState, setCheckoutState] = useState<CheckoutState>('cart');
   const [openQty, setOpenQty] = useState<string | null>(null);
@@ -41,6 +46,14 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
   const [orderError, setOrderError] = useState('');
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [pincodeSuccess, setPincodeSuccess] = useState('');
+  const [earnedReward, setEarnedReward] = useState<{
+    cashback: number;
+    milestone: number;
+    newBalance: number;
+    message?: string;
+  } | null>(null);
+  const [showMilestoneModal, setShowMilestoneModal] = useState<boolean>(false);
+  const [showScratchCard, setShowScratchCard] = useState<boolean>(true);
 
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(() => {
     return user?.addresses && user.addresses.length > 0 ? user.addresses[0].id : null;
@@ -114,14 +127,15 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
     }
   };
 
-  const activeItems = items.filter(item => !item.savedForLater);
-  const mrpTotal = activeItems.reduce((sum, item) => sum + item.product.mrp * item.quantity, 0);
-  const discount = mrpTotal - cartTotal;
-  const deliveryFee = cartTotal > 500 ? 0 : 49;
-  const totalAmount = cartTotal + deliveryFee;
+  const activeItems = items.filter(item => Boolean(item?.product?.id && !item.savedForLater));
+  const effectiveCartTotal = activeItems.reduce((sum, item) => sum + (item.product.price || 0) * Math.max(1, item.quantity || 1), 0);
+  const mrpTotal = activeItems.reduce((sum, item) => sum + (item.product.mrp || item.product.price || 0) * Math.max(1, item.quantity || 1), 0);
+  const discount = Math.max(0, mrpTotal - effectiveCartTotal);
+  const deliveryFee = effectiveCartTotal > 500 ? 0 : (effectiveCartTotal > 0 ? 49 : 0);
+  const totalAmount = effectiveCartTotal + deliveryFee;
   // COD requires 10% online advance via Razorpay
   const codAdvanceAmount = Math.max(1, Math.round(totalAmount * 0.10));
-  const codRemainingAmount = totalAmount - codAdvanceAmount;
+  const codRemainingAmount = Math.max(0, totalAmount - codAdvanceAmount);
 
   const handlePlaceOrder = async () => {
     setOrderError('');
@@ -253,6 +267,42 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
     // 3. Save to customer local orders AND Supplier Dashboard
     recordPlacedOrder(orderPayload);
 
+    // 4. Trigger automated instant email notifications (Seller alert to anojkumaryadav7290@gmail.com + Customer confirmation)
+    fetch('/api/notifications/send-order-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        order: orderPayload,
+        customerEmail: user?.email || undefined,
+        sellerEmail: 'anojkumaryadav7290@gmail.com',
+      }),
+    }).catch((e) => console.warn('Email notification dispatch notice:', e));
+
+    // 5. Award Product-Based Cashback & 3rd Order Milestone to Firebase Wallet
+    try {
+      const rewardResult = await awardOrderCashback(
+        user?.id || 'guest',
+        generatedId,
+        orderItems.map((item) => ({
+          id: item.product_id,
+          title: item.title,
+          price: item.unit_price,
+          quantity: item.quantity,
+        }))
+      );
+      setEarnedReward({
+        cashback: rewardResult.cashbackEarned,
+        milestone: rewardResult.milestoneAwarded,
+        newBalance: rewardResult.newWalletBalance,
+        message: rewardResult.celebrationMessage,
+      });
+      if (rewardResult.milestoneAwarded > 0) {
+        setShowMilestoneModal(true);
+      }
+    } catch (rErr) {
+      console.warn('Cashback award notice:', rErr);
+    }
+
     setOrderId(generatedId);
     clearCart();
     setCheckoutState('success');
@@ -261,6 +311,23 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
   if (checkoutState === 'success') {
     return (
       <div className="fixed inset-0 z-[60] bg-white flex flex-col items-center justify-center animate-fade-in px-4">
+        {/* Order-Linked Scratch Card (Strictly on confirmed paid order) */}
+        <ScratchCardModal
+          isOpen={showScratchCard}
+          cashbackAmount={earnedReward?.cashback ?? 30}
+          milestoneAmount={earnedReward?.milestone ?? 0}
+          orderId={orderId}
+          onDismiss={() => setShowScratchCard(false)}
+        />
+
+        {showMilestoneModal && (
+          <MilestoneCelebrationModal
+            isOpen={showMilestoneModal}
+            onClose={() => setShowMilestoneModal(false)}
+            milestoneBonus={earnedReward?.milestone}
+            message={earnedReward?.message}
+          />
+        )}
         <div className="w-20 h-20 rounded-full bg-success-500 flex items-center justify-center mb-4 animate-scale-in">
           <CheckCircle2 size={48} className="text-white" />
         </div>
@@ -271,7 +338,35 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
         {orderId && (
           <p className="text-xs text-gray-400 mt-1">Order ID: {orderId.slice(0, 8).toUpperCase()}</p>
         )}
-        <div className="mt-4 bg-flipkart-50 rounded-xl px-4 py-3 text-center">
+
+        {/* Real-time Cashback Earned Announcement Card */}
+        {earnedReward && (earnedReward.cashback > 0 || earnedReward.milestone > 0) && (
+          <div className="mt-4 w-full max-w-sm rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 p-4 text-white shadow-lg border border-indigo-700/40 text-left">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-yellow-300">
+                Cashback Earned!
+              </span>
+              <span className="text-[10px] font-semibold bg-emerald-500 text-white px-2 py-0.5 rounded-full">
+                CREDITED TO WALLET
+              </span>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-3xl font-black text-emerald-400">
+                +₹{earnedReward.cashback + earnedReward.milestone}
+              </span>
+              <span className="text-xs text-blue-200">
+                (New Balance: ₹{earnedReward.newBalance})
+              </span>
+            </div>
+            <p className="text-[11px] text-blue-200 mt-1">
+              {earnedReward.milestone > 0
+                ? `Includes ₹${earnedReward.cashback} order cashback and ₹${earnedReward.milestone} 3rd order milestone reward!`
+                : 'Available for immediate automated UPI or Bank withdrawal.'}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-4 bg-flipkart-50 rounded-xl px-4 py-3 text-center w-full max-w-sm">
           <p className="text-xs text-gray-500">Estimated Delivery</p>
           <p className="text-sm font-bold text-flipkart-600">3-5 Business Days</p>
         </div>
@@ -280,7 +375,7 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
             setCheckoutState('cart');
             onContinueShopping();
           }}
-          className="mt-6 bg-flipkart-500 text-white font-bold text-sm px-8 py-3 rounded-xl hover:bg-flipkart-600 transition-colors"
+          className="mt-6 bg-flipkart-500 text-white font-bold text-sm px-8 py-3 rounded-xl hover:bg-flipkart-600 transition-colors shadow-md"
         >
           Continue Shopping
         </button>
@@ -341,11 +436,11 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
                 </div>
 
                 <div className="space-y-2">
-                  {user.addresses.map((addr) => {
+                  {user.addresses.map((addr, addrIdx) => {
                     const isSelected = selectedAddressId === addr.id && !isAddingNewAddress;
                     return (
                       <div
-                        key={addr.id}
+                        key={addr.id || `addr_${addrIdx}`}
                         onClick={() => {
                           setSelectedAddressId(addr.id);
                           setIsAddingNewAddress(false);
@@ -700,106 +795,147 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
       {activeItems.length > 0 && (
         <div className="px-3 mt-3">
           <div className="bg-white rounded-xl shadow-card overflow-hidden">
-            {activeItems.map((item, idx) => (
-              <div
-                key={item.product.id}
-                className={`p-3 ${idx !== activeItems.length - 1 ? 'border-b border-gray-100' : ''}`}
-              >
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => onProductClick(item.product)}
-                    className="shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-gray-50"
-                  >
-                    <img
-                      src={item.product.images[0]}
-                      alt={item.product.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <button onClick={() => onProductClick(item.product)} className="text-left">
-                      <p className="text-xs text-gray-400 uppercase">{item.product.brand}</p>
-                      <h3 className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug">
-                        {item.product.title}
-                      </h3>
-                    </button>
-                    <div className="flex items-baseline gap-1.5 mt-1">
-                      <span className="text-sm font-bold text-gray-900">
-                        {formatPrice(item.product.price)}
-                      </span>
-                      <span className="text-xs text-gray-400 line-through">
-                        {formatPrice(item.product.mrp)}
-                      </span>
-                      <span className="text-xs font-bold text-success-500">
-                        {item.product.discount}% off
-                      </span>
+            {activeItems.map((item, idx) => {
+              const itemKey = item.id || `${item.product.id}_${item.selectedSize || 'std'}_${item.selectedColor || 'std'}_${idx}`;
+              return (
+                <div
+                  key={itemKey}
+                  onClick={() => onProductClick(item.product)}
+                  className={`p-3 group cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/60 transition-colors ${
+                    idx !== activeItems.length - 1 ? 'border-b border-gray-100' : ''
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      onProductClick(item.product);
+                    }
+                  }}
+                >
+                  <div className="flex gap-3">
+                    <div className="shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group-hover:border-flipkart-300 transition-colors">
+                      <img
+                        src={item.product.images[0]}
+                        alt={item.product.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        referrerPolicy="no-referrer"
+                      />
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-1">
+                        <div className="min-w-0">
+                          <p className="text-xs text-gray-400 uppercase tracking-wide">{item.product.brand}</p>
+                          <h3 className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug group-hover:text-flipkart-600 transition-colors">
+                            {item.product.title}
+                          </h3>
+                        </div>
+                        <ChevronRight size={16} className="text-gray-300 group-hover:text-flipkart-500 shrink-0 mt-1 transition-colors" />
+                      </div>
 
-                    <div className="flex items-center gap-3 mt-2">
-                      <div className="relative">
-                        <button
-                          onClick={() =>
-                            setOpenQty(openQty === item.product.id ? null : item.product.id)
-                          }
-                          className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1 text-sm font-medium text-gray-700"
-                        >
-                          Qty: {item.quantity}
-                          <ChevronDown size={14} />
-                        </button>
-                        {openQty === item.product.id && (
+                      {(item.selectedSize || item.selectedColor) && (
+                        <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500">
+                          {item.selectedSize && (
+                            <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">Size: {item.selectedSize}</span>
+                          )}
+                          {item.selectedColor && (
+                            <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">Color: {item.selectedColor}</span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-baseline gap-1.5 mt-1">
+                        <span className="text-sm font-bold text-gray-900">
+                          {formatPrice(item.product.price)}
+                        </span>
+                        {item.product.mrp > item.product.price && (
                           <>
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setOpenQty(null)}
-                            />
-                            <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 z-20 overflow-hidden">
-                              {[1, 2, 3, 4, 5].map(qty => (
-                                <button
-                                  key={qty}
-                                  onClick={() => {
-                                    updateQuantity(item.product.id, qty);
-                                    setOpenQty(null);
-                                  }}
-                                  className={`block w-full px-6 py-2 text-sm text-left hover:bg-flipkart-50 ${
-                                    qty === item.quantity
-                                      ? 'text-flipkart-500 font-bold bg-flipkart-50'
-                                      : 'text-gray-700'
-                                  }`}
-                                >
-                                  {qty}
-                                </button>
-                              ))}
-                            </div>
+                            <span className="text-xs text-gray-400 line-through">
+                              {formatPrice(item.product.mrp)}
+                            </span>
+                            <span className="text-xs font-bold text-success-500">
+                              {item.product.discount}% off
+                            </span>
                           </>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400">{item.product.delivery}</p>
+
+                      <div className="flex items-center gap-3 mt-2">
+                        <div className="relative" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenQty(openQty === itemKey ? null : itemKey)
+                            }
+                            className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1 text-sm font-medium text-gray-700 hover:border-gray-300"
+                          >
+                            Qty: {item.quantity}
+                            <ChevronDown size={14} />
+                          </button>
+                          {openQty === itemKey && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setOpenQty(null)}
+                              />
+                              <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 z-20 overflow-hidden">
+                                {[1, 2, 3, 4, 5].map(qty => (
+                                  <button
+                                    type="button"
+                                    key={qty}
+                                    onClick={() => {
+                                      updateQuantity(item.id || item.product.id, qty, item.selectedSize, item.selectedColor);
+                                      setOpenQty(null);
+                                    }}
+                                    className={`block w-full px-6 py-2 text-sm text-left hover:bg-flipkart-50 ${
+                                      qty === item.quantity
+                                        ? 'text-flipkart-500 font-bold bg-flipkart-50'
+                                        : 'text-gray-700'
+                                    }`}
+                                  >
+                                    {qty}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400">{item.product.delivery || 'Free Delivery'}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2 mt-3">
-                  <button
-                    onClick={() => removeFromCart(item.product.id)}
-                    className="flex items-center gap-1 text-xs font-bold text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <Trash2 size={14} /> Remove
-                  </button>
-                  <button
-                    onClick={() => saveForLater(item.product.id)}
-                    className="flex items-center gap-1 text-xs font-bold text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <Heart size={14} /> Save for later
-                  </button>
-                  <button
-                    onClick={() => onProductClick(item.product)}
-                    className="flex items-center gap-1 text-xs font-bold text-flipkart-500 px-3 py-1.5 rounded-lg hover:bg-flipkart-50 transition-colors ml-auto"
-                  >
-                    <Zap size={14} /> Buy this now
-                  </button>
+                  <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-50" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => removeFromCart(item.id || item.product.id, item.selectedSize, item.selectedColor)}
+                      className="flex items-center gap-1 text-xs font-bold text-gray-600 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <Trash2 size={14} /> Remove
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveForLater(item.id || item.product.id, item.selectedSize, item.selectedColor)}
+                      className="flex items-center gap-1 text-xs font-bold text-gray-600 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <Heart size={14} /> Save for later
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onBuyNow) {
+                          onBuyNow(item.product, item.selectedSize, item.selectedColor);
+                        } else {
+                          onProductClick(item.product);
+                        }
+                      }}
+                      className="flex items-center gap-1 text-xs font-bold text-flipkart-600 bg-flipkart-50 hover:bg-flipkart-100 px-3 py-1.5 rounded-lg transition-colors ml-auto border border-flipkart-200"
+                    >
+                      <Zap size={14} /> Buy this now
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             <div className="p-3 border-t border-gray-100">
               <button
@@ -822,46 +958,63 @@ export default function CartPage({ onProductClick, onContinueShopping }: CartPag
                 Saved for Later ({savedItems.length})
               </h2>
             </div>
-            {savedItems.map((item, idx) => (
-              <div
-                key={item.product.id}
-                className={`p-3 ${idx !== savedItems.length - 1 ? 'border-b border-gray-100' : ''}`}
-              >
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => onProductClick(item.product)}
-                    className="shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-gray-50"
-                  >
-                    <img
-                      src={item.product.images[0]}
-                      alt={item.product.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <button onClick={() => onProductClick(item.product)} className="text-left">
-                      <h3 className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug">
-                        {item.product.title}
-                      </h3>
-                    </button>
-                    <div className="flex items-baseline gap-1.5 mt-1">
-                      <span className="text-sm font-bold text-gray-900">
-                        {formatPrice(item.product.price)}
-                      </span>
-                      <span className="text-xs text-gray-400 line-through">
-                        {formatPrice(item.product.mrp)}
-                      </span>
+            {savedItems.map((item, idx) => {
+              const savedItemKey = item.id || `${item.product.id}_${item.selectedSize || 'std'}_${item.selectedColor || 'std'}_saved_${idx}`;
+              return (
+                <div
+                  key={savedItemKey}
+                  onClick={() => onProductClick(item.product)}
+                  className={`p-3 group cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/60 transition-colors ${
+                    idx !== savedItems.length - 1 ? 'border-b border-gray-100' : ''
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      onProductClick(item.product);
+                    }
+                  }}
+                >
+                  <div className="flex gap-3">
+                    <div className="shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group-hover:border-flipkart-300 transition-colors">
+                      <img
+                        src={item.product.images[0]}
+                        alt={item.product.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        referrerPolicy="no-referrer"
+                      />
                     </div>
-                    <button
-                      onClick={() => moveToCart(item.product.id)}
-                      className="flex items-center gap-1 text-xs font-bold text-flipkart-500 px-3 py-1.5 rounded-lg hover:bg-flipkart-50 transition-colors mt-2 border border-flipkart-200"
-                    >
-                      <ShoppingCart size={14} /> Move to Cart
-                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-1">
+                        <h3 className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug group-hover:text-flipkart-600 transition-colors">
+                          {item.product.title}
+                        </h3>
+                        <ChevronRight size={16} className="text-gray-300 group-hover:text-flipkart-500 shrink-0 mt-1 transition-colors" />
+                      </div>
+                      <div className="flex items-baseline gap-1.5 mt-1">
+                        <span className="text-sm font-bold text-gray-900">
+                          {formatPrice(item.product.price)}
+                        </span>
+                        {item.product.mrp > item.product.price && (
+                          <span className="text-xs text-gray-400 line-through">
+                            {formatPrice(item.product.mrp)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => moveToCart(item.id || item.product.id, item.selectedSize, item.selectedColor)}
+                          className="flex items-center gap-1 text-xs font-bold text-flipkart-500 px-3 py-1.5 rounded-lg hover:bg-flipkart-50 transition-colors border border-flipkart-200"
+                        >
+                          <ShoppingCart size={14} /> Move to Cart
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
