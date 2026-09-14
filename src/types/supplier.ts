@@ -1,3 +1,12 @@
+export interface VariantStockItem {
+  id?: string;
+  size: string;
+  color: string;
+  sku: string;
+  stock: number;
+  price?: number;
+}
+
 export interface SellerProduct {
   id: string;
   catalogId?: string;
@@ -23,6 +32,25 @@ export interface SellerProduct {
   fitType?: string;
   fabric?: string;
   pattern?: string;
+  productType?: string;
+  printDesign?: string;
+  weightGsm?: string | number;
+  shippingCharge?: number;
+  isFreeShipping?: boolean;
+  pickupAddress?: {
+    businessName?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    phone?: string;
+  };
+  variants?: VariantStockItem[];
+  storefrontPlacement?: {
+    homepage?: boolean;
+    categoryPages?: boolean;
+    bestDeals?: boolean;
+  };
   occasion?: string;
   pickupLocation?: string;
   weight?: number;

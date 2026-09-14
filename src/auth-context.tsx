@@ -91,8 +91,8 @@ const defaultProfileTemplate: UserProfile = {
   devices: [
     { id: 'd1', name: 'Web Browser', lastActive: 'Active now' },
   ],
-  walletBalance: 20,
-  totalCashbackEarned: 20,
+  walletBalance: 30,
+  totalCashbackEarned: 30,
   signupBonusClaimed: true,
   successfulOrdersCount: 0,
   milestoneBonusClaimed: false,
@@ -200,13 +200,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: resolvedProfile.email,
         }).catch((wErr) => console.warn('Wallet init notice:', wErr));
       } else {
-        // Only clear if not in an active custom session
+        // Only clear if user explicitly logged out or if there was no active profile
         try {
           const stored = localStorage.getItem('akselling_user_profile');
           if (stored) {
             const parsed = JSON.parse(stored);
-            if (parsed && parsed.id && parsed.id.startsWith('usr_')) {
-              // Keep persistent custom session intact
+            if (parsed && parsed.id && parsed.id !== 'guest') {
+              // Keep persistent session intact across reloads and tab switches
+              setUser(parsed);
+              setAuthInitialized(true);
               return;
             }
           }

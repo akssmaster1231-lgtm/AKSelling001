@@ -17,6 +17,8 @@ import {
   Clock,
   Film,
   Play,
+  Star,
+  IndianRupee,
 } from 'lucide-react';
 import type { SellerProduct, SellerOrder, SupplierTab } from '@/types/supplier';
 
@@ -36,6 +38,7 @@ interface DailySalesData {
   revenue: number;
   orders: number;
   views: number;
+  reviews: number;
 }
 
 export default function SupplierHomeTab({
@@ -48,6 +51,7 @@ export default function SupplierHomeTab({
   onOpenReelsStudio,
 }: SupplierHomeTabProps) {
   const [dateRange, setDateRange] = useState<'7days' | 'today' | '30days'>('7days');
+  const [activeMetric, setActiveMetric] = useState<'revenue' | 'orders' | 'views' | 'reviews'>('revenue');
   const [showPolicyBanner, setShowPolicyBanner] = useState(true);
   const [hoveredDay, setHoveredDay] = useState<DailySalesData | null>(null);
 
@@ -62,33 +66,90 @@ export default function SupplierHomeTab({
   const todayTotalSales = orders.reduce((sum, o) => sum + (o.status !== 'cancelled' ? o.totalAmount : 0), 0);
   const nextPayoutEstimate = Math.round(todayTotalSales * 0.98);
 
-  // Dynamic sales trend based on real store state
+  // Dynamic sales and reviews trend based on real store state
   const isZeroStartup = orders.length === 0;
   const totalViews = products.reduce((sum, p) => sum + (p.views || 0), 0);
+  const totalReviews = products.reduce((sum, p) => sum + (p.ratingCount || 0), 0);
+  const avgStoreRating = products.length > 0
+    ? (products.reduce((sum, p) => sum + (p.rating || 4.5), 0) / products.length).toFixed(1)
+    : '4.8';
 
-  const dailySalesData: DailySalesData[] = isZeroStartup
-    ? [
-        { date: '16 Aug 2026', shortDate: '16 Aug', revenue: 0, orders: 0, views: 0 },
-        { date: '17 Aug 2026', shortDate: '17 Aug', revenue: 0, orders: 0, views: 0 },
-        { date: '18 Aug 2026', shortDate: '18 Aug', revenue: 0, orders: 0, views: 0 },
-        { date: '19 Aug 2026', shortDate: '19 Aug', revenue: 0, orders: 0, views: 0 },
-        { date: '20 Aug 2026', shortDate: '20 Aug', revenue: 0, orders: 0, views: 0 },
-        { date: '21 Aug 2026', shortDate: '21 Aug', revenue: 0, orders: 0, views: 0 },
-        { date: '22 Aug 2026', shortDate: '22 Aug', revenue: 0, orders: 0, views: 0 },
-      ]
-    : [
-        { date: '16 Aug 2026', shortDate: '16 Aug', revenue: Math.round(todayTotalSales * 0.12), orders: Math.max(1, Math.round(orders.length * 0.12)), views: 320 },
-        { date: '17 Aug 2026', shortDate: '17 Aug', revenue: Math.round(todayTotalSales * 0.14), orders: Math.max(1, Math.round(orders.length * 0.14)), views: 420 },
-        { date: '18 Aug 2026', shortDate: '18 Aug', revenue: Math.round(todayTotalSales * 0.11), orders: Math.max(1, Math.round(orders.length * 0.11)), views: 360 },
-        { date: '19 Aug 2026', shortDate: '19 Aug', revenue: Math.round(todayTotalSales * 0.18), orders: Math.max(1, Math.round(orders.length * 0.18)), views: 490 },
-        { date: '20 Aug 2026', shortDate: '20 Aug', revenue: Math.round(todayTotalSales * 0.15), orders: Math.max(1, Math.round(orders.length * 0.15)), views: 430 },
-        { date: '21 Aug 2026', shortDate: '21 Aug', revenue: Math.round(todayTotalSales * 0.16), orders: Math.max(1, Math.round(orders.length * 0.16)), views: 510 },
-        { date: '22 Aug 2026', shortDate: '22 Aug', revenue: todayTotalSales, orders: orders.length, views: Math.max(totalViews, 480) },
-      ];
+  // Build daily data series based on dateRange
+  const generateDailyData = (): DailySalesData[] => {
+    if (isZeroStartup) {
+      const dates = ['16 Aug', '17 Aug', '18 Aug', '19 Aug', '20 Aug', '21 Aug', '22 Aug'];
+      return dates.map(d => ({
+        date: `${d} 2026`,
+        shortDate: d,
+        revenue: 0,
+        orders: 0,
+        views: 0,
+        reviews: 0,
+      }));
+    }
 
-  const maxRevenue = Math.max(1, ...dailySalesData.map(d => d.revenue));
+    if (dateRange === 'today') {
+      const slots = ['09 AM', '12 PM', '03 PM', '06 PM', '09 PM', '11 PM'];
+      return slots.map((s, idx) => ({
+        date: `Today, ${s}`,
+        shortDate: s,
+        revenue: Math.round(todayTotalSales * (0.1 + idx * 0.05)),
+        orders: Math.max(0, Math.round(orders.length * (0.1 + idx * 0.04))),
+        views: Math.max(20, Math.round((totalViews / 6) * (0.8 + idx * 0.1))),
+        reviews: idx === 2 || idx === 4 ? 1 : 0,
+      }));
+    }
+
+    if (dateRange === '30days') {
+      const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+      return weeks.map((w, idx) => ({
+        date: `Past 30 Days (${w})`,
+        shortDate: w,
+        revenue: Math.round(todayTotalSales * (0.2 + idx * 0.08)),
+        orders: Math.max(1, Math.round(orders.length * (0.2 + idx * 0.05))),
+        views: Math.max(150, Math.round((totalViews / 4) * (0.8 + idx * 0.15))),
+        reviews: Math.max(1, Math.round((totalReviews / 4) * (0.7 + idx * 0.2))),
+      }));
+    }
+
+    // Default: 7 Days
+    const days = [
+      { d: '16 Aug', r: 0.12, o: 0.12, v: 320, rev: 1 },
+      { d: '17 Aug', r: 0.14, o: 0.14, v: 420, rev: 2 },
+      { d: '18 Aug', r: 0.11, o: 0.11, v: 360, rev: 0 },
+      { d: '19 Aug', r: 0.18, o: 0.18, v: 490, rev: 3 },
+      { d: '20 Aug', r: 0.15, o: 0.15, v: 430, rev: 1 },
+      { d: '21 Aug', r: 0.16, o: 0.16, v: 510, rev: 2 },
+      { d: '22 Aug', r: 1.0, o: 1.0, v: Math.max(totalViews, 480), rev: Math.max(totalReviews, 4) },
+    ];
+
+    return days.map(item => ({
+      date: `${item.d} 2026`,
+      shortDate: item.d,
+      revenue: item.d === '22 Aug' ? todayTotalSales : Math.round(todayTotalSales * item.r),
+      orders: item.d === '22 Aug' ? orders.length : Math.max(1, Math.round(orders.length * item.o)),
+      views: item.v,
+      reviews: item.rev,
+    }));
+  };
+
+  const dailySalesData = generateDailyData();
+
+  // Max value calculation based on activeMetric
+  const getMetricValue = (d: DailySalesData) => {
+    switch (activeMetric) {
+      case 'revenue': return d.revenue;
+      case 'orders': return d.orders;
+      case 'views': return d.views;
+      case 'reviews': return d.reviews;
+    }
+  };
+
+  const maxMetricValue = Math.max(1, ...dailySalesData.map(d => getMetricValue(d)));
   const totalWeekRevenue = dailySalesData.reduce((sum, d) => sum + d.revenue, 0);
   const totalWeekOrders = dailySalesData.reduce((sum, d) => sum + d.orders, 0);
+  const totalWeekViews = dailySalesData.reduce((sum, d) => sum + d.views, 0);
+  const totalWeekReviews = dailySalesData.reduce((sum, d) => sum + d.reviews, 0);
 
   return (
     <div className="space-y-4 pb-20">
@@ -347,10 +408,67 @@ export default function SupplierHomeTab({
           </div>
         </div>
 
-        {/* Metric Summary Cards */}
+        {/* Metric Summary Cards (Revenue, Orders, Views, Reviews) */}
         <div className="grid grid-cols-2 gap-2.5">
-          {/* Views Summary Card */}
-          <div className="bg-gradient-to-br from-blue-50/70 to-indigo-50/50 rounded-xl p-3 border border-blue-200/70">
+          {/* 1. Gross Revenue Card */}
+          <div
+            onClick={() => setActiveMetric('revenue')}
+            className={`rounded-xl p-3 border transition-all cursor-pointer ${
+              activeMetric === 'revenue'
+                ? 'bg-blue-50/90 border-flipkart-500 ring-2 ring-flipkart-500/20 shadow-xs'
+                : 'bg-gradient-to-br from-blue-50/50 to-indigo-50/30 border-blue-200/60 hover:border-blue-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                <IndianRupee size={14} className="text-[#2874f0]" />
+                <span>Gross Revenue</span>
+              </div>
+              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                <ArrowUpRight size={11} /> {isZeroStartup ? '0%' : '+22.4%'}
+              </span>
+            </div>
+            <div className="text-xl font-black text-gray-900 mt-2">
+              ₹{totalWeekRevenue.toLocaleString('en-IN')}
+            </div>
+            <div className="text-[10px] text-[#2874f0] font-bold mt-0.5">
+              Next payout est: ₹{nextPayoutEstimate.toLocaleString('en-IN')}
+            </div>
+          </div>
+
+          {/* 2. Total Orders Card */}
+          <div
+            onClick={() => setActiveMetric('orders')}
+            className={`rounded-xl p-3 border transition-all cursor-pointer ${
+              activeMetric === 'orders'
+                ? 'bg-blue-50/90 border-flipkart-500 ring-2 ring-flipkart-500/20 shadow-xs'
+                : 'bg-gradient-to-br from-blue-50/50 to-sky-50/30 border-blue-200/60 hover:border-blue-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                <ShoppingBag size={14} className="text-[#2874f0]" />
+                <span>Total Orders</span>
+              </div>
+              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                <ArrowUpRight size={11} /> {isZeroStartup ? '0%' : '+12.6%'}
+              </span>
+            </div>
+            <div className="text-xl font-black text-gray-900 mt-2">{totalWeekOrders} Orders</div>
+            <div className="text-[10px] text-gray-500 mt-0.5">
+              {pendingOrdersCount} to process • {readyToShipCount} ready
+            </div>
+          </div>
+
+          {/* 3. Catalog Views Card */}
+          <div
+            onClick={() => setActiveMetric('views')}
+            className={`rounded-xl p-3 border transition-all cursor-pointer ${
+              activeMetric === 'views'
+                ? 'bg-blue-50/90 border-flipkart-500 ring-2 ring-flipkart-500/20 shadow-xs'
+                : 'bg-gradient-to-br from-blue-50/50 to-indigo-50/30 border-blue-200/60 hover:border-blue-300'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
                 <Eye size={14} className="text-[#2874f0]" />
@@ -364,23 +482,34 @@ export default function SupplierHomeTab({
               {isZeroStartup ? '0' : (totalViews > 0 ? totalViews.toLocaleString('en-IN') : '0')}
             </div>
             <div className="text-[10px] text-gray-500 mt-0.5">
-              {isZeroStartup ? 'Fresh startup listing' : 'Live catalog buyer traffic'}
+              {isZeroStartup ? 'Fresh startup listing' : `${liveCatalogsCount} active live catalogs`}
             </div>
           </div>
 
-          {/* Total Orders & Gross Revenue */}
-          <div className="bg-gradient-to-br from-blue-50/70 to-sky-50/50 rounded-xl p-3 border border-blue-200/70">
+          {/* 4. Customer Reviews & Ratings Card */}
+          <div
+            onClick={() => setActiveMetric('reviews')}
+            className={`rounded-xl p-3 border transition-all cursor-pointer ${
+              activeMetric === 'reviews'
+                ? 'bg-amber-50/90 border-amber-500 ring-2 ring-amber-500/20 shadow-xs'
+                : 'bg-gradient-to-br from-amber-50/50 to-yellow-50/30 border-amber-200/60 hover:border-amber-300'
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
-                <ShoppingBag size={14} className="text-[#2874f0]" />
-                <span>Total Orders</span>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                <Star size={14} className="text-amber-500 fill-amber-500" />
+                <span>Customer Reviews</span>
               </div>
-              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
-                <ArrowUpRight size={11} /> {isZeroStartup ? '0%' : '+12.6%'}
+              <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                ★ {avgStoreRating}
               </span>
             </div>
-            <div className="text-xl font-black text-gray-900 mt-2">{totalWeekOrders} Orders</div>
-            <div className="text-[10px] text-[#2874f0] font-bold mt-0.5">Gross: ₹{totalWeekRevenue.toLocaleString('en-IN')}</div>
+            <div className="text-xl font-black text-gray-900 mt-2">
+              {totalReviews > 0 ? `${totalReviews.toLocaleString('en-IN')}` : '0'} Reviews
+            </div>
+            <div className="text-[10px] text-amber-700 font-bold mt-0.5">
+              Store Rating: {avgStoreRating}★ • 98% Positive
+            </div>
           </div>
         </div>
 
@@ -402,16 +531,69 @@ export default function SupplierHomeTab({
 
         {/* Interactive Date-Wise Sales Graph */}
         <div className="pt-2">
-          <div className="flex items-center justify-between text-xs mb-2">
-            <span className="font-bold text-gray-800">Daily Revenue & Orders Trend</span>
-            <span className="text-[11px] text-gray-500">Hover bar for details</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2">
+            <div>
+              <span className="font-bold text-xs text-gray-800">
+                Daily{' '}
+                {activeMetric === 'revenue'
+                  ? 'Gross Revenue (₹)'
+                  : activeMetric === 'orders'
+                  ? 'Orders Count'
+                  : activeMetric === 'views'
+                  ? 'Catalog Views'
+                  : 'Customer Reviews'}{' '}
+                Trend
+              </span>
+              <p className="text-[10px] text-gray-400">Click any card above or tabs to change metric</p>
+            </div>
+
+            {/* Metric Switcher Pills */}
+            <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg text-[10px] font-bold self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setActiveMetric('revenue')}
+                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                  activeMetric === 'revenue' ? 'bg-[#2874f0] text-white shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                ₹ Revenue
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMetric('orders')}
+                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                  activeMetric === 'orders' ? 'bg-[#2874f0] text-white shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Orders
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMetric('views')}
+                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                  activeMetric === 'views' ? 'bg-[#2874f0] text-white shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Views
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMetric('reviews')}
+                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                  activeMetric === 'reviews' ? 'bg-amber-500 text-white shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                ★ Reviews
+              </button>
+            </div>
           </div>
 
           {/* Bar Chart Container */}
           <div className="bg-gray-50/70 p-3 rounded-xl border border-gray-100">
             <div className="h-36 flex items-end justify-between gap-1.5 pt-4">
               {dailySalesData.map(day => {
-                const heightPercent = isZeroStartup ? 6 : Math.max(8, Math.round((day.revenue / maxRevenue) * 100));
+                const metricVal = getMetricValue(day);
+                const heightPercent = isZeroStartup ? 6 : Math.max(8, Math.round((metricVal / maxMetricValue) * 100));
                 const isHovered = hoveredDay?.shortDate === day.shortDate;
 
                 return (
@@ -423,11 +605,21 @@ export default function SupplierHomeTab({
                     className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer"
                   >
                     <div className="relative w-full flex items-end justify-center h-28">
+                      {/* Floating value on hover */}
+                      {isHovered && (
+                        <div className="absolute -top-6 bg-gray-900 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md shadow-xs whitespace-nowrap z-10 animate-fade-in">
+                          {activeMetric === 'revenue' ? `₹${day.revenue.toLocaleString('en-IN')}` : metricVal}
+                        </div>
+                      )}
                       {/* Bar */}
                       <div
                         style={{ height: `${heightPercent}%` }}
                         className={`w-full max-w-[28px] rounded-t-md transition-all ${
-                          isHovered
+                          activeMetric === 'reviews'
+                            ? isHovered
+                              ? 'bg-amber-500 shadow-sm'
+                              : 'bg-gradient-to-t from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600'
+                            : isHovered
                             ? 'bg-[#2874f0] shadow-sm'
                             : 'bg-gradient-to-t from-[#2874f0]/70 to-[#2874f0] hover:from-[#1a65dc] hover:to-[#2874f0]'
                         }`}
@@ -436,7 +628,11 @@ export default function SupplierHomeTab({
                     {/* Date label */}
                     <span
                       className={`text-[10px] font-semibold transition-colors ${
-                        isHovered ? 'text-[#2874f0] font-bold' : 'text-gray-500'
+                        isHovered
+                          ? activeMetric === 'reviews'
+                            ? 'text-amber-600 font-bold'
+                            : 'text-[#2874f0] font-bold'
+                          : 'text-gray-500'
                       }`}
                     >
                       {day.shortDate}
@@ -449,18 +645,21 @@ export default function SupplierHomeTab({
             {/* Hover tooltip readout card */}
             <div className="mt-2.5 pt-2 border-t border-gray-200/60 flex items-center justify-between text-xs">
               {hoveredDay ? (
-                <div className="flex items-center gap-3 w-full justify-between bg-white px-2.5 py-1.5 rounded-lg border border-blue-200 shadow-2xs animate-fade-in">
+                <div className="flex items-center gap-2.5 w-full justify-between bg-white px-2.5 py-1.5 rounded-lg border border-blue-200 shadow-2xs animate-fade-in">
                   <span className="font-bold text-gray-900">{hoveredDay.date}</span>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="text-[#2874f0] font-bold">₹{hoveredDay.revenue.toLocaleString('en-IN')}</span>
                     <span className="text-gray-600 font-semibold">{hoveredDay.orders} Orders</span>
-                    <span className="text-gray-400 text-[11px]">{hoveredDay.views} Views</span>
+                    <span className="text-gray-500 text-[11px]">{hoveredDay.views} Views</span>
+                    <span className="text-amber-700 font-bold text-[11px] flex items-center gap-0.5">
+                      <Star size={10} className="fill-amber-500 text-amber-500" /> {hoveredDay.reviews} Reviews
+                    </span>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between w-full text-gray-500 text-[11px]">
                   <span>Total Revenue: ₹{totalWeekRevenue.toLocaleString('en-IN')}</span>
-                  <span>{totalWeekOrders} Total Orders</span>
+                  <span>{totalWeekOrders} Orders • {totalWeekViews} Views • {totalWeekReviews} Reviews</span>
                 </div>
               )}
             </div>

@@ -15,6 +15,7 @@ import {
   MAX_WALLET_ACCUMULATION_CAP,
   calculateOrderCashback,
   MILESTONE_CELEBRATION_MESSAGE,
+  SIGNUP_BONUS_FLAT,
 } from './cashbackEngine';
 
 const WALLET_LOCAL_STORAGE_PREFIX = 'akselling_wallet_cache_';
@@ -22,7 +23,7 @@ const WITHDRAWAL_LOCAL_STORAGE_KEY = 'akselling_pending_withdrawals_';
 
 /**
  * Helper to get locally cached wallet state for offline/instant UI renders
- * Zero Free Rewards: Balance starts at 0 without a confirmed order payment
+ * Instant ₹30 Welcome Bonus credited upon initial sign-up
  */
 export function getLocalWalletCache(userId: string): {
   walletBalance: number;
@@ -40,8 +41,8 @@ export function getLocalWalletCache(userId: string): {
     // fallback
   }
   return {
-    walletBalance: 0,
-    totalCashbackEarned: 0,
+    walletBalance: SIGNUP_BONUS_FLAT,
+    totalCashbackEarned: SIGNUP_BONUS_FLAT,
     signupBonusClaimed: true,
     successfulOrdersCount: 0,
     milestoneBonusClaimed: false,
@@ -62,9 +63,9 @@ export function setLocalWalletCache(
 }
 
 /**
- * 1. User Wallet Initialization (Zero Free Rewards Rule)
- * Under strict zero-free-rewards policy, users start with ₹0.
- * Rewards and credits are strictly earned ONLY from confirmed, successful product payments.
+ * 1. User Wallet Initialization (Instant Sign-Up Bonus ₹30)
+ * On first login/sign-up, ₹30 is credited instantly into the user's wallet.
+ * Subsequent rewards and credits are strictly earned from confirmed, successful product payments.
  */
 export async function initializeUserWallet(
   userId: string,
@@ -76,7 +77,7 @@ export async function initializeUserWallet(
 }> {
   if (!userId || userId === 'guest') {
     return {
-      walletBalance: 0,
+      walletBalance: SIGNUP_BONUS_FLAT,
       isFirstBonusCredited: false,
       successfulOrdersCount: 0,
     };
@@ -84,44 +85,76 @@ export async function initializeUserWallet(
 
   try {
     if (!isFirebaseConfigured) {
+      const cached = getLocalWalletCache(userId);
+      const balance = cached.walletBalance > 0 ? cached.walletBalance : SIGNUP_BONUS_FLAT;
       setLocalWalletCache(userId, {
-        walletBalance: 0,
-        totalCashbackEarned: 0,
+        walletBalance: balance,
+        totalCashbackEarned: Math.max(cached.totalCashbackEarned, balance),
         signupBonusClaimed: true,
-        successfulOrdersCount: 0,
+        successfulOrdersCount: cached.successfulOrdersCount || 0,
       });
       return {
-        walletBalance: 0,
-        isFirstBonusCredited: false,
-        successfulOrdersCount: 0,
+        walletBalance: balance,
+        isFirstBonusCredited: true,
+        successfulOrdersCount: cached.successfulOrdersCount || 0,
       };
     }
 
     const userDocRef = doc(db, 'users', userId);
-    let finalBalance = 0;
+    let finalBalance = SIGNUP_BONUS_FLAT;
     let finalOrdersCount = 0;
+    let isBonusCredited = false;
 
     await runTransaction(db, async (transaction) => {
       const userDocSnap = await transaction.get(userDocRef);
 
       if (userDocSnap.exists()) {
         const data = userDocSnap.data();
-        const balance = typeof data.walletBalance === 'number' ? data.walletBalance : 0;
+        let balance = typeof data.walletBalance === 'number' ? data.walletBalance : 0;
         const ordersCount = typeof data.successfulOrdersCount === 'number' ? data.successfulOrdersCount : 0;
+        
+        // If user never received the signup bonus, credit ₹30 now
+        if (!data.signupBonusClaimed && balance === 0) {
+          balance = SIGNUP_BONUS_FLAT;
+          const earned = (typeof data.totalCashbackEarned === 'number' ? data.totalCashbackEarned : 0) + SIGNUP_BONUS_FLAT;
+          transaction.set(userDocRef, {
+            ...data,
+            walletBalance: balance,
+            totalCashbackEarned: earned,
+            signupBonusClaimed: true,
+            updatedAt: new Date().toISOString(),
+          }, { merge: true });
+
+          const txDocRef = doc(db, 'wallet_transactions', `tx_signup_${userId}`);
+          transaction.set(txDocRef, {
+            id: `tx_signup_${userId}`,
+            userId,
+            type: 'CREDIT',
+            amount: SIGNUP_BONUS_FLAT,
+            title: 'Welcome Sign-Up Bonus',
+            description: 'Instant ₹30 Welcome Bonus credited upon first sign-up',
+            category: 'signup_bonus',
+            status: 'SUCCESS',
+            createdAt: new Date().toISOString(),
+          });
+          isBonusCredited = true;
+        }
+
         finalBalance = balance;
         finalOrdersCount = ordersCount;
       } else {
-        // Brand new user document: starts with ₹0 balance (Zero Free Rewards Policy)
-        finalBalance = 0;
+        // Brand new user document: starts with ₹30 Instant Welcome Bonus
+        finalBalance = SIGNUP_BONUS_FLAT;
         finalOrdersCount = 0;
+        isBonusCredited = true;
 
         const initialData = {
           id: userId,
           name: extraProfileData.name || 'AKSelling Member',
           phone: extraProfileData.phone || '',
           email: extraProfileData.email || '',
-          walletBalance: 0,
-          totalCashbackEarned: 0,
+          walletBalance: SIGNUP_BONUS_FLAT,
+          totalCashbackEarned: SIGNUP_BONUS_FLAT,
           signupBonusClaimed: true,
           successfulOrdersCount: 0,
           milestoneBonusClaimed: false,
@@ -130,6 +163,19 @@ export async function initializeUserWallet(
         };
 
         transaction.set(userDocRef, initialData);
+
+        const txDocRef = doc(db, 'wallet_transactions', `tx_signup_${userId}`);
+        transaction.set(txDocRef, {
+          id: `tx_signup_${userId}`,
+          userId,
+          type: 'CREDIT',
+          amount: SIGNUP_BONUS_FLAT,
+          title: 'Welcome Sign-Up Bonus',
+          description: 'Instant ₹30 Welcome Bonus credited upon first sign-up',
+          category: 'signup_bonus',
+          status: 'SUCCESS',
+          createdAt: new Date().toISOString(),
+        });
       }
     });
 
@@ -141,13 +187,13 @@ export async function initializeUserWallet(
 
     return {
       walletBalance: finalBalance,
-      isFirstBonusCredited: false,
+      isFirstBonusCredited: isBonusCredited,
       successfulOrdersCount: finalOrdersCount,
     };
   } catch (err) {
     console.warn('initializeUserWallet error:', err);
     return {
-      walletBalance: 0,
+      walletBalance: SIGNUP_BONUS_FLAT,
       isFirstBonusCredited: false,
       successfulOrdersCount: 0,
     };
@@ -156,12 +202,13 @@ export async function initializeUserWallet(
 
 /**
  * 2 & 3. Product-Based Cashback, Repeat Order Caps & 3rd Order Milestone
- * Awards cashback ONLY after a verified paid order placement.
+ * Awards cashback ONLY after a verified paid order placement with genuine paymentId.
  */
 export async function awardOrderCashback(
   userId: string,
   orderId: string,
-  items: Array<{ id?: string; title?: string; price: number; quantity?: number }>
+  items: Array<{ id?: string; title?: string; price: number; quantity?: number }>,
+  paymentId?: string
 ): Promise<{
   cashbackEarned: number;
   milestoneAwarded: number;
@@ -178,11 +225,23 @@ export async function awardOrderCashback(
     };
   }
 
+  // Enforce mandatory payment validation: rewards cannot be generated without a verified payment transaction
+  if (!paymentId) {
+    console.warn('[WalletSecurity] Order reward generation halted: Missing verified payment ID.');
+    return {
+      cashbackEarned: 0,
+      milestoneAwarded: 0,
+      newWalletBalance: 0,
+      newOrdersCount: 0,
+      celebrationMessage: undefined,
+    };
+  }
+
   try {
     let cashbackEarned = 0;
     let milestoneAwarded = 0;
-    let newWalletBalance = 20;
-    let newTotalEarned = 20;
+    let newWalletBalance = 0;
+    let newTotalEarned = 0;
     let newOrdersCount = 1;
     let newMilestoneClaimed = false;
 
@@ -191,14 +250,14 @@ export async function awardOrderCashback(
 
       await runTransaction(db, async (transaction) => {
         const userDocSnap = await transaction.get(userDocRef);
-        let currentBalance = 20;
-        let currentTotalEarned = 20;
+        let currentBalance = 0;
+        let currentTotalEarned = 0;
         let previousOrdersCount = 0;
         let milestoneAlreadyClaimed = false;
 
         if (userDocSnap.exists()) {
           const data = userDocSnap.data();
-          currentBalance = typeof data.walletBalance === 'number' ? data.walletBalance : 20;
+          currentBalance = typeof data.walletBalance === 'number' ? data.walletBalance : 0;
           currentTotalEarned = typeof data.totalCashbackEarned === 'number' ? data.totalCashbackEarned : currentBalance;
           previousOrdersCount = typeof data.successfulOrdersCount === 'number' ? data.successfulOrdersCount : 0;
           milestoneAlreadyClaimed = Boolean(data.milestoneBonusClaimed);
@@ -231,7 +290,7 @@ export async function awardOrderCashback(
           { merge: true }
         );
 
-        // 1. Transaction log for order cashback
+        // 1. Transaction log for order cashback (Strictly Immutable)
         if (cashbackEarned > 0) {
           const txDocRef = doc(db, 'wallet_transactions', `tx_cb_${orderId}`);
           transaction.set(txDocRef, {
@@ -240,15 +299,17 @@ export async function awardOrderCashback(
             type: 'CREDIT',
             amount: cashbackEarned,
             title: `Order #${orderId.slice(-6).toUpperCase()} Cashback`,
-            description: `Cashback earned on verified purchase (Repeat Bonus Level: ${previousOrdersCount})`,
+            description: `Cashback earned on verified purchase (Repeat Level: ${previousOrdersCount})`,
             category: 'order_cashback',
             status: 'SUCCESS',
             orderId,
+            paymentId,
+            verifiedPayment: true,
             createdAt: new Date().toISOString(),
           });
         }
 
-        // 2. Transaction log for 3rd order milestone reward
+        // 2. Transaction log for 3rd order milestone reward (Strictly Immutable)
         if (milestoneAwarded > 0) {
           const milestoneTxRef = doc(db, 'wallet_transactions', `tx_milestone_${orderId}`);
           transaction.set(milestoneTxRef, {
@@ -261,6 +322,8 @@ export async function awardOrderCashback(
             category: 'milestone_reward',
             status: 'SUCCESS',
             orderId,
+            paymentId,
+            verifiedPayment: true,
             createdAt: new Date().toISOString(),
           });
         }

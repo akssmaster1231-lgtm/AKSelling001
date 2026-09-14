@@ -60,6 +60,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
   });
   const [isAddingNewAddress, setIsAddingNewAddress] = useState(false);
   const [saveAddressToProfile, setSaveAddressToProfile] = useState(true);
+  const [isPaymentAuthorizing, setIsPaymentAuthorizing] = useState(false);
 
   const [form, setForm] = useState({
     name: user?.name || '',
@@ -152,46 +153,74 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
       return;
     }
 
-    let rzpOrderId: string | undefined;
-    let rzpPaymentId: string | undefined;
+    setIsPaymentAuthorizing(true);
 
-    setCheckoutState('processing');
+    try {
+      let paymentResult;
+      const isCod = form.paymentMethod === 'cod';
 
-    if (form.paymentMethod === 'cod') {
-      // 10% Online Advance via Razorpay for COD order
-      const paymentResult = await initiateRazorpayPayment(codAdvanceAmount, {
-        name: 'AKSelling - 10% COD Advance',
-        description: `10% Token Advance for Cart Order (${cartCount} items)`,
-        prefill: { name: form.name, contact: form.phone },
-      });
+      if (isCod) {
+        // 10% Online Advance via Razorpay for COD order
+        paymentResult = await initiateRazorpayPayment(codAdvanceAmount, {
+          name: 'AKSelling - 10% COD Advance',
+          description: `10% Token Advance for Cart Order (${cartCount} items)`,
+          prefill: { name: form.name, contact: form.phone },
+        });
+      } else {
+        // Full Prepaid (UPI / Card / NetBanking)
+        paymentResult = await initiateRazorpayPayment(totalAmount, {
+          name: 'AKSelling',
+          description: `Order of ${cartCount} item(s)`,
+          prefill: { name: form.name, contact: form.phone },
+        });
+      }
 
-      if (!paymentResult.success) {
-        setOrderError(paymentResult.error || '10% COD advance payment was not completed. Order cannot be placed without advance confirmation.');
-        setCheckoutState('checkout');
+      if (!paymentResult.success || !paymentResult.paymentId) {
+        setIsPaymentAuthorizing(false);
+        setOrderError(
+          paymentResult.error ||
+          'Payment was not completed. Mandatory pre-payment verification is required before order placement.'
+        );
         return;
       }
-      rzpOrderId = paymentResult.orderId;
-      rzpPaymentId = paymentResult.paymentId;
-      await placeOrderInDb(rzpOrderId, rzpPaymentId, codAdvanceAmount, codRemainingAmount);
-      return;
+
+      // Backend Transaction Validation Middleware: Check server ledger before placing order
+      const validateResp = await fetch('/api/orders/validate-and-verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_id: paymentResult.paymentId,
+          order_id: paymentResult.orderId,
+          total_amount: totalAmount,
+          payment_method: form.paymentMethod,
+          required_advance: isCod ? codAdvanceAmount : totalAmount,
+        }),
+      });
+
+      if (!validateResp.ok) {
+        const errPayload = await validateResp.json().catch(() => ({}));
+        setIsPaymentAuthorizing(false);
+        setOrderError(
+          errPayload.error ||
+          'Server payment validation failed. Your transaction has not been confirmed on the backend ledger.'
+        );
+        return;
+      }
+
+      // ONLY after verified payment callback and server validation do we transition to order placement
+      setIsPaymentAuthorizing(false);
+      setCheckoutState('processing');
+
+      if (isCod) {
+        await placeOrderInDb(paymentResult.orderId, paymentResult.paymentId, codAdvanceAmount, codRemainingAmount);
+      } else {
+        await placeOrderInDb(paymentResult.orderId, paymentResult.paymentId);
+      }
+    } catch (err: unknown) {
+      setIsPaymentAuthorizing(false);
+      const errMsg = err instanceof Error ? err.message : 'Unexpected payment error';
+      setOrderError(`Payment processing failed: ${errMsg}`);
     }
-
-    // Full Prepaid (UPI / Card / NetBanking)
-    const paymentResult = await initiateRazorpayPayment(totalAmount, {
-      name: 'AKSelling',
-      description: `Order of ${cartCount} item(s)`,
-      prefill: { name: form.name, contact: form.phone },
-    });
-
-    if (!paymentResult.success) {
-      setOrderError(paymentResult.error || 'Payment failed. Please try again.');
-      setCheckoutState('checkout');
-      return;
-    }
-    rzpOrderId = paymentResult.orderId;
-    rzpPaymentId = paymentResult.paymentId;
-
-    await placeOrderInDb(rzpOrderId, rzpPaymentId);
   };
 
   const placeOrderInDb = async (
@@ -278,17 +307,18 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
       }),
     }).catch((e) => console.warn('Email notification dispatch notice:', e));
 
-    // 5. Award Product-Based Cashback & 3rd Order Milestone to Firebase Wallet
+    // 5. Award Product-Based Cashback & 3rd Order Milestone to Firebase Wallet with verified paymentId
     try {
       const rewardResult = await awardOrderCashback(
         user?.id || 'guest',
         generatedId,
         orderItems.map((item) => ({
           id: item.product_id,
-          title: item.title,
-          price: item.unit_price,
+          title: item.product_title,
+          price: item.price,
           quantity: item.quantity,
-        }))
+        })),
+        rzpPaymentId
       );
       setEarnedReward({
         cashback: rewardResult.cashbackEarned,
@@ -753,9 +783,20 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
             </div>
             <button
               onClick={handlePlaceOrder}
-              className="flex-1 ml-4 bg-accent-400 text-white font-bold text-base py-3.5 rounded-xl hover:bg-accent-600 transition-colors"
+              disabled={isPaymentAuthorizing}
+              className={`flex-1 ml-4 ${
+                isPaymentAuthorizing ? 'bg-accent-400/80 cursor-wait' : 'bg-accent-400 hover:bg-accent-600'
+              } text-white font-bold text-base py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2`}
             >
-              {form.paymentMethod === 'cod' ? `Pay 10% Advance (₹${codAdvanceAmount})` : 'Confirm Order'}
+              {isPaymentAuthorizing ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" /> Verifying Payment...
+                </>
+              ) : (
+                <>
+                  <Zap size={18} /> {form.paymentMethod === 'cod' ? `Pay 10% Advance (₹${codAdvanceAmount})` : 'Confirm Order'}
+                </>
+              )}
             </button>
           </div>
         </div>

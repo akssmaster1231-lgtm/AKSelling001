@@ -23,6 +23,32 @@ export interface Product {
   pickupLocation?: string;
   weight?: number;
   dimensions?: { length: number; width: number; height: number };
+  productType?: string;
+  printDesign?: string;
+  weightGsm?: string | number;
+  shippingCharge?: number;
+  isFreeShipping?: boolean;
+  pickupAddress?: {
+    businessName?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    phone?: string;
+  };
+  variants?: Array<{
+    id?: string;
+    size: string;
+    color: string;
+    sku: string;
+    stock: number;
+    price?: number;
+  }>;
+  storefrontPlacement?: {
+    homepage?: boolean;
+    categoryPages?: boolean;
+    bestDeals?: boolean;
+  };
 }
 
 export interface CartItem {

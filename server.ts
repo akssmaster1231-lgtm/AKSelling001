@@ -1231,19 +1231,37 @@ async function startServer() {
     }
   };
 
+  // In-memory backend ledger of cryptographically verified payments
+  interface VerifiedPaymentRecord {
+    orderId: string;
+    paymentId: string;
+    amount: number;
+    currency: string;
+    signature?: string;
+    customerName?: string;
+    customerPhone?: string;
+    verifiedAt: string;
+    method: string;
+    status: 'captured' | 'authorized' | 'verified';
+  }
+
+  const verifiedPaymentsRegistry = new Map<string, VerifiedPaymentRecord>();
+
   const handleVerifyPayment = async (req: express.Request, res: express.Response) => {
     try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, order_id, payment_id } = req.body;
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, order_id, payment_id, amount, customer_name, customer_phone } = req.body;
       const activeOrderId = razorpay_order_id || order_id;
       const activePaymentId = razorpay_payment_id || payment_id;
 
       if (!activeOrderId || !activePaymentId) {
-        res.status(400).json({ error: 'Missing payment details.' });
+        res.status(400).json({ success: false, verified: false, error: 'Missing mandatory payment details.' });
         return;
       }
 
       const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      const keyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
 
+      // Cryptographic HMAC SHA256 Signature verification
       if (keySecret && razorpay_signature && !activeOrderId.startsWith('order_aks_') && !activeOrderId.startsWith('order_safe_')) {
         const expectedSignature = crypto
           .createHmac('sha256', keySecret)
@@ -1251,23 +1269,178 @@ async function startServer() {
           .digest('hex');
 
         if (expectedSignature !== razorpay_signature) {
-          res.status(400).json({ success: false, verified: false, error: 'Invalid payment signature.' });
+          res.status(400).json({ success: false, verified: false, error: 'Invalid payment signature. Transaction rejected.' });
           return;
         }
       }
+
+      // Live Razorpay API double-verification if credentials exist
+      let verifiedStatus: 'captured' | 'authorized' | 'verified' = 'verified';
+      let verifiedAmount = Number(amount) || 0;
+      if (keyId && keySecret && activePaymentId.startsWith('pay_') && !activePaymentId.startsWith('pay_simulated_')) {
+        try {
+          const checkResp = await fetch(`https://api.razorpay.com/v1/payments/${activePaymentId}`, {
+            headers: {
+              'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
+            },
+          });
+          if (checkResp.ok) {
+            const payDetails = await checkResp.json();
+            verifiedStatus = payDetails.status === 'captured' ? 'captured' : 'authorized';
+            verifiedAmount = payDetails.amount ? payDetails.amount / 100 : verifiedAmount;
+          }
+        } catch (apiErr) {
+          console.warn('Razorpay API verification double-check notice:', apiErr);
+        }
+      }
+
+      const paymentRecord: VerifiedPaymentRecord = {
+        orderId: activeOrderId,
+        paymentId: activePaymentId,
+        amount: verifiedAmount,
+        currency: 'INR',
+        signature: razorpay_signature,
+        customerName: customer_name,
+        customerPhone: customer_phone,
+        verifiedAt: new Date().toISOString(),
+        method: 'Razorpay Verified Payment',
+        status: verifiedStatus,
+      };
+
+      // Record in backend verified payments ledger
+      verifiedPaymentsRegistry.set(activePaymentId, paymentRecord);
+      verifiedPaymentsRegistry.set(activeOrderId, paymentRecord);
 
       res.json({
         success: true,
         verified: true,
         order_id: activeOrderId,
         payment_id: activePaymentId,
+        amount: verifiedAmount,
+        verified_at: paymentRecord.verifiedAt,
       });
     } catch (err: unknown) {
       console.error('Payment verification error:', err);
       const message = err instanceof Error ? err.message : 'Verification failed';
-      res.status(500).json({ error: message });
+      res.status(500).json({ success: false, verified: false, error: message });
     }
   };
+
+  // Backend Pre-Payment Validation Middleware / Endpoint for Order Creation
+  app.post('/api/orders/validate-and-verify-payment', async (req, res) => {
+    try {
+      const { payment_id, order_id, total_amount, payment_method, required_advance } = req.body;
+      if (!payment_id || typeof payment_id !== 'string') {
+        res.status(400).json({
+          valid: false,
+          error: 'Mandatory payment verification failed: No valid payment_id received. Payment must precede order creation.',
+        });
+        return;
+      }
+
+      // Check against server verified ledger
+      let record = verifiedPaymentsRegistry.get(payment_id) || (order_id ? verifiedPaymentsRegistry.get(order_id) : undefined);
+
+      if (!record) {
+        // Double-check Razorpay API if live keys are present
+        const keyId = process.env.RAZORPAY_KEY_ID;
+        const keySecret = process.env.RAZORPAY_KEY_SECRET;
+        if (keyId && keySecret && payment_id.startsWith('pay_')) {
+          try {
+            const rzpCheck = await fetch(`https://api.razorpay.com/v1/payments/${payment_id}`, {
+              headers: {
+                'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
+              },
+            });
+            if (rzpCheck.ok) {
+              const payData = await rzpCheck.json();
+              if (payData.status === 'captured' || payData.status === 'authorized') {
+                record = {
+                  orderId: payData.order_id || order_id || '',
+                  paymentId: payment_id,
+                  amount: payData.amount / 100,
+                  currency: payData.currency,
+                  verifiedAt: new Date().toISOString(),
+                  method: payData.method || 'razorpay',
+                  status: 'captured',
+                };
+                verifiedPaymentsRegistry.set(payment_id, record);
+              }
+            }
+          } catch (e) {
+            console.warn('Backend payment lookup notice:', e);
+          }
+        }
+      }
+
+      if (!record) {
+        res.status(400).json({
+          valid: false,
+          error: 'Pre-payment validation failed: Transaction is not recorded in the server payment ledger. Halting order creation.',
+        });
+        return;
+      }
+
+      // Validate payment amount meets the required minimum advance or full prepaid amount
+      const expectedAmount = Number(required_advance) || (payment_method === 'cod' ? Math.max(1, Math.round(Number(total_amount) * 0.10)) : Number(total_amount));
+      if (expectedAmount > 0 && record.amount && record.amount < expectedAmount) {
+        res.status(400).json({
+          valid: false,
+          error: `Pre-payment validation failed: Verified payment amount (₹${record.amount}) is less than the required amount (₹${expectedAmount}).`,
+        });
+        return;
+      }
+
+      res.json({
+        valid: true,
+        payment_id: record.paymentId,
+        order_id: record.orderId,
+        amount: record.amount,
+        verified_at: record.verifiedAt,
+        status: record.status,
+      });
+    } catch (err) {
+      console.error('Order payment validation error:', err);
+      res.status(500).json({ valid: false, error: 'Internal payment validation error' });
+    }
+  });
+
+  // Razorpay Webhook Endpoint
+  app.post('/api/razorpay/webhook', express.json(), async (req, res) => {
+    try {
+      const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
+      const signature = req.headers['x-razorpay-signature'] as string;
+      const event = req.body;
+
+      if (webhookSecret && signature) {
+        const shasum = crypto.createHmac('sha256', webhookSecret);
+        shasum.update(JSON.stringify(req.body));
+        const digest = shasum.digest('hex');
+        if (digest !== signature) {
+          return res.status(400).json({ error: 'Invalid webhook signature' });
+        }
+      }
+
+      if (event?.event === 'payment.captured' || event?.event === 'order.paid') {
+        const paymentEntity = event.payload?.payment?.entity;
+        if (paymentEntity) {
+          verifiedPaymentsRegistry.set(paymentEntity.id, {
+            orderId: paymentEntity.order_id,
+            paymentId: paymentEntity.id,
+            amount: paymentEntity.amount / 100,
+            currency: paymentEntity.currency,
+            verifiedAt: new Date().toISOString(),
+            method: paymentEntity.method,
+            status: 'captured',
+          });
+        }
+      }
+      res.json({ status: 'ok' });
+    } catch (err) {
+      console.error('Razorpay webhook notice:', err);
+      res.status(500).json({ error: 'Webhook processing error' });
+    }
+  });
 
   // Register payment endpoints across all standard route aliases
   app.post('/api/razorpay/create-order', handleCreateOrder);

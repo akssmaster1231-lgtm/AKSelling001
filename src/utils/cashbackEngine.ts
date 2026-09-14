@@ -2,9 +2,10 @@ import type { CashbackBreakdownItem, OrderCashbackCalculationResult } from '@/ty
 
 /**
  * AKSelling Rewards & Cashback System Constants
- * Zero Free Rewards Policy: No rewards or wallet credits are given without a confirmed, successful product payment.
+ * Instant Sign-Up Bonus (₹30) credited upon first account creation / login.
+ * Subsequent rewards, repeat increment, and scratch cards unlock strictly from confirmed, successful product payments.
  */
-export const SIGNUP_BONUS_FLAT = 0; // Strictly ₹0 free signup rewards
+export const SIGNUP_BONUS_FLAT = 30; // Flat ₹30 Instant Welcome Sign-Up Bonus credited upon first sign-up / login
 export const REPEAT_ORDER_INCREMENT = 2; // +₹2 per repeat order
 export const MILESTONE_3RD_ORDER_BONUS = 20; // Flat ₹20 extra on 3rd order
 export const MIN_WITHDRAWAL_AMOUNT = 100; // Minimum withdrawal is ₹100

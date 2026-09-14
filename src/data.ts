@@ -1,6 +1,6 @@
 import type { Product, Category, VideoReel, Banner } from './types';
 import { safeLocalStorageGetItem } from './utils/storageHelper';
-import { db, getCachedProducts, setCachedProducts, getCachedCategories } from './firebase';
+import { db, getCachedProducts, setCachedProducts, getCachedCategories, getDeletedCategoryIds } from './firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
 export async function fetchProducts(): Promise<Product[]> {
@@ -172,17 +172,46 @@ export const categories: Category[] = [
 
 export function getAllCategories(): Category[] {
   const custom = getCachedCategories();
-  if (!custom || custom.length === 0) return categories;
-  const existingIds = new Set(categories.map(c => c.id));
-  const mappedCustom: Category[] = custom
-    .filter(c => !existingIds.has(c.id))
-    .map(c => ({
-      id: c.id,
-      name: c.name,
-      icon: (c.icon as Category['icon']) || 'Layers',
-      color: c.color || '#2874f0',
-    }));
-  return [...categories, ...mappedCustom];
+  const deletedIds = new Set(getDeletedCategoryIds());
+
+  // Build a map of customized categories
+  const customMap = new Map<string, Category>();
+  if (custom && custom.length > 0) {
+    custom.forEach(c => {
+      if (!deletedIds.has(c.id)) {
+        customMap.set(c.id, {
+          id: c.id,
+          name: c.name,
+          icon: (c.icon as Category['icon']) || 'Layers',
+          color: c.color || '#2874f0',
+        });
+      }
+    });
+  }
+
+  // Filter default categories, applying any custom overrides
+  const result: Category[] = [];
+  const processedIds = new Set<string>();
+
+  for (const cat of categories) {
+    if (deletedIds.has(cat.id)) continue;
+    if (customMap.has(cat.id)) {
+      result.push(customMap.get(cat.id)!);
+    } else {
+      result.push(cat);
+    }
+    processedIds.add(cat.id);
+  }
+
+  // Append new custom categories
+  customMap.forEach((cat, id) => {
+    if (!processedIds.has(id)) {
+      result.push(cat);
+      processedIds.add(id);
+    }
+  });
+
+  return result;
 }
 
 export const banners: Banner[] = [

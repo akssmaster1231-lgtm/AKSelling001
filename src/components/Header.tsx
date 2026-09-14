@@ -3,6 +3,7 @@ import { Search, Mic, Camera, ShoppingCart, X, Loader2 } from 'lucide-react';
 import { useCart } from '@/cart-context';
 import { useAuth } from '@/auth-context';
 import { useI18n } from '@/i18n';
+import HeaderLocationWidget from '@/components/HeaderLocationWidget';
 
 interface HeaderProps {
   onSearch: (query: string) => void;
@@ -155,13 +156,16 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
     <>
       <header className="sticky top-0 z-50 bg-flipkart-500 shadow-md w-full">
         <div className="w-full max-w-md mx-auto px-3 pt-2 pb-2.5">
-          {/* Top Row: Logo & Action Buttons */}
+          {/* Top Row: Logo & Location & Action Buttons */}
           <div className="flex items-center justify-between gap-2 mb-2">
-            <button onClick={onNavigateHome} className="flex items-baseline gap-0.5 shrink-0" id="header-logo-btn">
-              <span className="text-xl font-extrabold text-white tracking-tight">
-                AK<span className="text-accent-400">Selling</span>
-              </span>
-            </button>
+            <div className="flex items-center gap-2 min-w-0">
+              <button onClick={onNavigateHome} className="flex items-baseline gap-0.5 shrink-0" id="header-logo-btn">
+                <span className="text-xl font-extrabold text-white tracking-tight">
+                  AK<span className="text-accent-400">Selling</span>
+                </span>
+              </button>
+              <HeaderLocationWidget />
+            </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
               {onAccountClick && (

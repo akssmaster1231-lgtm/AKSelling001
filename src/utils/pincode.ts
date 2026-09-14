@@ -235,3 +235,34 @@ export async function lookupPincode(pincode: string): Promise<PincodeInfo | null
     isDeliverable: true,
   };
 }
+
+export const DELIVERY_LOCATION_KEY = 'akselling_delivery_location';
+
+export function getStoredDeliveryLocation(): PincodeInfo {
+  try {
+    const raw = localStorage.getItem(DELIVERY_LOCATION_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {
+    // fallback
+  }
+  return {
+    pincode: '452001',
+    city: 'Indore',
+    district: 'Indore',
+    state: 'Madhya Pradesh',
+    country: 'India',
+    isDeliverable: true,
+  };
+}
+
+export function setStoredDeliveryLocation(info: PincodeInfo) {
+  try {
+    localStorage.setItem(DELIVERY_LOCATION_KEY, JSON.stringify(info));
+    window.dispatchEvent(new CustomEvent('akselling:delivery_location_changed', { detail: info }));
+  } catch {
+    // silent
+  }
+}
+

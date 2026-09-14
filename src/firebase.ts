@@ -14,6 +14,8 @@ import {
   getAuth,
   RecaptchaVerifier,
   signInWithPhoneNumber,
+  setPersistence,
+  browserLocalPersistence,
   type ConfirmationResult,
   type UserCredential,
 } from 'firebase/auth';
@@ -59,6 +61,9 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRIT
 export const auth = getAuth(app);
 try {
   auth.useDeviceLanguage();
+  setPersistence(auth, browserLocalPersistence).catch(() => {
+    // browser local persistence fallback
+  });
 } catch {
   // ignore in non-browser environments
 }
@@ -370,6 +375,17 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
     if ('sleeveType' in product && product.sleeveType !== undefined) rawData.sleeveType = product.sleeveType;
     if ('fitType' in product && product.fitType !== undefined) rawData.fitType = product.fitType;
     if ('fabric' in product && product.fabric !== undefined) rawData.fabric = product.fabric;
+    if ('productType' in product && product.productType !== undefined) rawData.productType = product.productType;
+    if ('printDesign' in product && product.printDesign !== undefined) rawData.printDesign = product.printDesign;
+    if ('weightGsm' in product && product.weightGsm !== undefined) rawData.weightGsm = product.weightGsm;
+    if ('shippingCharge' in product && product.shippingCharge !== undefined) rawData.shippingCharge = product.shippingCharge;
+    if ('isFreeShipping' in product && product.isFreeShipping !== undefined) rawData.isFreeShipping = product.isFreeShipping;
+    if ('pickupAddress' in product && product.pickupAddress !== undefined) rawData.pickupAddress = product.pickupAddress;
+    if ('variants' in product && product.variants !== undefined) rawData.variants = product.variants;
+    if ('storefrontPlacement' in product && product.storefrontPlacement !== undefined) rawData.storefrontPlacement = product.storefrontPlacement;
+    if ('stock' in product && product.stock !== undefined) rawData.stock = product.stock;
+    if ('status' in product && product.status !== undefined) rawData.status = product.status;
+    if ('sku' in product && product.sku !== undefined) rawData.sku = product.sku;
     if ('pickupLocation' in product && product.pickupLocation !== undefined) rawData.pickupLocation = product.pickupLocation;
     if ('weight' in product && product.weight !== undefined) rawData.weight = product.weight;
     if ('dimensions' in product && product.dimensions !== undefined) rawData.dimensions = product.dimensions;
@@ -451,7 +467,7 @@ export interface FirestoreOrder {
 }
 
 export function subscribeOrders(
-  userPhone: string | undefined,
+  userPhoneOrId: string | undefined,
   callback: (orders: FirestoreOrder[]) => void
 ): () => void {
   try {
@@ -462,10 +478,16 @@ export function subscribeOrders(
       q,
       (snapshot) => {
         const orderList: FirestoreOrder[] = [];
+        const cleanIdent = userPhoneOrId ? userPhoneOrId.replace(/\D/g, '').slice(-10) : '';
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as FirestoreOrder;
-          // If filtering by user phone
-          if (!userPhone || !data.customer_phone || data.customer_phone.includes(userPhone.replace(/\D/g, '').slice(-10))) {
+          // If filtering by user phone or identifier
+          if (
+            !userPhoneOrId ||
+            (cleanIdent && data.customer_phone && data.customer_phone.replace(/\D/g, '').includes(cleanIdent)) ||
+            (data.user_id && data.user_id === userPhoneOrId) ||
+            (data.customer_email && data.customer_email.toLowerCase() === userPhoneOrId.toLowerCase())
+          ) {
             orderList.push({
               ...data,
               id: docSnap.id,
@@ -844,6 +866,20 @@ export interface FirestoreCategory {
 }
 
 const CATEGORIES_STORAGE_KEY = 'akselling_custom_categories';
+const DELETED_CATEGORIES_KEY = 'akselling_deleted_categories';
+
+export function getDeletedCategoryIds(): string[] {
+  try {
+    const raw = localStorage.getItem(DELETED_CATEGORIES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // fallback
+  }
+  return [];
+}
 
 export function getCachedCategories(): FirestoreCategory[] {
   try {
@@ -903,6 +939,14 @@ export async function saveCategoryToFirestore(cat: {
   icon?: string;
   color?: string;
 }): Promise<void> {
+  // If previously deleted, un-delete it
+  try {
+    const deleted = getDeletedCategoryIds().filter(id => id !== cat.id);
+    localStorage.setItem(DELETED_CATEGORIES_KEY, JSON.stringify(deleted));
+  } catch {
+    // ignore
+  }
+
   if (isQuotaExhausted()) return;
   try {
     const docRef = doc(db, 'categories', cat.id);
@@ -922,6 +966,34 @@ export async function saveCategoryToFirestore(cat: {
     window.dispatchEvent(new CustomEvent('akselling_categories_updated'));
   } catch (err) {
     handleFirestoreError(err, 'saveCategoryToFirestore');
+  }
+}
+
+export async function deleteCategoryFromFirestore(catId: string): Promise<void> {
+  if (!catId) return;
+
+  // Track deletion so both default and custom categories are purged
+  try {
+    const deleted = getDeletedCategoryIds();
+    if (!deleted.includes(catId)) {
+      localStorage.setItem(DELETED_CATEGORIES_KEY, JSON.stringify([...deleted, catId]));
+    }
+  } catch {
+    // ignore
+  }
+
+  // Update local cache immediately
+  const current = getCachedCategories();
+  const updated = current.filter((c) => c.id !== catId);
+  localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('akselling_categories_updated'));
+
+  if (isQuotaExhausted()) return;
+  try {
+    const docRef = doc(db, 'categories', catId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    handleFirestoreError(err, 'deleteCategoryFromFirestore');
   }
 }
 

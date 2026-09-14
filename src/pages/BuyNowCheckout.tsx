@@ -15,10 +15,12 @@ import {
   ChevronRight,
   Building,
   Navigation,
+  Globe,
 } from 'lucide-react';
 import { formatPrice } from '@/data';
 import { initiateRazorpayPayment } from '@/razorpay';
 import { saveOrderToFirestore, deductProductInventory, type FirestoreOrder } from '@/firebase';
+import { INDIAN_STATES_AND_UTS } from '@/shiprocket-api';
 import { useI18n } from '@/i18n';
 import { useAuth } from '@/auth-context';
 import { recordPlacedOrder } from '@/utils/orderSync';
@@ -63,6 +65,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
   });
   const [isAddingNewAddress, setIsAddingNewAddress] = useState(false);
   const [saveAddressToProfile, setSaveAddressToProfile] = useState(true);
+  const [isPaymentAuthorizing, setIsPaymentAuthorizing] = useState(false);
 
   const [form, setForm] = useState({
     name: user?.name || '',
@@ -71,7 +74,8 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     street: '',
     landmark: '',
     city: '',
-    state: '',
+    state: 'Madhya Pradesh',
+    country: 'India',
     pincode: '',
     addressType: 'Home' as 'Home' | 'Work' | 'Other',
     paymentMethod: 'cod',
@@ -156,40 +160,74 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
 
   const handleConfirm = async () => {
     setError('');
-    setState('processing');
+    setIsPaymentAuthorizing(true);
 
-    // If Cash on Delivery, mandatory 10% online advance via Razorpay
-    if (form.paymentMethod === 'cod') {
-      const paymentResult = await initiateRazorpayPayment(codAdvanceAmount, {
-        name: 'AKSelling - 10% COD Advance',
-        description: `10% Token Advance for COD Order: ${product.title.slice(0, 30)}...`,
-        prefill: { name: form.name, contact: form.phone },
-      });
+    try {
+      let paymentResult;
+      const isCod = form.paymentMethod === 'cod';
 
-      if (!paymentResult.success) {
-        setError(paymentResult.error || '10% COD advance payment was not completed. Order cannot be placed without advance confirmation.');
-        setState('form');
+      if (isCod) {
+        // If Cash on Delivery, mandatory 10% online advance via Razorpay
+        paymentResult = await initiateRazorpayPayment(codAdvanceAmount, {
+          name: 'AKSelling - 10% COD Advance',
+          description: `10% Token Advance for COD Order: ${product.title.slice(0, 30)}...`,
+          prefill: { name: form.name, contact: form.phone },
+        });
+      } else {
+        // Full Prepaid (UPI / Card / NetBanking)
+        paymentResult = await initiateRazorpayPayment(finalAmount, {
+          name: 'AKSelling',
+          description: product.title,
+          prefill: { name: form.name, contact: form.phone },
+        });
+      }
+
+      if (!paymentResult.success || !paymentResult.paymentId) {
+        setIsPaymentAuthorizing(false);
+        setError(
+          paymentResult.error ||
+          'Payment was not completed. Mandatory pre-payment verification is required before order placement.'
+        );
         return;
       }
 
-      await placeOrder(paymentResult.orderId, paymentResult.paymentId, codAdvanceAmount, codRemainingAmount);
-      return;
+      // Backend Transaction Validation Middleware: Check server ledger before placing order
+      const validateResp = await fetch('/api/orders/validate-and-verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_id: paymentResult.paymentId,
+          order_id: paymentResult.orderId,
+          total_amount: finalAmount,
+          payment_method: form.paymentMethod,
+          required_advance: isCod ? codAdvanceAmount : finalAmount,
+        }),
+      });
+
+      if (!validateResp.ok) {
+        const errPayload = await validateResp.json().catch(() => ({}));
+        setIsPaymentAuthorizing(false);
+        setError(
+          errPayload.error ||
+          'Server payment validation failed. Your transaction has not been confirmed on the backend ledger.'
+        );
+        return;
+      }
+
+      // ONLY after verified payment callback and server validation do we transition to order placement
+      setIsPaymentAuthorizing(false);
+      setState('processing');
+
+      if (isCod) {
+        await placeOrder(paymentResult.orderId, paymentResult.paymentId, codAdvanceAmount, codRemainingAmount);
+      } else {
+        await placeOrder(paymentResult.orderId, paymentResult.paymentId);
+      }
+    } catch (err: unknown) {
+      setIsPaymentAuthorizing(false);
+      const errMsg = err instanceof Error ? err.message : 'Unexpected payment error';
+      setError(`Payment processing failed: ${errMsg}`);
     }
-
-    // Full Prepaid (UPI / Card / NetBanking)
-    const paymentResult = await initiateRazorpayPayment(finalAmount, {
-      name: 'AKSelling',
-      description: product.title,
-      prefill: { name: form.name, contact: form.phone },
-    });
-
-    if (!paymentResult.success) {
-      setError(paymentResult.error || 'Payment failed. Please try again.');
-      setState('form');
-      return;
-    }
-
-    await placeOrder(paymentResult.orderId, paymentResult.paymentId);
   };
 
   const placeOrder = async (
@@ -274,7 +312,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         }),
       }).catch((e) => console.warn('Email notification dispatch notice:', e));
 
-      // 5. Award Product-Based Cashback & 3rd Order Milestone to Firebase Wallet
+      // 5. Award Product-Based Cashback & 3rd Order Milestone to Firebase Wallet with verified paymentId
       try {
         const rewardResult = await awardOrderCashback(
           user?.id || 'guest',
@@ -286,7 +324,8 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               price: product.price,
               quantity,
             },
-          ]
+          ],
+          rzpPayId
         );
         setEarnedReward({
           cashback: rewardResult.cashbackEarned,
@@ -629,27 +668,44 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
                   />
                 </div>
 
-                {/* City & State Auto-populated */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* City, State & Country Auto-populated */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="text-xs font-medium text-gray-600 mb-1.5 block">City / District *</label>
                     <input
                       type="text"
                       value={form.city}
                       onChange={e => setForm({ ...form, city: e.target.value })}
-                      placeholder="City"
+                      placeholder="e.g. Indore"
                       className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1.5 block">State *</label>
-                    <input
-                      type="text"
-                      value={form.state}
+                    <label className="text-xs font-medium text-gray-600 mb-1.5 block">State / UT *</label>
+                    <select
+                      value={form.state || 'Madhya Pradesh'}
                       onChange={e => setForm({ ...form, state: e.target.value })}
-                      placeholder="State"
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
-                    />
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white font-medium"
+                    >
+                      {INDIAN_STATES_AND_UTS.map(st => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1.5 block">Country *</label>
+                    <div className="relative">
+                      <select
+                        value={form.country || 'India'}
+                        onChange={e => setForm({ ...form, country: e.target.value })}
+                        className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white font-medium"
+                      >
+                        <option value="India">India</option>
+                      </select>
+                      <Globe size={14} className="absolute left-2.5 top-3 text-gray-400" />
+                    </div>
                   </div>
                 </div>
 
@@ -898,9 +954,20 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
             </div>
             <button
               onClick={handleConfirm}
-              className="flex-1 ml-4 bg-accent-400 text-white font-bold text-base py-3.5 rounded-xl hover:bg-accent-600 transition-colors flex items-center justify-center gap-2"
+              disabled={isPaymentAuthorizing}
+              className={`flex-1 ml-4 ${
+                isPaymentAuthorizing ? 'bg-accent-400/80 cursor-wait' : 'bg-accent-400 hover:bg-accent-600'
+              } text-white font-bold text-base py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2`}
             >
-              <Zap size={18} /> {form.paymentMethod === 'cod' ? `Pay 10% Advance (₹${codAdvanceAmount})` : t('confirmAndBuy')}
+              {isPaymentAuthorizing ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" /> Verifying Payment...
+                </>
+              ) : (
+                <>
+                  <Zap size={18} /> {form.paymentMethod === 'cod' ? `Pay 10% Advance (₹${codAdvanceAmount})` : t('confirmAndBuy')}
+                </>
+              )}
             </button>
           </div>
         </div>

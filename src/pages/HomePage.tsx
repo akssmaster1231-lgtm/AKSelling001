@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n';
 import type { Product, Banner, Category } from '@/types';
 import BannerCarousel from '@/components/BannerCarousel';
 import ProductCard from '@/components/ProductCard';
+import CategoryIcon from '@/components/CategoryIcon';
 
 interface HomePageProps {
   searchQuery: string;
@@ -318,18 +319,4 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
       )}
     </div>
   );
-}
-
-function CategoryIcon({ name }: { name: string }) {
-  const icons: Record<string, React.ReactNode> = {
-    Shirt: <span className="text-base">👕</span>,
-    Smartphone: <span className="text-base">📱</span>,
-    Headphones: <span className="text-base">🎧</span>,
-    Sofa: <span className="text-base">🛋️</span>,
-    Sparkles: <span className="text-base">✨</span>,
-    Footprints: <span className="text-base">👟</span>,
-    Watch: <span className="text-base">⌚</span>,
-    Refrigerator: <span className="text-base">🔌</span>,
-  };
-  return <>{icons[name] || <span className="text-base">📦</span>}</>;
 }

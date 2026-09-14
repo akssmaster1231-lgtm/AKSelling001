@@ -16,6 +16,7 @@ import {
   Landmark,
   Film,
   RotateCcw,
+  Grid,
 } from 'lucide-react';
 
 interface SupplierMenuTabProps {
@@ -33,6 +34,7 @@ interface SupplierMenuTabProps {
   onSwitchToBuying: () => void;
   onOpenReelsStudio?: () => void;
   onResetStartupData?: () => void;
+  onOpenCategoryManagement?: () => void;
 }
 
 export default function SupplierMenuTab({
@@ -50,6 +52,7 @@ export default function SupplierMenuTab({
   onSwitchToBuying,
   onOpenReelsStudio,
   onResetStartupData,
+  onOpenCategoryManagement,
 }: SupplierMenuTabProps) {
   // Read active seller info
   const sellerInfo = (() => {
@@ -82,6 +85,18 @@ export default function SupplierMenuTab({
             subtitle: 'Upload product showcase, dance and styling video reels to Play feed',
             badge: 'NEW STUDIO',
             onClick: onOpenReelsStudio,
+          },
+        ]
+      : []),
+    ...(onOpenCategoryManagement
+      ? [
+          {
+            icon: <Grid size={20} className="text-[#2874f0]" />,
+            bg: 'bg-indigo-50',
+            title: 'Admin Category & Icon Management',
+            subtitle: 'Create, edit & delete categories, customize home circular icons & color accents',
+            badge: 'ADMIN',
+            onClick: onOpenCategoryManagement,
           },
         ]
       : []),

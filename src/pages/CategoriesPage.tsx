@@ -4,6 +4,7 @@ import { categories as defaultCategories, getAllCategories, products as fallback
 import { subscribeCategories } from '@/firebase';
 import type { Product, Category } from '@/types';
 import ProductCard from '@/components/ProductCard';
+import CategoryIcon from '@/components/CategoryIcon';
 
 interface CategoriesPageProps {
   onProductClick: (product: Product) => void;
@@ -167,18 +168,4 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
       </div>
     </div>
   );
-}
-
-function CategoryIcon({ name }: { name: string }) {
-  const icons: Record<string, React.ReactNode> = {
-    Shirt: <span className="text-lg">👕</span>,
-    Smartphone: <span className="text-lg">📱</span>,
-    Headphones: <span className="text-lg">🎧</span>,
-    Sofa: <span className="text-lg">🛋️</span>,
-    Sparkles: <span className="text-lg">✨</span>,
-    Footprints: <span className="text-lg">👟</span>,
-    Watch: <span className="text-lg">⌚</span>,
-    Refrigerator: <span className="text-lg">🔌</span>,
-  };
-  return <>{icons[name] || <span className="text-lg">📦</span>}</>;
 }
