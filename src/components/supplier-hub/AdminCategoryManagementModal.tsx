@@ -9,16 +9,14 @@ import {
   RotateCcw,
   Search,
   Grid,
-  Layers,
   Palette,
 } from 'lucide-react';
 import type { Category } from '@/types';
-import { getAllCategories, categories as defaultCategories } from '@/data';
+import { getAllCategories } from '@/data';
 import {
   saveCategoryToFirestore,
   deleteCategoryFromFirestore,
   subscribeCategories,
-  getDeletedCategoryIds,
 } from '@/firebase';
 import CategoryIcon, {
   POPULAR_CATEGORY_ICONS,

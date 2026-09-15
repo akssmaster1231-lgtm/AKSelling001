@@ -37,7 +37,6 @@ import {
 import BankDetailsModal from '@/components/supplier-hub/BankDetailsModal';
 import ShiprocketSettingsModal from '@/components/supplier-hub/ShiprocketSettingsModal';
 import SupplierReelsStudio from '@/components/supplier-hub/SupplierReelsStudio';
-import AdminCategoryManagementModal from '@/components/supplier-hub/AdminCategoryManagementModal';
 import { safeLocalStorageSetItem, safeLocalStorageGetItem, getCleanSellerStoreName } from '@/utils/storageHelper';
 import {
   saveProductToFirestore,

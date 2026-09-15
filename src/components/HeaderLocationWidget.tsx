@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, ChevronDown, X, Check, Loader2, Navigation, Sparkles } from 'lucide-react';
+import { MapPin, ChevronDown, X, Check, Loader2 } from 'lucide-react';
 import { lookupPincode, getStoredDeliveryLocation, setStoredDeliveryLocation, type PincodeInfo } from '@/utils/pincode';
 import { useAuth } from '@/auth-context';
 

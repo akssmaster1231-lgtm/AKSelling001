@@ -5,6 +5,9 @@ import { fileURLToPath, URL } from 'node:url';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    '__RAZORPAY_KEY_ID__': JSON.stringify(process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_TOuYEwOlXSF8vU'),
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
