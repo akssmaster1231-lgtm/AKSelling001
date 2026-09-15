@@ -7,7 +7,11 @@ import {
   Menu as MenuIcon,
   ChevronLeft,
   ShoppingBag,
+  Lock,
+  ShieldAlert,
 } from 'lucide-react';
+import { useAuth } from '@/auth-context';
+import { isWhitelistedSellerEmail, OWNER_ADMIN_EMAIL } from '@/utils/sellerWhitelist';
 import type {
   SellerProduct,
   SellerOrder,
@@ -43,6 +47,7 @@ import {
   deleteProductFromFirestore,
   updateOrderStatusInFirestore,
   subscribeOrders,
+  saveOrderToFirestore,
 } from '@/firebase';
 
 // Initial Catalogs (Default Clean Slate 00 for Public Launch)
@@ -62,8 +67,8 @@ const SAMPLE_TEST_ORDER: SellerOrder = {
   id: `ord_${Date.now()}`,
   orderNumber: `OD${Math.floor(1000000000 + Math.random() * 9000000000)}`,
   customerName: 'Rahul Sharma',
-  customerCity: 'New Delhi, DL',
-  customerAddress: 'Flat 402, Royal Palms, Sector 62, Noida Road',
+  customerCity: 'Noida, Uttar Pradesh',
+  customerAddress: 'Flat 402, Tower B, Royal Palms, Sector 62, Near Fortis Hospital, Noida, Uttar Pradesh, 201301',
   customerPincode: '201301',
   customerPhone: '+91 98112 34567',
   items: [
@@ -77,7 +82,11 @@ const SAMPLE_TEST_ORDER: SellerOrder = {
     },
   ],
   totalAmount: 649,
-  paymentMethod: 'Prepaid (UPI)',
+  paymentMethod: 'Prepaid (Razorpay UPI)',
+  paymentStatus: 'Paid',
+  transactionId: `pay_${Math.random().toString(36).substring(2, 12)}`,
+  razorpayPaymentId: `pay_${Math.random().toString(36).substring(2, 12)}`,
+  razorpayOrderId: `order_${Math.random().toString(36).substring(2, 12)}`,
   status: 'pending',
   orderDate: 'Just Now',
 };
@@ -89,6 +98,9 @@ interface SellerDashboardProps {
 }
 
 export default function SellerDashboard({ onBack }: SellerDashboardProps) {
+  const { user } = useAuth();
+  const isAuthorizedOwner = isWhitelistedSellerEmail(user?.email);
+
   const [activeTab, setActiveTab] = useState<SupplierTab>('home');
   const [subFilter, setSubFilter] = useState<string | undefined>(undefined);
 
@@ -180,15 +192,55 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
   };
 
   // Add 1 sample test order for seller testing & dispatch demonstration
-  const handleAddSampleOrder = () => {
+  const handleAddSampleOrder = async () => {
+    const rzpPayId = `pay_live_${Math.random().toString(36).substring(2, 12)}`;
+    const rzpOrdId = `order_live_${Math.random().toString(36).substring(2, 12)}`;
     const newSample: SellerOrder = {
       ...SAMPLE_TEST_ORDER,
       id: `ord_${Date.now()}`,
       orderNumber: `OD${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-      orderDate: 'Just Now',
+      orderDate: new Date().toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      paymentStatus: 'Paid',
+      razorpayPaymentId: rzpPayId,
+      razorpayOrderId: rzpOrdId,
+      transactionId: rzpPayId,
     };
     setOrders(prev => [newSample, ...prev]);
-    alert('Sample Test Order generated! You can now test packing, generating shipping labels, and courier dispatch.');
+
+    // Persist to Firestore for real-time seller analytics synchronization
+    try {
+      await saveOrderToFirestore({
+        id: newSample.id,
+        customer_name: newSample.customerName,
+        customer_phone: newSample.customerPhone || '+91 98112 34567',
+        customer_address: newSample.customerAddress || 'Flat 402, Tower B, Royal Palms, Sector 62, Noida, Uttar Pradesh, 201301',
+        items: newSample.items.map(it => ({
+          product_id: 'prod_dennis_shirt',
+          product_title: it.title,
+          product_image: it.image,
+          quantity: it.quantity,
+          price: it.price,
+          sku: it.sku,
+          size: it.size,
+        })),
+        total_amount: newSample.totalAmount,
+        payment_method: newSample.paymentMethod,
+        payment_status: 'Paid',
+        razorpay_order_id: rzpOrdId,
+        razorpay_payment_id: rzpPayId,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('Firestore test order logging notice:', e);
+    }
+
+    alert('Sample Test Order generated & reconciled with Live Payment ID! You can test packing, generating shipping labels, and courier dispatch.');
   };
 
   // Synchronize products to localStorage safely & notify customer shopping app
@@ -217,11 +269,12 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
           prev.forEach(o => map.set(o.id, o));
           // Remote items converted
           remoteOrders.forEach(ro => {
+            const isCod = ro.payment_method?.toLowerCase().includes('cod');
             const converted: SellerOrder = {
               id: ro.id,
               orderNumber: ro.id.startsWith('ORD-') ? ro.id : `ORD-${ro.id.slice(-6).toUpperCase()}`,
               customerName: ro.customer_name || 'Customer',
-              customerCity: ro.customer_address?.split(',').slice(-2, -1)[0]?.trim() || 'New Delhi',
+              customerCity: ro.customer_address?.split(',').slice(-3, -2)[0]?.trim() || ro.customer_address?.split(',').slice(-2, -1)[0]?.trim() || 'New Delhi',
               customerAddress: ro.customer_address,
               customerPhone: ro.customer_phone,
               customerPincode: ro.customer_address?.match(/\b\d{6}\b/)?.[0] || '110001',
@@ -236,6 +289,10 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
               })),
               totalAmount: ro.total_amount,
               paymentMethod: ro.payment_method || 'Prepaid',
+              paymentStatus: ro.payment_status || (isCod ? 'Partially Paid' : 'Paid'),
+              razorpayOrderId: ro.razorpay_order_id,
+              razorpayPaymentId: ro.razorpay_payment_id,
+              transactionId: ro.razorpay_payment_id || ro.razorpay_order_id || (ro as Record<string, unknown>).transaction_id as string,
               status: (ro.status?.toLowerCase() === 'placed' ? 'pending' : ro.status?.toLowerCase() || 'pending') as SellerOrder['status'],
               orderDate: new Date(ro.created_at || Date.now()).toLocaleDateString('en-IN', {
                 day: 'numeric',
@@ -403,6 +460,36 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
 
   // Pending count for tab badge
   const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
+
+  // Strict Owner Security Lockdown: Public users have zero access permissions
+  if (!isAuthorizedOwner) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center p-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
+          <Lock size={32} />
+        </div>
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold mb-3">
+          <ShieldAlert size={12} /> Merchant Portal Locked
+        </div>
+        <h1 className="text-xl font-black text-white mb-2">Seller Dashboard Restricted</h1>
+        <p className="text-sm text-slate-300 max-w-sm mb-6 leading-relaxed">
+          The seller dashboard, order fulfillment, and logistics controls are exclusively restricted to the verified store owner (<span className="text-amber-300 font-mono font-bold">{OWNER_ADMIN_EMAIL}</span>). Public users have zero access permissions.
+        </p>
+        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-3 w-full max-w-sm text-left mb-6">
+          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider mb-1">Signed-in Identity:</p>
+          <p className="text-xs font-mono font-medium text-slate-200 truncate">
+            {user?.email || 'Public Visitor (Unauthenticated)'}
+          </p>
+        </div>
+        <button
+          onClick={onBack}
+          className="w-full max-w-sm py-3 px-4 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-100 transition-colors shadow-lg cursor-pointer"
+        >
+          Return to Marketplace
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f1f3f6] text-gray-900 flex flex-col font-sans selection:bg-[#2874f0] selection:text-white">
@@ -686,7 +773,7 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
       )}
 
       {showAnalyticsModal && (
-        <BusinessAnalyticsModal onClose={() => setShowAnalyticsModal(false)} />
+        <BusinessAnalyticsModal orders={orders} onClose={() => setShowAnalyticsModal(false)} />
       )}
 
       {showSettingsModal && (

@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { categories as defaultCategories, getAllCategories, products as fallbackProducts, fetchProductsByCategory } from '@/data';
 import { subscribeCategories } from '@/firebase';
 import type { Product, Category } from '@/types';
-import ProductCard from '@/components/ProductCard';
+import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 import CategoryIcon from '@/components/CategoryIcon';
 
 interface CategoriesPageProps {
@@ -121,8 +121,10 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
 
       <div className="mt-3 px-3">
         {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 size={28} className="animate-spin text-flipkart-500" />
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <ProductCardSkeleton key={i} />
+            ))}
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="bg-white rounded-xl shadow-card p-8 text-center">

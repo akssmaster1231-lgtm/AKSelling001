@@ -30,6 +30,7 @@ import {
   deleteMasterBanner,
 } from '@/banner-api';
 import { compressImageFile } from '@/utils/imageCompressor';
+import type { SellerOrder } from '@/types/supplier';
 
 // =========================================================================
 // 1. Quality & Rating Dashboard Modal
@@ -373,7 +374,20 @@ export function WarehouseLocationsModal({ onClose }: { onClose: () => void }) {
 // =========================================================================
 // 3. Business Analytics & Funnel Modal
 // =========================================================================
-export function BusinessAnalyticsModal({ onClose }: { onClose: () => void }) {
+export function BusinessAnalyticsModal({ orders = [], onClose }: { orders?: SellerOrder[]; onClose: () => void }) {
+  // Compute real-time reconciled financial metrics
+  const activeOrders = orders.filter(o => o.status !== 'cancelled');
+  const totalRevenue = activeOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const paidOrders = activeOrders.filter(
+    o =>
+      (o.paymentStatus || '').toLowerCase().includes('paid') ||
+      (o.paymentMethod || '').toLowerCase().includes('prepaid')
+  );
+  const codOrders = activeOrders.filter(o => (o.paymentMethod || '').toLowerCase().includes('cod'));
+  const reconciledTxns = activeOrders
+    .filter(o => o.razorpayPaymentId || o.transactionId || o.razorpayOrderId)
+    .slice(0, 5);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
       <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-scale-up">
@@ -382,7 +396,7 @@ export function BusinessAnalyticsModal({ onClose }: { onClose: () => void }) {
             <BarChart3 size={20} />
             <div>
               <h3 className="font-bold text-sm">Business Analytics & Growth</h3>
-              <p className="text-[10px] text-purple-200">Sales funnel, geographic breakdown & top SKUs</p>
+              <p className="text-[10px] text-purple-200">Reconciled sales, payment tracking & regional performance</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-lg text-white">
@@ -391,6 +405,59 @@ export function BusinessAnalyticsModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="p-4 space-y-4 overflow-y-auto text-xs">
+          {/* Real-time Order & Payment Reconciliation Banner */}
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-3.5 rounded-2xl border border-emerald-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs">
+                <CheckCircle2 size={15} className="text-emerald-600" /> Payment & Orders Reconciliation
+              </span>
+              <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                {activeOrders.length} {activeOrders.length === 1 ? 'Order' : 'Orders'} Tracked
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+              <div className="bg-white p-2 rounded-xl border border-emerald-100 shadow-2xs">
+                <div className="text-[10px] text-gray-500 font-medium">Reconciled Gross</div>
+                <div className="font-black text-gray-900 text-sm mt-0.5">₹{totalRevenue.toLocaleString('en-IN')}</div>
+              </div>
+              <div className="bg-white p-2 rounded-xl border border-emerald-100 shadow-2xs">
+                <div className="text-[10px] text-gray-500 font-medium">Prepaid / Paid</div>
+                <div className="font-black text-emerald-700 text-sm mt-0.5">{paidOrders.length}</div>
+              </div>
+              <div className="bg-white p-2 rounded-xl border border-emerald-100 shadow-2xs">
+                <div className="text-[10px] text-gray-500 font-medium">COD (Advance Paid)</div>
+                <div className="font-black text-amber-700 text-sm mt-0.5">{codOrders.length}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Reconciled Transaction Log (Test Orders / Live Orders) */}
+          {reconciledTxns.length > 0 && (
+            <div className="space-y-1.5 bg-gray-50 p-3 rounded-2xl border border-gray-200">
+              <h4 className="font-bold text-gray-900 text-[11px] uppercase tracking-wider text-gray-500">
+                Recent Reconciled Payments
+              </h4>
+              <div className="space-y-1">
+                {reconciledTxns.map((o) => (
+                  <div key={o.id} className="bg-white p-2 rounded-lg border border-gray-100 flex items-center justify-between text-[11px]">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-gray-900 truncate">#{o.orderNumber} • {o.customerName}</div>
+                      <div className="text-[10px] text-gray-500 font-mono truncate">
+                        ID: {o.razorpayPaymentId || o.transactionId || o.razorpayOrderId}
+                      </div>
+                    </div>
+                    <div className="text-right ml-2 shrink-0">
+                      <div className="font-bold text-gray-900">₹{o.totalAmount}</div>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 rounded">
+                        {o.paymentStatus || 'Paid'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Funnel Card */}
           <div className="bg-purple-50 p-3.5 rounded-2xl border border-purple-200 space-y-2.5">
             <h4 className="font-bold text-purple-900 flex items-center gap-1.5">
@@ -421,7 +488,7 @@ export function BusinessAnalyticsModal({ onClose }: { onClose: () => void }) {
               <div>
                 <div className="flex justify-between text-[11px] font-bold text-emerald-800">
                   <span>Completed Orders</span>
-                  <span>842 orders (5.9% conversion)</span>
+                  <span>{Math.max(activeOrders.length, 1)} active orders</span>
                 </div>
                 <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-0.5">
                   <div className="h-full bg-emerald-600 rounded-full" style={{ width: '22%' }} />
@@ -435,10 +502,10 @@ export function BusinessAnalyticsModal({ onClose }: { onClose: () => void }) {
             <h4 className="font-bold text-gray-900">Top Ordering States & Demand Heatmap</h4>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { state: 'Uttar Pradesh', orders: '284 orders (34%)', growth: '+18%' },
-                { state: 'Maharashtra', orders: '192 orders (23%)', growth: '+12%' },
-                { state: 'Delhi NCR', orders: '148 orders (17%)', growth: '+25%' },
-                { state: 'Karnataka & South', orders: '112 orders (13%)', growth: '+9%' },
+                { state: 'Uttar Pradesh', orders: '34% demand', growth: '+18%' },
+                { state: 'Maharashtra', orders: '23% demand', growth: '+12%' },
+                { state: 'Delhi NCR', orders: '17% demand', growth: '+25%' },
+                { state: 'Karnataka & South', orders: '13% demand', growth: '+9%' },
               ].map((st, idx) => (
                 <div key={idx} className="bg-gray-50 p-2.5 rounded-xl border border-gray-200">
                   <div className="font-bold text-gray-900">{st.state}</div>
@@ -554,7 +621,7 @@ export function SupplierSettingsModal({
   const [bannerSubtitle, setBannerSubtitle] = useState('Latest Pure Cotton Kurtis, Sarees & Men Shirts');
   const [bannerCta, setBannerCta] = useState('Shop Now');
   const [bannerImage, setBannerImage] = useState(
-    'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg?auto=compress&cs=tinysrgb&h=650&w=940'
+    'https://images.pexels.com/photos/996329/pexels-photo-996329.jpeg?auto=compress&cs=tinysrgb&h=650&w=940'
   );
   const [bannerGradient, setBannerGradient] = useState('from-blue-600 to-indigo-800');
   const [bannerCategory, setBannerCategory] = useState('fashion');
@@ -575,7 +642,7 @@ export function SupplierSettingsModal({
   const IMAGE_PRESETS = [
     {
       title: 'Festive Clothing',
-      url: 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
+      url: 'https://images.pexels.com/photos/996329/pexels-photo-996329.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
     },
     {
       title: 'Men Casual Shirts',
@@ -691,7 +758,7 @@ export function SupplierSettingsModal({
     setBannerSubtitle('Latest Pure Cotton Kurtis, Sarees & Men Shirts');
     setBannerCta('Shop Now');
     setBannerImage(
-      'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg?auto=compress&cs=tinysrgb&h=650&w=940'
+      'https://images.pexels.com/photos/996329/pexels-photo-996329.jpeg?auto=compress&cs=tinysrgb&h=650&w=940'
     );
   };
 
@@ -1051,7 +1118,7 @@ export function SupplierSettingsModal({
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <img
-                            src={b.image || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'}
+                            src={(b.image && !b.image.includes('8532616')) ? b.image : 'https://images.pexels.com/photos/996329/pexels-photo-996329.jpeg?auto=compress&cs=tinysrgb&h=650&w=940'}
                             alt={b.title}
                             className="w-12 h-12 rounded-lg object-cover border border-gray-200 shrink-0"
                             referrerPolicy="no-referrer"

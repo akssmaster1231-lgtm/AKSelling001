@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { SellerProduct } from '@/types/supplier';
 import type { Product, VideoReel } from '@/types';
+import { DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 import {
   getCustomReels,
   addSellerReel,
@@ -87,7 +88,7 @@ export default function SupplierReelsStudio({
         mrp: 1999,
         discount: 50,
         category: 'fashion',
-        images: [thumbnail || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'],
+        images: [(thumbnail && !thumbnail.includes('8532616')) ? thumbnail : DEFAULT_PRODUCT_PLACEHOLDER],
         rating: 4.5,
         ratingCount: 120,
         brand: storeName,
@@ -135,7 +136,7 @@ export default function SupplierReelsStudio({
         description.trim() ||
         `Check out our best seller ${selectedSellerProduct?.title || ''}! Available now on AKSelling. #trending #viral #deals`,
       product: mappedProduct,
-      thumbnail: thumbnail || mappedProduct.images[0] || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg',
+      thumbnail: (thumbnail && !thumbnail.includes('8532616')) ? thumbnail : (mappedProduct.images[0] && !mappedProduct.images[0].includes('8532616')) ? mappedProduct.images[0] : DEFAULT_PRODUCT_PLACEHOLDER,
       videoUrl: videoUrl || undefined,
       sellerStoreName: storeName,
     });
@@ -259,7 +260,7 @@ export default function SupplierReelsStudio({
                 {selectedSellerProduct && (
                   <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-gray-200 shadow-2xs">
                     <img
-                      src={selectedSellerProduct.images?.[0] || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'}
+                      src={(selectedSellerProduct.images?.[0] && !selectedSellerProduct.images[0].includes('8532616')) ? selectedSellerProduct.images[0] : DEFAULT_PRODUCT_PLACEHOLDER}
                       alt=""
                       className="w-12 h-12 object-cover rounded-lg border border-gray-100 shrink-0"
                     />
@@ -464,7 +465,7 @@ export default function SupplierReelsStudio({
                     />
                   ) : (
                     <img
-                      src={thumbnail || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'}
+                      src={(thumbnail && !thumbnail.includes('8532616')) ? thumbnail : DEFAULT_PRODUCT_PLACEHOLDER}
                       alt=""
                       className="w-full h-full object-cover"
                     />

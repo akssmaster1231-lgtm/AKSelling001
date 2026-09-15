@@ -8,6 +8,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { SellerProduct } from '@/types/supplier';
+import { DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 
 interface SupplierInventoryTabProps {
   products: SellerProduct[];
@@ -164,7 +165,7 @@ export default function SupplierInventoryTab({
               >
                 <div className="flex items-start gap-3">
                   <img
-                    src={product.images[0] || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'}
+                    src={(product.images && product.images[0] && !product.images[0].includes('8532616')) ? product.images[0] : DEFAULT_PRODUCT_PLACEHOLDER}
                     alt={product.title}
                     className="w-16 h-16 object-cover rounded-xl border border-gray-200 shrink-0"
                   />

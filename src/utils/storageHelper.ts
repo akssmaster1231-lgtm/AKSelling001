@@ -2,6 +2,9 @@
  * Safe localStorage utilities with automatic quota handling and graceful mitigation
  */
 
+export const DEFAULT_PRODUCT_PLACEHOLDER =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Cpath d='M200 130 L270 170 L270 250 L200 290 L130 250 L130 170 Z' fill='none' stroke='%239ca3af' stroke-width='8' stroke-linejoin='round'/%3E%3Cpath d='M200 130 L200 290' stroke='%239ca3af' stroke-width='8'/%3E%3Cpath d='M130 170 L200 210 L270 170' fill='none' stroke='%239ca3af' stroke-width='8'/%3E%3C/svg%3E";
+
 export function safeLocalStorageSetItem(key: string, value: string): boolean {
   try {
     localStorage.setItem(key, value);
@@ -16,8 +19,8 @@ export function safeLocalStorageSetItem(key: string, value: string): boolean {
           const sanitized = parsed.map((item) => ({
             ...item,
             images: (item.images || []).map((img: string) => {
-              if (typeof img === 'string' && img.startsWith('data:') && img.length > 50000) {
-                return 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg?auto=compress&cs=tinysrgb&h=650&w=940';
+              if (typeof img === 'string' && (img.includes('8532616') || (img.startsWith('data:') && img.length > 50000))) {
+                return DEFAULT_PRODUCT_PLACEHOLDER;
               }
               return img;
             }),

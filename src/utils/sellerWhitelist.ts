@@ -4,7 +4,16 @@
  */
 
 export const WHITELISTED_SELLER_EMAIL = 'anojkumaryadav7290@gmail.com';
+export const OWNER_ADMIN_EMAIL = 'anojkumaryadav7290@gmail.com';
 export const OFFICIAL_SUPPORT_EMAIL = 'support.akselling@gmail.com';
+
+/**
+ * Checks if the given email strictly matches the verified owner admin email.
+ */
+export function isVerifiedOwnerAdmin(email?: string | null): boolean {
+  if (!email || typeof email !== 'string') return false;
+  return email.trim().toLowerCase() === OWNER_ADMIN_EMAIL.toLowerCase();
+}
 
 /**
  * Checks if the given email strictly matches the whitelisted seller admin email.

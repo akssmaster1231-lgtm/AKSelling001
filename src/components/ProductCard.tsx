@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Star } from 'lucide-react';
 import type { Product } from '@/types';
-import { formatPrice, formatCount } from '@/data';
+import { formatPrice, formatCount, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 import { calculateProductDynamicRating } from '@/utils/orderSync';
 
 interface ProductCardProps {
@@ -10,27 +11,48 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, onClick }: ProductCardProps) {
   const dynamicRating = calculateProductDynamicRating(product);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // Sanitize image: ensure no black t-shirt flash or broken url
+  const rawImage = product.images && product.images[0] ? product.images[0] : '';
+  const isBlackTshirt = typeof rawImage === 'string' && rawImage.includes('8532616');
+  const imageUrl = isBlackTshirt || !rawImage || hasError ? DEFAULT_PRODUCT_PLACEHOLDER : rawImage;
 
   return (
     <button
       onClick={onClick}
-      className="bg-white rounded-lg shadow-card hover:shadow-card-hover transition-shadow overflow-hidden text-left flex flex-col group"
+      className="bg-white rounded-lg shadow-card hover:shadow-card-hover transition-shadow overflow-hidden text-left flex flex-col group cursor-pointer"
     >
-      <div className="relative aspect-square bg-gray-50 overflow-hidden">
+      <div className="relative aspect-square bg-gray-100 overflow-hidden">
+        {/* Shimmering Skeleton while loading image */}
+        {!imageLoaded && !hasError && (
+          <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse z-0" />
+        )}
+
         <img
-          src={product.images[0]}
+          src={imageUrl}
           alt={product.title}
           loading="lazy"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          onLoad={() => setImageLoaded(true)}
+          onError={() => {
+            setHasError(true);
+            setImageLoaded(true);
+          }}
+          className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-300 relative z-10 ${
+            imageLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
         />
+
         {product.discount > 0 && (
-          <span className="absolute top-2 left-2 bg-flipkart-500 text-white text-xs font-bold px-1.5 py-0.5 rounded">
+          <span className="absolute top-2 left-2 bg-flipkart-500 text-white text-xs font-bold px-1.5 py-0.5 rounded shadow-xs z-20">
             {product.discount}% Off
           </span>
         )}
       </div>
+
       <div className="p-2.5 flex flex-col gap-1 flex-1">
-        <p className="text-xs text-gray-500 uppercase tracking-wide">{product.brand}</p>
+        <p className="text-xs text-gray-500 uppercase tracking-wide truncate">{product.brand}</p>
         <h3 className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug min-h-[2.5rem]">
           {product.title}
         </h3>
@@ -59,5 +81,21 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
         </div>
       </div>
     </button>
+  );
+}
+
+// Exported ProductCardSkeleton for hydration/refresh states
+export function ProductCardSkeleton() {
+  return (
+    <div className="bg-white rounded-lg shadow-card overflow-hidden flex flex-col animate-pulse">
+      <div className="aspect-square bg-gray-200" />
+      <div className="p-2.5 flex flex-col gap-2 flex-1">
+        <div className="h-3 bg-gray-200 rounded-sm w-1/3" />
+        <div className="h-4 bg-gray-200 rounded-sm w-full" />
+        <div className="h-4 bg-gray-200 rounded-sm w-2/3" />
+        <div className="h-4 bg-gray-200 rounded-sm w-1/4 mt-1" />
+        <div className="h-5 bg-gray-200 rounded-sm w-1/2 mt-1" />
+      </div>
+    </div>
   );
 }

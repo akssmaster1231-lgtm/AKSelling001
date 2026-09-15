@@ -3,6 +3,9 @@ import { safeLocalStorageGetItem } from './utils/storageHelper';
 import { db, getCachedProducts, setCachedProducts, getCachedCategories, getDeletedCategoryIds } from './firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
+export const DEFAULT_PRODUCT_PLACEHOLDER =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Cpath d='M200 130 L270 170 L270 250 L200 290 L130 250 L130 170 Z' fill='none' stroke='%239ca3af' stroke-width='8' stroke-linejoin='round'/%3E%3Cpath d='M200 130 L200 290' stroke='%239ca3af' stroke-width='8'/%3E%3Cpath d='M130 170 L200 210 L270 170' fill='none' stroke='%239ca3af' stroke-width='8'/%3E%3C/svg%3E";
+
 export async function fetchProducts(): Promise<Product[]> {
   const localSellerProducts = getLocalSellerProducts();
   const localIds = new Set(localSellerProducts.map(p => p.id));
@@ -16,6 +19,8 @@ export async function fetchProducts(): Promise<Product[]> {
       snap.forEach(docSnap => {
         const d = docSnap.data();
         if (!localIds.has(docSnap.id)) {
+          const rawImages = Array.isArray(d.images) && d.images.length > 0 ? d.images : (d.image ? [d.image] : [DEFAULT_PRODUCT_PLACEHOLDER]);
+          const sanitizedImages = rawImages.map((img: string) => (typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img));
           dbItems.push({
             id: docSnap.id,
             title: d.title || '',
@@ -24,7 +29,7 @@ export async function fetchProducts(): Promise<Product[]> {
             mrp: Number(d.mrp) || Number(d.price) || 0,
             discount: Number(d.discount) || 0,
             category: d.category || 'fashion',
-            images: Array.isArray(d.images) && d.images.length > 0 ? d.images : [d.image || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'],
+            images: sanitizedImages,
             rating: typeof d.rating === 'number' ? d.rating : 4.2,
             ratingCount: Number(d.ratingCount || d.rating_count || 120),
             brand: d.brand || 'AKSelling',
@@ -66,6 +71,8 @@ export async function fetchProductsByCategory(category: string): Promise<Product
       snap.forEach(docSnap => {
         const d = docSnap.data();
         if (!localIds.has(docSnap.id)) {
+          const rawImages = Array.isArray(d.images) && d.images.length > 0 ? d.images : (d.image ? [d.image] : [DEFAULT_PRODUCT_PLACEHOLDER]);
+          const sanitizedImages = rawImages.map((img: string) => (typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img));
           dbItems.push({
             id: docSnap.id,
             title: d.title || '',
@@ -74,7 +81,7 @@ export async function fetchProductsByCategory(category: string): Promise<Product
             mrp: Number(d.mrp) || Number(d.price) || 0,
             discount: Number(d.discount) || 0,
             category: d.category || 'fashion',
-            images: Array.isArray(d.images) && d.images.length > 0 ? d.images : [d.image || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'],
+            images: sanitizedImages,
             rating: typeof d.rating === 'number' ? d.rating : 4.2,
             ratingCount: Number(d.ratingCount || d.rating_count || 120),
             brand: d.brand || 'AKSelling',
@@ -109,27 +116,31 @@ function getLocalSellerProducts(): Product[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter(p => !p.id?.startsWith('sp_') && p.catalogId !== 'CAT-98421' && p.catalogId !== 'CAT-89302' && p.catalogId !== 'CAT-74910' && p.catalogId !== 'CAT-62914' && p.catalogId !== 'CAT-51928' && p.catalogId !== 'CAT-41092')
-      .map(p => ({
-        id: p.id,
-        title: p.title,
-        description: p.description || '',
-        price: Number(p.price) || 0,
-        mrp: Number(p.mrp) || Number(p.price) || 0,
-        discount: p.discount || (p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0),
-        category: p.category || 'fashion',
-        images: p.images && p.images.length > 0 ? p.images : ['https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg?auto=compress&cs=tinysrgb&h=650&w=940'],
-        rating: typeof p.rating === 'number' ? p.rating : 0.0,
-        ratingCount: p.salesCount || 0,
-        brand: p.brand || 'AKSelling',
-        inStock: p.stock > 0 || p.status === 'live',
-        delivery: 'Free delivery in 2-3 days',
-        sizes: p.sizes,
-        colors: p.colors,
-        neckType: p.neckType,
-        sleeveType: p.sleeveType,
-        fitType: p.fitType,
-        fabric: p.fabric,
-      }));
+      .map(p => {
+        const rawImgs = p.images && p.images.length > 0 ? p.images : [DEFAULT_PRODUCT_PLACEHOLDER];
+        const sanitizedImgs = rawImgs.map((img: string) => (typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img));
+        return {
+          id: p.id,
+          title: p.title,
+          description: p.description || '',
+          price: Number(p.price) || 0,
+          mrp: Number(p.mrp) || Number(p.price) || 0,
+          discount: p.discount || (p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0),
+          category: p.category || 'fashion',
+          images: sanitizedImgs,
+          rating: typeof p.rating === 'number' ? p.rating : 0.0,
+          ratingCount: p.salesCount || 0,
+          brand: p.brand || 'AKSelling',
+          inStock: p.stock > 0 || p.status === 'live',
+          delivery: 'Free delivery in 2-3 days',
+          sizes: p.sizes,
+          colors: p.colors,
+          neckType: p.neckType,
+          sleeveType: p.sleeveType,
+          fitType: p.fitType,
+          fabric: p.fabric,
+        };
+      });
   } catch {
     return [];
   }

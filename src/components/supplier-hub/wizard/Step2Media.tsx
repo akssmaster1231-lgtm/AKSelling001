@@ -25,7 +25,7 @@ const ANGLE_LABELS = [
 const SAMPLE_APPAREL_IMAGES = [
   {
     title: 'Oversized Tee (Front)',
-    url: 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
+    url: 'https://images.pexels.com/photos/1043474/pexels-photo-1043474.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
   },
   {
     title: 'Oversized Tee (Back)',

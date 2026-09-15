@@ -20,6 +20,10 @@ export interface CustomerPlacedOrder {
   items: CustomerOrderItem[];
   total_amount: number;
   payment_method?: string;
+  payment_status?: string;
+  razorpay_order_id?: string;
+  razorpay_payment_id?: string;
+  transaction_id?: string;
   status: string;
   created_at: string;
 }
@@ -62,6 +66,10 @@ export function recordPlacedOrder(order: CustomerPlacedOrder): void {
       })),
       totalAmount: order.total_amount,
       paymentMethod: order.payment_method || 'Prepaid (UPI / Card)',
+      paymentStatus: order.payment_status || (order.payment_method?.toLowerCase().includes('cod') ? 'Partially Paid' : 'Paid'),
+      razorpayOrderId: order.razorpay_order_id,
+      razorpayPaymentId: order.razorpay_payment_id,
+      transactionId: order.razorpay_payment_id || order.transaction_id || order.razorpay_order_id,
       status: 'pending',
       orderDate: new Date().toLocaleDateString('en-IN', {
         day: 'numeric',

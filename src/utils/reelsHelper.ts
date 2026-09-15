@@ -1,5 +1,5 @@
 import type { VideoReel, Product } from '@/types';
-import { videoReels as defaultReels } from '@/data';
+import { videoReels as defaultReels, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 
 const REELS_STORAGE_KEY = 'akselling_custom_video_reels';
 
@@ -72,7 +72,7 @@ export function addSellerReel(input: {
     title: input.title.trim() || `${input.product.title} - Showcase`,
     description: input.description.trim() || `Explore ${input.product.title} on AKSelling #shopping #deals`,
     product: input.product,
-    thumbnail: input.thumbnail || input.product.images[0] || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg',
+    thumbnail: (input.thumbnail && !input.thumbnail.includes('8532616')) ? input.thumbnail : (input.product.images[0] && !input.product.images[0].includes('8532616')) ? input.product.images[0] : DEFAULT_PRODUCT_PLACEHOLDER,
     videoUrl: input.videoUrl,
     likes: 0,
     comments: 0,

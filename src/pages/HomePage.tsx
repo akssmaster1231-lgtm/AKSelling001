@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, Zap, TrendingUp, Gift, Loader2 } from 'lucide-react';
+import { ChevronRight, Zap, TrendingUp, Gift } from 'lucide-react';
 import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice } from '@/data';
 import { fetchBanners } from '@/banner-api';
 import { subscribeProducts, subscribeBanners, getCachedProducts, subscribeCategories } from '@/firebase';
 import { useI18n } from '@/i18n';
 import type { Product, Banner, Category } from '@/types';
 import BannerCarousel from '@/components/BannerCarousel';
-import ProductCard from '@/components/ProductCard';
+import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 import CategoryIcon from '@/components/CategoryIcon';
 
 interface HomePageProps {
@@ -106,8 +106,35 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 size={32} className="animate-spin text-flipkart-500" />
+      <div className="pb-4">
+        {/* Banner Skeleton */}
+        <div className="px-3 pt-3">
+          <div className="w-full aspect-[21/9] sm:aspect-[3/1] bg-gray-200 rounded-xl animate-pulse" />
+        </div>
+
+        {/* Categories Skeleton */}
+        <div className="mt-4 px-3">
+          <div className="bg-white rounded-xl p-3 flex gap-3 overflow-hidden shadow-card">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="flex flex-col items-center gap-1.5 shrink-0 w-16 animate-pulse">
+                <div className="w-14 h-14 rounded-full bg-gray-200" />
+                <div className="w-10 h-2 bg-gray-200 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Products Grid Skeleton */}
+        <div className="mt-4 px-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="w-36 h-5 bg-gray-200 rounded animate-pulse" />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <ProductCardSkeleton key={i} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -120,7 +147,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
       <div className="mt-4 px-3">
         <div className="bg-white rounded-xl shadow-card p-3">
-          <div className="flex gap-3 overflow-x-auto no-scrollbar">
+          <div className="flex gap-3 overflow-x-auto no-scrollbar touch-pan-x overscroll-x-contain scroll-smooth">
             {activeCategories.map(cat => (
               <button
                 key={cat.id}
@@ -231,7 +258,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
                   See all <ChevronRight size={16} />
                 </button>
               </div>
-              <div className="flex gap-3 overflow-x-auto no-scrollbar p-3">
+              <div className="flex gap-3 overflow-x-auto no-scrollbar touch-pan-x overscroll-x-contain scroll-smooth p-3">
                 {topDeals.map(p => (
                   <div key={p.id} className="shrink-0 w-36">
                     <ProductCard product={p} onClick={() => onProductClick(p)} />
@@ -268,7 +295,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
                   See all <ChevronRight size={16} />
                 </button>
               </div>
-              <div className="flex gap-3 overflow-x-auto no-scrollbar p-3">
+              <div className="flex gap-3 overflow-x-auto no-scrollbar touch-pan-x overscroll-x-contain scroll-smooth p-3">
                 {trendingProducts.map(p => (
                   <div key={p.id} className="shrink-0 w-36">
                     <ProductCard product={p} onClick={() => onProductClick(p)} />

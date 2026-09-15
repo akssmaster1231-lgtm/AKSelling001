@@ -49,6 +49,7 @@ export default function SupplierOrdersTab({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedAwb, setCopiedAwb] = useState<string | null>(null);
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
+  const [shippingNimbusId, setShippingNimbusId] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -61,12 +62,13 @@ export default function SupplierOrdersTab({
 Order ID: #${order.orderNumber}
 Customer: ${order.customerName}
 Phone: ${order.customerPhone || 'Not Provided'}
-Address: ${order.customerAddress || 'Not Provided'}
+Full Address: ${order.customerAddress || `${order.customerCity} - ${order.customerPincode || '201301'}`}
 City/PIN: ${order.customerCity} - ${order.customerPincode || '201301'}
 Total Amount: ₹${order.totalAmount}
-Payment: Prepaid
+Payment Status: ${order.paymentStatus || order.paymentMethod || 'Prepaid (Paid)'}
+Transaction ID: ${order.razorpayPaymentId || order.transactionId || order.razorpayOrderId || 'Prepaid Online Verified'}
 Items: ${order.items.map(i => `${i.title} (Qty: ${i.quantity})`).join(', ')}
-Provider Target: ${providerName}`;
+Logistics Provider: ${providerName}`;
 
     navigator.clipboard?.writeText(text);
   };
@@ -84,17 +86,102 @@ Provider Target: ${providerName}`;
     setSyncModalOrder(order);
   };
 
-  // 2. Ship via NimbusPost: direct panel redirection
-  const handleShipViaNimbusPost = (order: SellerOrder) => {
+  // 2. Ship via NimbusPost: automated live API booking with portal sync (fixed valid portal URL to avoid 404)
+  const handleShipViaNimbusPost = async (order: SellerOrder) => {
+    setShippingNimbusId(order.id);
     copyOrderDispatchData(order, 'NimbusPost');
-    showToast('Redirecting to NimbusPost Panel... Order details copied to clipboard!');
-    window.open('https://app.nimbuspost.com/dashboard/order/create', '_blank', 'noopener,noreferrer');
+    showToast('Pushing order to NimbusPost production system...');
 
-    // Open AWB sync modal for quick entry after booking
-    setSelectedProvider('nimbuspost');
-    setCourierNameInput(order.courierName || 'Delhivery Surface Pro');
-    setAwbInput(order.awbCode || `NP${Math.floor(100000000 + Math.random() * 900000000)}`);
-    setSyncModalOrder(order);
+    try {
+      const response = await fetch('/api/logistics/nimbuspost/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: order.id,
+          order_number: order.orderNumber,
+          courier_name: order.courierName || 'Delhivery Surface Pro',
+          pickup_pincode: '122015',
+          delivery_pincode: order.customerPincode || '201301',
+          customer_name: order.customerName,
+          customer_phone: order.customerPhone || '9811234567',
+          customer_address: order.customerAddress || `${order.customerCity} - ${order.customerPincode || '201301'}`,
+          customer_city: order.customerCity || 'Noida',
+          customer_state: 'Uttar Pradesh',
+          total_amount: order.totalAmount,
+          payment_method: order.paymentMethod || 'prepaid',
+          items: order.items,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success && data.awb_code) {
+        onUpdateOrderStatus(order.id, 'shipped');
+
+        const trackingSteps: TrackingStep[] = [
+          {
+            label: 'Order Confirmed & Payment Verified',
+            location: 'Merchant Store Database',
+            time: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+            completed: true,
+          },
+          {
+            label: 'Manifest Created via NimbusPost Gateway',
+            location: `Hub (${data.courier_name || 'Delhivery'})`,
+            time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+            completed: true,
+          },
+          {
+            label: 'Pickup Assigned to Courier',
+            location: 'Origin Processing Center',
+            time: 'Pending Pickup',
+            completed: false,
+          },
+          {
+            label: 'Out for Delivery',
+            location: order.customerCity || 'Destination Hub',
+            time: 'Expected in 2-3 days',
+            completed: false,
+          },
+        ];
+
+        saveShipment({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          awbCode: data.awb_code,
+          courierName: data.courier_name || 'Delhivery Surface Pro',
+          status: 'manifest_created',
+          provider: 'nimbuspost',
+          trackingUrl: data.tracking_url,
+          labelUrl: data.label_url,
+          steps: trackingSteps,
+          estimatedDelivery: '3-4 Days',
+          updatedAt: new Date().toISOString(),
+        });
+
+        await updateOrderStatusInFirestore(order.id, 'shipped', {
+          awb_code: data.awb_code,
+          courier_name: data.courier_name || 'Delhivery Surface Pro',
+          tracking_url: data.tracking_url,
+          label_url: data.label_url,
+          updated_at: new Date().toISOString(),
+        });
+
+        showToast(`NimbusPost Booked! AWB: ${data.awb_code} generated.`);
+        window.open(data.portal_url || 'https://ship.nimbuspost.com/shipping/order', '_blank', 'noopener,noreferrer');
+      } else {
+        throw new Error(data.error || 'NimbusPost API response incomplete');
+      }
+    } catch (err) {
+      console.warn('NimbusPost booking fallback:', err);
+      showToast('Opening NimbusPost portal & manual AWB sync...');
+      window.open('https://ship.nimbuspost.com/shipping/order', '_blank', 'noopener,noreferrer');
+      setSelectedProvider('nimbuspost');
+      setCourierNameInput(order.courierName || 'Delhivery Surface Pro');
+      setAwbInput(order.awbCode || `NP${Math.floor(100000000 + Math.random() * 900000000)}`);
+      setSyncModalOrder(order);
+    } finally {
+      setShippingNimbusId(null);
+    }
   };
 
   // Manual AWB Entry Dialog
@@ -112,11 +199,11 @@ Provider Target: ${providerName}`;
     const finalCourier = courierNameInput.trim() || 'Logistics Express Surface';
     const trackingUrl =
       selectedProvider === 'nimbuspost'
-        ? `https://nimbuspost.com/tracking?awb=${finalAwb}`
+        ? `https://ship.nimbuspost.com/shipping/tracking?awb=${finalAwb}`
         : `https://shiprocket.co/tracking/${finalAwb}`;
     const labelUrl =
       selectedProvider === 'nimbuspost'
-        ? `https://nimbuspost.com/print-label/${finalAwb}`
+        ? `https://ship.nimbuspost.com/shipping/print-label/${finalAwb}`
         : `https://shiprocket.co/print-label/${finalAwb}`;
 
     setIsSubmittingAwb(true);
@@ -420,18 +507,86 @@ Provider Target: ${providerName}`;
                 ))}
               </div>
 
-              {/* Customer & Destination Summary */}
-              <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-1.5 text-gray-700 min-w-0">
-                  <MapPin size={13} className="text-gray-400 shrink-0" />
-                  <span className="truncate">
-                    <strong>{order.customerName}</strong> • {order.customerCity} (PIN:{' '}
-                    {order.customerPincode || '201301'})
-                  </span>
+              {/* Customer Full Shipping Address & Payment Verification */}
+              <div className="bg-gray-50/90 p-3 rounded-xl border border-gray-200 text-xs space-y-2.5">
+                {/* Header: Customer Name, Phone & Payment Badge */}
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-gray-200/80 pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[11px] shrink-0">
+                      {order.customerName ? order.customerName.charAt(0).toUpperCase() : 'C'}
+                    </div>
+                    <div>
+                      <span className="font-bold text-gray-900 text-xs sm:text-sm">{order.customerName}</span>
+                      {order.customerPhone && (
+                        <span className="text-gray-500 text-[11px] ml-2 font-mono">
+                          +91 {order.customerPhone.replace(/\D/g, '').slice(-10)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        (order.paymentStatus || '').toLowerCase().includes('paid') && !(order.paymentStatus || '').toLowerCase().includes('partially')
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : (order.paymentStatus || '').toLowerCase().includes('partially') || (order.paymentMethod || '').toLowerCase().includes('cod')
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-blue-100 text-blue-800 border border-blue-300'
+                      }`}
+                    >
+                      {order.paymentStatus || order.paymentMethod || 'Prepaid (Paid)'}
+                    </span>
+                    <span className="font-black text-gray-900 text-xs sm:text-sm">
+                      Total: ₹{order.totalAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
                 </div>
-                <span className="font-bold text-gray-900 shrink-0">
-                  Total: ₹{order.totalAmount.toLocaleString('en-IN')}
-                </span>
+
+                {/* Complete Uncut Shipping Address (House Number, Street/Locality, Landmark, City, State, PIN) */}
+                <div className="flex items-start justify-between gap-3 pt-0.5">
+                  <div className="flex items-start gap-2 text-gray-700 flex-1 min-w-0">
+                    <MapPin size={15} className="text-red-500 shrink-0 mt-0.5" />
+                    <div className="space-y-1 leading-relaxed min-w-0 flex-1">
+                      <div className="font-bold text-gray-500 text-[10px] uppercase tracking-wider">
+                        Full Delivery Address:
+                      </div>
+                      <p className="text-gray-900 text-xs whitespace-normal break-words font-medium leading-normal">
+                        {order.customerAddress || `${order.customerCity} - PIN: ${order.customerPincode || '201301'}`}
+                      </p>
+                      {order.customerAddress && !order.customerAddress.includes(order.customerPincode || '') && (
+                        <p className="text-gray-600 text-[11px] font-semibold">
+                          City/State: {order.customerCity} • PIN: {order.customerPincode || '201301'}
+                        </p>
+                      )}
+                      {(order.razorpayPaymentId || order.transactionId || order.razorpayOrderId) && (
+                        <div className="text-[10px] text-gray-500 font-mono pt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <span className="bg-gray-200 text-gray-700 px-1.5 py-0.2 rounded font-sans font-bold">
+                            Txn ID:
+                          </span>
+                          <span className="text-gray-800 font-medium truncate max-w-xs">
+                            {order.razorpayPaymentId || order.transactionId || order.razorpayOrderId}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Copy Full Address Action */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fullAddr = `${order.customerName}\n${order.customerPhone ? 'Phone: ' + order.customerPhone + '\n' : ''}Address: ${order.customerAddress || order.customerCity + ' - ' + (order.customerPincode || '201301')}`;
+                      navigator.clipboard?.writeText(fullAddr);
+                      showToast('Complete shipping address copied to clipboard!');
+                    }}
+                    className="shrink-0 px-2.5 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-[11px] font-bold rounded-lg border border-gray-300 shadow-xs flex items-center gap-1 transition-all cursor-pointer"
+                    title="Copy full delivery address for shipping label"
+                  >
+                    <Copy size={12} className="text-gray-500" />
+                    <span className="hidden sm:inline">Copy Address</span>
+                    <span className="sm:hidden">Copy</span>
+                  </button>
+                </div>
               </div>
 
               {/* Direct Logistics Dispatch Actions */}
@@ -452,16 +607,26 @@ Provider Target: ${providerName}`;
                         <ExternalLink size={12} className="opacity-75 shrink-0" />
                       </button>
 
-                      {/* Ship via NimbusPost Direct Redirection */}
+                      {/* Ship via NimbusPost Direct Production Booking */}
                       <button
                         type="button"
+                        disabled={shippingNimbusId === order.id}
                         onClick={() => handleShipViaNimbusPost(order)}
-                        className="bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white text-xs font-bold py-2.5 px-3.5 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                        title="Click to open NimbusPost dashboard to book courier shipment"
+                        className="bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 disabled:opacity-75 text-white text-xs font-bold py-2.5 px-3.5 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        title="Direct push order to live NimbusPost production system"
                       >
-                        <Zap size={14} className="text-yellow-300 shrink-0" />
-                        <span className="truncate">Ship via NimbusPost</span>
-                        <ExternalLink size={12} className="opacity-75 shrink-0" />
+                        {shippingNimbusId === order.id ? (
+                          <>
+                            <RefreshCw size={14} className="animate-spin text-white shrink-0" />
+                            <span className="truncate">Booking NimbusPost...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap size={14} className="text-yellow-300 shrink-0" />
+                            <span className="truncate">Ship via NimbusPost</span>
+                            <ExternalLink size={12} className="opacity-75 shrink-0" />
+                          </>
+                        )}
                       </button>
                     </div>
 

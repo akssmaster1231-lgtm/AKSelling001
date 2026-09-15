@@ -247,13 +247,23 @@ export function handleFirestoreError(err: unknown, operationName: string): void 
 
 const PRODUCTS_CACHE_KEY = 'akselling_firestore_products_cache';
 
+const DEFAULT_PRODUCT_PLACEHOLDER =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Cpath d='M200 130 L270 170 L270 250 L200 290 L130 250 L130 170 Z' fill='none' stroke='%239ca3af' stroke-width='8' stroke-linejoin='round'/%3E%3Cpath d='M200 130 L200 290' stroke='%239ca3af' stroke-width='8'/%3E%3Cpath d='M130 170 L200 210 L270 170' fill='none' stroke='%239ca3af' stroke-width='8'/%3E%3C/svg%3E";
+
 export function getCachedProducts(): Product[] {
   try {
     const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed
+          .filter(p => !p.id?.startsWith('sp_') && p.id !== 'demo_tshirt')
+          .map(p => ({
+            ...p,
+            images: (p.images || []).map((img: string) =>
+              typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img
+            ),
+          }));
       }
     }
   } catch {
@@ -306,7 +316,12 @@ export function subscribeProducts(
               mrp: Number(data.mrp) || Number(data.price) || 0,
               discount: Number(data.discount) || 0,
               category: data.category || 'fashion',
-              images: Array.isArray(data.images) && data.images.length > 0 ? data.images : [data.image || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'],
+              images: (Array.isArray(data.images) && data.images.length > 0
+                ? data.images
+                : [data.image || DEFAULT_PRODUCT_PLACEHOLDER]
+              ).map((img: string) =>
+                typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img
+              ),
               rating: typeof data.rating === 'number' ? data.rating : 4.2,
               ratingCount: Number(data.ratingCount || data.rating_count || 120),
               brand: data.brand || 'AKSelling',

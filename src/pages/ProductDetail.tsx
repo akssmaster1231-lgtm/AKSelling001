@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Product } from '@/types';
-import { formatPrice, formatCount } from '@/data';
+import { formatPrice, formatCount, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 import { useCart } from '@/cart-context';
 import { calculateProductDynamicRating } from '@/utils/orderSync';
 
@@ -83,7 +83,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
       <div className="bg-white">
         <div className="relative aspect-square bg-gray-50">
           <img
-            src={product.images[selectedImage] || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg?auto=compress&cs=tinysrgb&h=650&w=940'}
+            src={(product.images && product.images[selectedImage] && !product.images[selectedImage].includes('8532616')) ? product.images[selectedImage] : DEFAULT_PRODUCT_PLACEHOLDER}
             alt={product.title}
             className="w-full h-full object-cover"
           />

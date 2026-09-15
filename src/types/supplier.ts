@@ -86,6 +86,10 @@ export interface SellerOrder {
   }[];
   totalAmount: number;
   paymentMethod: string;
+  paymentStatus?: string;
+  transactionId?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   status: 'pending' | 'ready_to_ship' | 'shipped' | 'delivered' | 'cancelled';
   orderDate: string;
   dispatchDeadline?: string;

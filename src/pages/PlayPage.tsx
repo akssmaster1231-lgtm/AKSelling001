@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Heart, MessageCircle, Share2, ShoppingBag, Play, Volume2, VolumeX, Send, X, Check } from 'lucide-react';
-import { formatCount, formatPrice } from '@/data';
+import { formatCount, formatPrice, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 import type { VideoReel, Product } from '@/types';
 import { useCart } from '@/cart-context';
 import { getAllReels, getCustomReels } from '@/utils/reelsHelper';
@@ -402,7 +402,7 @@ function ReelItem({
               className="flex items-center gap-3 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-2xl p-2.5 w-full max-w-xs border border-white/20 transition-colors"
             >
               <img
-                src={reel.product.images?.[0] || 'https://images.pexels.com/photos/8532616/pexels-photo-8532616.jpeg'}
+                src={(reel.product.images && reel.product.images[0] && !reel.product.images[0].includes('8532616')) ? reel.product.images[0] : DEFAULT_PRODUCT_PLACEHOLDER}
                 alt=""
                 className="w-12 h-12 rounded-xl object-cover shrink-0 border border-white/20"
               />
