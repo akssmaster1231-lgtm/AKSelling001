@@ -4,6 +4,8 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
+  getDocs,
   onSnapshot,
   query,
   where,
@@ -19,7 +21,7 @@ import {
   type ConfirmationResult,
   type UserCredential,
 } from 'firebase/auth';
-import type { Product, Banner } from '@/types';
+import type { Product, Banner, PriceAlert } from '@/types';
 import type { UserProfile } from '@/auth-context';
 import type { SellerProduct } from '@/types/supplier';
 
@@ -248,7 +250,7 @@ export function handleFirestoreError(err: unknown, operationName: string): void 
 const PRODUCTS_CACHE_KEY = 'akselling_firestore_products_cache';
 
 const DEFAULT_PRODUCT_PLACEHOLDER =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Cpath d='M200 130 L270 170 L270 250 L200 290 L130 250 L130 170 Z' fill='none' stroke='%239ca3af' stroke-width='8' stroke-linejoin='round'/%3E%3Cpath d='M200 130 L200 290' stroke='%239ca3af' stroke-width='8'/%3E%3Cpath d='M130 170 L200 210 L270 170' fill='none' stroke='%239ca3af' stroke-width='8'/%3E%3C/svg%3E";
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f8fafc'/%3E%3Cpath d='M150 160 C150 132 172 110 200 110 C228 110 250 132 250 160 M120 160 L280 160 L295 300 L105 300 Z' fill='none' stroke='%23cbd5e1' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
 
 export function getCachedProducts(): Product[] {
   try {
@@ -333,6 +335,8 @@ export function subscribeProducts(
               sleeveType: data.sleeveType || data.sleeve_type,
               fitType: data.fitType || data.fit_type,
               fabric: data.fabric,
+              tags: Array.isArray(data.tags) ? data.tags : [],
+              keywords: Array.isArray(data.keywords) ? data.keywords : [],
               pickupLocation: data.pickupLocation,
               weight: data.weight,
               dimensions: data.dimensions,
@@ -404,6 +408,8 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
     if ('pickupLocation' in product && product.pickupLocation !== undefined) rawData.pickupLocation = product.pickupLocation;
     if ('weight' in product && product.weight !== undefined) rawData.weight = product.weight;
     if ('dimensions' in product && product.dimensions !== undefined) rawData.dimensions = product.dimensions;
+    if ('tags' in product && Array.isArray(product.tags)) rawData.tags = product.tags;
+    if ('keywords' in product && Array.isArray(product.keywords)) rawData.keywords = product.keywords;
 
     const dataToSave = sanitizeForFirestore(rawData);
     await setDoc(docRef, dataToSave, { merge: true });
@@ -424,7 +430,21 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
       brand: rawData.brand as string,
       inStock: rawData.inStock as boolean,
       delivery: rawData.delivery as string,
+      tags: (rawData.tags as string[]) || [],
+      keywords: (rawData.keywords as string[]) || [],
     };
+    const existingProd = current.find(p => p.id === prodId);
+    if (existingProd && typeof existingProd.price === 'number' && normalizedProd.price < existingProd.price) {
+      // Product price has been reduced! Automatically dispatch PriceAlerts
+      checkAndDispatchPriceDropAlerts(
+        prodId,
+        normalizedProd.price,
+        existingProd.price,
+        normalizedProd.title,
+        normalizedProd.images?.[0]
+      ).catch(dispatchErr => console.warn('[PriceAlert] Auto-dispatch notice:', dispatchErr));
+    }
+
     const nextCached = current.some(p => p.id === prodId)
       ? current.map(p => p.id === prodId ? normalizedProd : p)
       : [normalizedProd, ...current];
@@ -618,18 +638,24 @@ export function subscribeBanners(callback: (banners: Banner[]) => void): () => v
       bannersRef,
       (snapshot) => {
         if (!snapshot.empty) {
-          const list: Banner[] = [];
+          const list: (Banner & { display_order?: number; active?: boolean })[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            list.push({
-              id: docSnap.id,
-              title: data.title || '',
-              subtitle: data.subtitle || '',
-              cta: data.cta || 'Shop Now',
-              image: data.image || '',
-              gradient: data.gradient || 'from-blue-600 to-indigo-800',
-            });
+            const isActive = data.active !== false && data.isActive !== false;
+            if (isActive) {
+              list.push({
+                id: docSnap.id,
+                title: data.title || '',
+                subtitle: data.subtitle || '',
+                cta: data.cta || 'Shop Now',
+                image: data.image || data.imageUrl || '',
+                gradient: data.gradient || 'from-blue-600 to-indigo-800',
+                display_order: Number(data.display_order || data.order || 1),
+                active: true,
+              });
+            }
           });
+          list.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
           callback(list);
         } else {
           callback([]);
@@ -1094,5 +1120,235 @@ export async function saveReelToFirestore(reel: Record<string, unknown> & { id: 
     handleFirestoreError(err, 'saveReelToFirestore');
   }
 }
+
+// -------------------------------------------------------------
+// PRICE DROP ALERTS FIRESTORE INTEGRATION & DISPATCH
+// -------------------------------------------------------------
+
+export async function savePriceAlertToFirestore(alert: PriceAlert): Promise<void> {
+  // Sync to local storage for instant UI responsiveness & offline fallback
+  try {
+    const localAlerts: PriceAlert[] = JSON.parse(localStorage.getItem('akselling_price_alerts') || '[]');
+    const filtered = localAlerts.filter(a => a.id !== alert.id && a.productId !== alert.productId);
+    localStorage.setItem('akselling_price_alerts', JSON.stringify([...filtered, alert]));
+    window.dispatchEvent(new CustomEvent('akselling_price_alerts_updated'));
+  } catch {
+    // ignore local storage errors
+  }
+
+  if (isQuotaExhausted()) return;
+
+  try {
+    const docId = alert.id || `alert_${alert.productId}_${alert.userId || 'guest'}`;
+    const docRef = doc(db, 'PriceAlerts', docId);
+    await setDoc(
+      docRef,
+      sanitizeForFirestore({
+        ...alert,
+        id: docId,
+        active: alert.active !== false,
+        updatedAt: new Date().toISOString(),
+        createdAt: alert.createdAt || new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'savePriceAlertToFirestore');
+  }
+}
+
+export async function removePriceAlertFromFirestore(alertId: string, productId?: string): Promise<void> {
+  // Clean up local storage
+  try {
+    const localAlerts: PriceAlert[] = JSON.parse(localStorage.getItem('akselling_price_alerts') || '[]');
+    const filtered = localAlerts.filter(a => a.id !== alertId && (!productId || a.productId !== productId));
+    localStorage.setItem('akselling_price_alerts', JSON.stringify(filtered));
+    window.dispatchEvent(new CustomEvent('akselling_price_alerts_updated'));
+  } catch {
+    // ignore
+  }
+
+  if (isQuotaExhausted()) return;
+
+  try {
+    if (alertId) {
+      const docRef = doc(db, 'PriceAlerts', alertId);
+      await setDoc(docRef, { active: false, updatedAt: new Date().toISOString() }, { merge: true });
+    }
+  } catch (err) {
+    handleFirestoreError(err, 'removePriceAlertFromFirestore');
+  }
+}
+
+export async function getUserPriceAlertForProduct(
+  productId: string,
+  userId?: string,
+  email?: string
+): Promise<PriceAlert | null> {
+  // 1. Fast check from local storage
+  try {
+    const localAlerts: PriceAlert[] = JSON.parse(localStorage.getItem('akselling_price_alerts') || '[]');
+    const found = localAlerts.find(
+      a =>
+        a.productId === productId &&
+        a.active !== false &&
+        (!userId || a.userId === userId || a.userId === 'guest' || (email && a.notifyEmail === email))
+    );
+    if (found) return found;
+  } catch {
+    // ignore
+  }
+
+  if (isQuotaExhausted()) return null;
+
+  try {
+    // 2. Direct document lookup
+    const directDocId = `alert_${productId}_${userId || 'guest'}`;
+    const directDoc = await getDoc(doc(db, 'PriceAlerts', directDocId));
+    if (directDoc.exists()) {
+      const data = directDoc.data() as PriceAlert;
+      if (data.active !== false) return { ...data, id: directDoc.id };
+    }
+
+    // 3. Fallback query by productId
+    const alertsRef = collection(db, 'PriceAlerts');
+    const q = query(alertsRef, where('productId', '==', productId), where('active', '==', true));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      for (const d of snap.docs) {
+        const item = d.data() as PriceAlert;
+        if (!userId || item.userId === userId || (email && item.notifyEmail === email) || item.userId === 'guest') {
+          return { ...item, id: d.id };
+        }
+      }
+    }
+    return null;
+  } catch (err) {
+    handleFirestoreError(err, 'getUserPriceAlertForProduct');
+    return null;
+  }
+}
+
+export function subscribeUserPriceAlerts(
+  userId: string,
+  callback: (alerts: PriceAlert[]) => void
+): () => void {
+  try {
+    const alertsRef = collection(db, 'PriceAlerts');
+    const q = query(alertsRef, where('userId', '==', userId), where('active', '==', true));
+    return onSnapshot(
+      q,
+      snapshot => {
+        const list: PriceAlert[] = [];
+        snapshot.forEach(docSnap => {
+          list.push({ ...docSnap.data(), id: docSnap.id } as PriceAlert);
+        });
+        callback(list);
+      },
+      err => {
+        handleFirestoreError(err, 'subscribeUserPriceAlerts');
+      }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'subscribeUserPriceAlerts');
+    return () => {};
+  }
+}
+
+export async function checkAndDispatchPriceDropAlerts(
+  productId: string,
+  newPrice: number,
+  oldPrice: number,
+  productTitle: string,
+  productImage?: string
+): Promise<{ triggeredCount: number }> {
+  if (newPrice >= oldPrice) return { triggeredCount: 0 };
+  let triggeredCount = 0;
+
+  try {
+    // Also check local alerts in case of offline/local storage
+    const localAlerts: PriceAlert[] = JSON.parse(localStorage.getItem('akselling_price_alerts') || '[]');
+    const matchingLocal = localAlerts.filter(a => a.productId === productId && a.active !== false);
+
+    for (const alert of matchingLocal) {
+      const threshold = alert.targetPrice || alert.initialPrice;
+      if (newPrice < threshold) {
+        triggeredCount++;
+        // Post to email & notification API
+        try {
+          await fetch('/api/price-alerts/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              alertId: alert.id,
+              email: alert.notifyEmail,
+              productId,
+              productTitle: productTitle || alert.productTitle,
+              productImage: productImage || alert.productImage,
+              oldPrice: alert.initialPrice || oldPrice,
+              newPrice,
+              userId: alert.userId,
+            }),
+          });
+        } catch {
+          // ignore network error
+        }
+      }
+    }
+
+    if (!isQuotaExhausted()) {
+      const alertsRef = collection(db, 'PriceAlerts');
+      const q = query(alertsRef, where('productId', '==', productId), where('active', '==', true));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        for (const docSnap of snapshot.docs) {
+          const alert = docSnap.data() as PriceAlert;
+          const threshold = alert.targetPrice || alert.initialPrice;
+          if (newPrice < threshold) {
+            // Avoid duplicate trigger if already counted in local
+            if (!matchingLocal.some(m => m.id === docSnap.id)) {
+              triggeredCount++;
+              try {
+                await fetch('/api/price-alerts/notify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    alertId: docSnap.id,
+                    email: alert.notifyEmail,
+                    productId,
+                    productTitle: productTitle || alert.productTitle,
+                    productImage: productImage || alert.productImage,
+                    oldPrice: alert.initialPrice || oldPrice,
+                    newPrice,
+                    userId: alert.userId,
+                  }),
+                });
+              } catch {
+                // ignore
+              }
+            }
+
+            // Update record in Firestore
+            try {
+              await updateDoc(doc(db, 'PriceAlerts', docSnap.id), {
+                currentPrice: newPrice,
+                lastNotifiedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              });
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('checkAndDispatchPriceDropAlerts error:', err);
+  }
+
+  return { triggeredCount };
+}
+
 
 

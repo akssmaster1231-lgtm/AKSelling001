@@ -3,12 +3,32 @@
  * Automatically downscales large dimensions (default max 800x800) and applies JPEG compression.
  * Converts 5MB-20MB phone/camera photos down to ~30KB-60KB without visible quality loss.
  */
+export interface CompressImageOptions {
+  maxWidth?: number;
+  maxHeight?: number;
+  quality?: number;
+}
+
 export async function compressImageFile(
   file: File | Blob,
-  maxWidth = 800,
-  maxHeight = 800,
-  quality = 0.75
+  maxWidthOrOptions?: number | CompressImageOptions,
+  maybeMaxHeight?: number,
+  maybeQuality?: number
 ): Promise<string> {
+  let maxWidth = 800;
+  let maxHeight = 800;
+  let quality = 0.75;
+
+  if (typeof maxWidthOrOptions === 'object' && maxWidthOrOptions !== null) {
+    maxWidth = maxWidthOrOptions.maxWidth ?? 800;
+    maxHeight = maxWidthOrOptions.maxHeight ?? 800;
+    quality = maxWidthOrOptions.quality ?? 0.75;
+  } else if (typeof maxWidthOrOptions === 'number') {
+    maxWidth = maxWidthOrOptions;
+    if (typeof maybeMaxHeight === 'number') maxHeight = maybeMaxHeight;
+    if (typeof maybeQuality === 'number') quality = maybeQuality;
+  }
+
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {

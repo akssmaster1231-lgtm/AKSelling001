@@ -19,9 +19,12 @@ import {
   Grid,
   Search,
   RefreshCw,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '@/auth-context';
-import { isVerifiedOwnerAdmin, OWNER_ADMIN_EMAIL } from '@/utils/sellerWhitelist';
+import { isVerifiedOwnerAdmin, OWNER_ADMIN_EMAIL, ADMIN_MASTER_PASSCODE } from '@/utils/sellerWhitelist';
+import { compressImageFile } from '@/utils/imageCompressor';
 import { fetchAllBanners, addBanner, deleteBanner, updateBanner } from '@/banner-api';
 import { AdminWithdrawalManager } from '@/components/AdminWithdrawalManager';
 import { getAllCategories } from '@/data';
@@ -77,11 +80,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   });
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
-  const [masterPin, setMasterPin] = useState(() => {
-    return localStorage.getItem('akselling_master_pin') || '1234';
-  });
-  const [showChangePin, setShowChangePin] = useState(false);
-  const [newPin, setNewPin] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'payouts'>('categories');
 
   // Categories State & Management
@@ -111,6 +110,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     display_order: 0,
   });
   const [savingBanner, setSavingBanner] = useState(false);
+  const [isCompressingBanner, setIsCompressingBanner] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -189,26 +189,17 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     );
   }
 
-  // Master Passcode Verification Handler for Owner
+  // Permanent Admin Master Passcode Verification Handler for Owner (anojkumaryadav7290@gmail.com)
   const handleVerifyPin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinInput === masterPin || pinInput === '1234' || pinInput === '0000') {
+    const cleanPin = pinInput.trim();
+    // Strictly validate both owner authorized email and permanent master passcode @@AKSS1#aKSS$$$
+    if (isOwner && cleanPin === ADMIN_MASTER_PASSCODE) {
       setIsAuthenticated(true);
       sessionStorage.setItem('akselling_admin_unlocked', 'true');
       setPinError(false);
     } else {
       setPinError(true);
-    }
-  };
-
-  const handleSaveNewPin = () => {
-    if (newPin.length >= 4) {
-      localStorage.setItem('akselling_master_pin', newPin);
-      setMasterPin(newPin);
-      setShowChangePin(false);
-      setNewPin('');
-      setSavedMsg('Master Owner PIN updated successfully!');
-      setTimeout(() => setSavedMsg(''), 2500);
     }
   };
 
@@ -281,16 +272,20 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   };
 
   // BANNER CRUD HANDLERS
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setBannerForm(prev => ({ ...prev, image: reader.result as string }));
+    setIsCompressingBanner(true);
+    try {
+      const compressed = await compressImageFile(file, 1200, 600, 0.82);
+      if (compressed) {
+        setBannerForm(prev => ({ ...prev, image: compressed }));
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Failed to compress banner image:', err);
+    } finally {
+      setIsCompressingBanner(false);
+    }
   };
 
   const handleOpenAddBanner = () => {
@@ -407,7 +402,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
             </div>
             <h2 className="text-xl font-black text-white">AKSelling Admin Master Panel</h2>
             <p className="text-xs text-gray-300 mt-1 max-w-xs mx-auto">
-              Welcome, <span className="text-white font-bold">{OWNER_ADMIN_EMAIL}</span>. Please enter your Owner Passcode to unlock Category & Banner controls.
+              Authorized Owner: <span className="text-white font-bold">{OWNER_ADMIN_EMAIL}</span>. Enter the permanent Admin Master Passcode to unlock Category, Banner, and Admin controls.
             </p>
           </div>
 
@@ -416,21 +411,29 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
               <div className="relative">
                 <KeyRound size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
-                  type="password"
-                  maxLength={8}
+                  type={showPassword ? 'text' : 'password'}
+                  maxLength={64}
                   autoFocus
                   value={pinInput}
                   onChange={e => {
                     setPinInput(e.target.value);
                     setPinError(false);
                   }}
-                  placeholder="Enter Master PIN (Default: 1234)"
-                  className="w-full bg-gray-900 border border-gray-600 focus:border-[#9f2089] rounded-2xl pl-10 pr-4 py-3.5 text-center text-lg tracking-widest font-mono text-white placeholder:text-gray-500 placeholder:tracking-normal placeholder:text-xs outline-none transition-all"
+                  placeholder="Enter Master Passcode (@@AKSS1#aKSS$$$)"
+                  className="w-full bg-gray-900 border border-gray-600 focus:border-[#9f2089] rounded-2xl pl-10 pr-11 py-3.5 text-center text-sm font-mono text-white placeholder:text-gray-500 placeholder:text-xs outline-none transition-all shadow-inner"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 cursor-pointer"
+                  title={showPassword ? 'Hide passcode' : 'Show passcode'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
               {pinError && (
                 <p className="text-xs text-rose-400 font-bold pt-1 animate-shake">
-                  Incorrect PIN. Please enter your Owner PIN (Default: 1234).
+                  Access Denied. Passcode does not match @@AKSS1#aKSS$$$ or user is not {OWNER_ADMIN_EMAIL}.
                 </p>
               )}
             </div>
@@ -445,9 +448,12 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
           </form>
 
           <div className="bg-gray-900/80 rounded-xl p-3 border border-gray-700/60 text-[11px] text-gray-400 text-left">
-            <span className="font-bold text-gray-300">💡 Tip for App Owner:</span>
-            <p className="mt-0.5">
-              Default master PIN is <strong>1234</strong>. You can change this PIN anytime once inside.
+            <span className="font-bold text-amber-300 flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-amber-400" />
+              Enterprise Authentication Lock:
+            </span>
+            <p className="mt-0.5 leading-relaxed text-gray-300">
+              Only requests authenticated as <strong>{OWNER_ADMIN_EMAIL}</strong> with master passcode <strong>@@AKSS1#aKSS$$$</strong> are authorized to configure store assets.
             </p>
           </div>
         </div>
@@ -483,14 +489,13 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowChangePin(!showChangePin)}
-            className="text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-xl border border-gray-200 flex items-center gap-1 transition-all cursor-pointer"
-            title="Security PIN Settings"
+          <div
+            className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5"
+            title="Permanent Enterprise Passcode: @@AKSS1#aKSS$$$"
           >
-            <KeyRound size={14} />
-            <span className="hidden xs:inline">PIN</span>
-          </button>
+            <ShieldCheck size={14} className="text-emerald-600" />
+            <span className="hidden sm:inline">Hardened Passcode: Active</span>
+          </div>
 
           <button
             onClick={() => {
@@ -557,32 +562,6 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
 
       {/* Main Content Area */}
       <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 pb-20 space-y-4">
-        {/* Change PIN Box */}
-        {showChangePin && (
-          <div className="bg-white rounded-2xl p-4 border border-purple-200 shadow-sm space-y-3 animate-fade-in">
-            <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
-              <KeyRound size={15} className="text-[#9f2089]" />
-              Update Owner Master Passcode
-            </h3>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                maxLength={8}
-                value={newPin}
-                onChange={e => setNewPin(e.target.value)}
-                placeholder="Enter new 4-8 digit PIN"
-                className="flex-1 bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#9f2089]"
-              />
-              <button
-                onClick={handleSaveNewPin}
-                disabled={newPin.length < 4}
-                className="bg-[#9f2089] disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
-              >
-                Update PIN
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* TAB 1: PRODUCT CATEGORIES CRUD */}
         {adminTab === 'categories' && (
@@ -978,11 +957,21 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                     </label>
                     <button
                       type="button"
+                      disabled={isCompressingBanner}
                       onClick={() => fileInputRef.current?.click()}
-                      className="text-xs text-[#9f2089] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-xs text-[#9f2089] font-bold hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
                     >
-                      <Upload size={13} />
-                      <span>Upload from Device</span>
+                      {isCompressingBanner ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          <span>Optimizing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={13} />
+                          <span>Upload from Device</span>
+                        </>
+                      )}
                     </button>
                     <input
                       ref={fileInputRef}

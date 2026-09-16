@@ -129,10 +129,12 @@ export default function Step5InventoryPreview({
         mrp: Number(formData.mrp) || Number(formData.price) || 0,
         discount: discountPercent,
         category: formData.category || 'fashion',
-        images: formData.images.length > 0 ? formData.images.map((img: string) => img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img) : [DEFAULT_PRODUCT_PLACEHOLDER],
+        images: formData.images.length > 0 ? formData.images : [DEFAULT_PRODUCT_PLACEHOLDER],
         stock: totalStock,
         brand: formData.brand.trim() || 'AK Yadav Print',
         status: totalStock > 0 ? 'live' : 'out_of_stock',
+        tags: formData.tags || [],
+        keywords: formData.keywords || formData.tags || [],
         sizes: formData.sizes,
         colors: formData.colors,
         fabric: formData.fabric,
@@ -326,7 +328,7 @@ export default function Step5InventoryPreview({
             <div>
               <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-2.5 border border-gray-100">
                 <img
-                  src={(formData.images[0] && !formData.images[0].includes('8532616')) ? formData.images[0] : DEFAULT_PRODUCT_PLACEHOLDER}
+                  src={formData.images[0] || DEFAULT_PRODUCT_PLACEHOLDER}
                   alt={formData.title}
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"

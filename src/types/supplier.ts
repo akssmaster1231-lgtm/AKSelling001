@@ -25,6 +25,8 @@ export interface SellerProduct {
   salesCount?: number;
   views?: number;
   rating?: number;
+  tags?: string[];
+  keywords?: string[];
   sizes?: string[];
   colors?: string[];
   neckType?: string;

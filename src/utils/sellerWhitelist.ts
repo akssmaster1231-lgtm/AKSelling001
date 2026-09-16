@@ -8,6 +8,12 @@ export const OWNER_ADMIN_EMAIL = 'anojkumaryadav7290@gmail.com';
 export const OFFICIAL_SUPPORT_EMAIL = 'support.akselling@gmail.com';
 
 /**
+ * Enterprise Master Passcode for AKSelling Admin Panel & Management Lock.
+ * Permanently hardcoded for owner authentication.
+ */
+export const ADMIN_MASTER_PASSCODE = '@@AKSS1#aKSS$$$';
+
+/**
  * Checks if the given email strictly matches the verified owner admin email.
  */
 export function isVerifiedOwnerAdmin(email?: string | null): boolean {

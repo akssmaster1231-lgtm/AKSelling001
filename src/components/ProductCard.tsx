@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Star } from 'lucide-react';
 import type { Product } from '@/types';
 import { formatPrice, formatCount, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
@@ -9,15 +9,30 @@ interface ProductCardProps {
   onClick: () => void;
 }
 
-export default function ProductCard({ product, onClick }: ProductCardProps) {
+const loadedImagesCache = new Set<string>();
+
+const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardProps) {
   const dynamicRating = calculateProductDynamicRating(product);
-  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Safe image determination
+  const rawImage = product.images && product.images[0] ? product.images[0] : '';
+  const isBrokenUrl = typeof rawImage === 'string' && rawImage.includes('8532616');
+  const imageUrl = isBrokenUrl || !rawImage ? DEFAULT_PRODUCT_PLACEHOLDER : rawImage;
+
+  const [imageLoaded, setImageLoaded] = useState(() => Boolean(imageUrl && loadedImagesCache.has(imageUrl)));
   const [hasError, setHasError] = useState(false);
 
-  // Sanitize image: ensure no black t-shirt flash or broken url
-  const rawImage = product.images && product.images[0] ? product.images[0] : '';
-  const isBlackTshirt = typeof rawImage === 'string' && rawImage.includes('8532616');
-  const imageUrl = isBlackTshirt || !rawImage || hasError ? DEFAULT_PRODUCT_PLACEHOLDER : rawImage;
+  const handleImageLoad = () => {
+    if (imageUrl) loadedImagesCache.add(imageUrl);
+    setImageLoaded(true);
+  };
+
+  const handleImageError = () => {
+    setHasError(true);
+    setImageLoaded(true);
+  };
+
+  const finalSrc = hasError ? DEFAULT_PRODUCT_PLACEHOLDER : imageUrl;
 
   return (
     <button
@@ -31,14 +46,13 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
         )}
 
         <img
-          src={imageUrl}
+          src={finalSrc}
           alt={product.title}
           loading="lazy"
-          onLoad={() => setImageLoaded(true)}
-          onError={() => {
-            setHasError(true);
-            setImageLoaded(true);
-          }}
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onLoad={handleImageLoad}
+          onError={handleImageError}
           className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-300 relative z-10 ${
             imageLoaded ? 'opacity-100' : 'opacity-0'
           }`}
@@ -82,7 +96,9 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
       </div>
     </button>
   );
-}
+});
+
+export default ProductCard;
 
 // Exported ProductCardSkeleton for hydration/refresh states
 export function ProductCardSkeleton() {

@@ -18,6 +18,8 @@ export interface Product {
   sleeveType?: string;
   fitType?: string;
   fabric?: string;
+  tags?: string[];
+  keywords?: string[];
   selectedSize?: string;
   selectedColor?: string;
   pickupLocation?: string;
@@ -103,4 +105,23 @@ export interface OrderTrackingCheckpoint {
   time: string;
   completed: boolean;
   active?: boolean;
+}
+
+export interface PriceAlert {
+  id: string;
+  userId: string;
+  productId: string;
+  productTitle: string;
+  productImage?: string;
+  initialPrice: number;
+  currentPrice: number;
+  targetPrice?: number;
+  notifyEmail?: string;
+  notifyPush?: boolean;
+  notifyEmailPref?: boolean;
+  fcmToken?: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastNotifiedAt?: string;
 }

@@ -35,6 +35,8 @@ export interface WizardFormData {
   images: string[];
   title: string;
   description: string;
+  tags?: string[];
+  keywords?: string[];
 
   // Step 3
   weightGsm: string;

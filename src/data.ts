@@ -4,7 +4,7 @@ import { db, getCachedProducts, setCachedProducts, getCachedCategories, getDelet
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
 export const DEFAULT_PRODUCT_PLACEHOLDER =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Cpath d='M200 130 L270 170 L270 250 L200 290 L130 250 L130 170 Z' fill='none' stroke='%239ca3af' stroke-width='8' stroke-linejoin='round'/%3E%3Cpath d='M200 130 L200 290' stroke='%239ca3af' stroke-width='8'/%3E%3Cpath d='M130 170 L200 210 L270 170' fill='none' stroke='%239ca3af' stroke-width='8'/%3E%3C/svg%3E";
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f8fafc'/%3E%3Cpath d='M150 160 C150 132 172 110 200 110 C228 110 250 132 250 160 M120 160 L280 160 L295 300 L105 300 Z' fill='none' stroke='%23cbd5e1' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
 
 export async function fetchProducts(): Promise<Product[]> {
   const localSellerProducts = getLocalSellerProducts();
@@ -41,6 +41,8 @@ export async function fetchProducts(): Promise<Product[]> {
             sleeveType: d.sleeveType,
             fitType: d.fitType,
             fabric: d.fabric,
+            tags: Array.isArray(d.tags) ? d.tags : [],
+            keywords: Array.isArray(d.keywords) ? d.keywords : [],
             pickupLocation: d.pickupLocation,
             weight: d.weight,
             dimensions: d.dimensions,
@@ -93,6 +95,8 @@ export async function fetchProductsByCategory(category: string): Promise<Product
             sleeveType: d.sleeveType,
             fitType: d.fitType,
             fabric: d.fabric,
+            tags: Array.isArray(d.tags) ? d.tags : [],
+            keywords: Array.isArray(d.keywords) ? d.keywords : [],
             pickupLocation: d.pickupLocation,
             weight: d.weight,
             dimensions: d.dimensions,

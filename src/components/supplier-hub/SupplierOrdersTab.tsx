@@ -42,14 +42,13 @@ export default function SupplierOrdersTab({
 
   // AWB Entry & Live Sync Modal State
   const [syncModalOrder, setSyncModalOrder] = useState<SellerOrder | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<'shiprocket' | 'nimbuspost'>('shiprocket');
-  const [courierNameInput, setCourierNameInput] = useState('Delhivery Surface');
+  const [courierNameInput, setCourierNameInput] = useState('Shadowfax Express Surface');
   const [awbInput, setAwbInput] = useState('');
   const [isSubmittingAwb, setIsSubmittingAwb] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedAwb, setCopiedAwb] = useState<string | null>(null);
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
-  const [shippingNimbusId, setShippingNimbusId] = useState<string | null>(null);
+  const [shippingShiprocketId, setShippingShiprocketId] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -57,7 +56,7 @@ export default function SupplierOrdersTab({
   };
 
   // Helper to format order details and copy to clipboard for carrier panel
-  const copyOrderDispatchData = (order: SellerOrder, providerName: string) => {
+  const copyOrderDispatchData = (order: SellerOrder, providerName: string = 'Shiprocket') => {
     const text = `[AKSelling Order Dispatch Details]
 Order ID: #${order.orderNumber}
 Customer: ${order.customerName}
@@ -74,32 +73,31 @@ Logistics Provider: ${providerName}`;
   };
 
   // 1. Ship via Shiprocket: direct panel redirection
-  const handleShipViaShiprocket = (order: SellerOrder) => {
+  const handleShipViaShiprocketPanel = (order: SellerOrder) => {
     copyOrderDispatchData(order, 'Shiprocket');
     showToast('Redirecting to Shiprocket Panel... Order details copied to clipboard!');
     window.open('https://app.shiprocket.in/orders/create', '_blank', 'noopener,noreferrer');
 
     // Open AWB sync modal for quick entry after booking
-    setSelectedProvider('shiprocket');
     setCourierNameInput(order.courierName || 'Shadowfax Express Surface');
-    setAwbInput(order.awbCode || `SFX${Math.floor(100000000 + Math.random() * 900000000)}`);
+    setAwbInput(order.awbCode || `SR${Math.floor(100000000 + Math.random() * 900000000)}`);
     setSyncModalOrder(order);
   };
 
-  // 2. Ship via NimbusPost: automated live API booking with portal sync (fixed valid portal URL to avoid 404)
-  const handleShipViaNimbusPost = async (order: SellerOrder) => {
-    setShippingNimbusId(order.id);
-    copyOrderDispatchData(order, 'NimbusPost');
-    showToast('Pushing order to NimbusPost production system...');
+  // 2. Direct Automated Dispatch via Shiprocket
+  const handleAutoDispatchShiprocket = async (order: SellerOrder) => {
+    setShippingShiprocketId(order.id);
+    copyOrderDispatchData(order, 'Shiprocket');
+    showToast('Pushing order to Shiprocket automated booking system...');
 
     try {
-      const response = await fetch('/api/logistics/nimbuspost/create-order', {
+      const response = await fetch('/api/logistics/shiprocket/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           order_id: order.id,
           order_number: order.orderNumber,
-          courier_name: order.courierName || 'Delhivery Surface Pro',
+          courier_name: order.courierName || 'Shadowfax Express Surface',
           pickup_pincode: '122015',
           delivery_pincode: order.customerPincode || '201301',
           customer_name: order.customerName,
@@ -122,25 +120,25 @@ Logistics Provider: ${providerName}`;
             label: 'Order Confirmed & Payment Verified',
             location: 'Merchant Store Database',
             time: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-            completed: true,
+            done: true,
           },
           {
-            label: 'Manifest Created via NimbusPost Gateway',
-            location: `Hub (${data.courier_name || 'Delhivery'})`,
+            label: 'Manifest Created via Shiprocket',
+            location: `Hub (${data.courier_name || 'Shadowfax'})`,
             time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-            completed: true,
+            done: true,
           },
           {
             label: 'Pickup Assigned to Courier',
             location: 'Origin Processing Center',
             time: 'Pending Pickup',
-            completed: false,
+            done: false,
           },
           {
             label: 'Out for Delivery',
             location: order.customerCity || 'Destination Hub',
             time: 'Expected in 2-3 days',
-            completed: false,
+            done: false,
           },
         ];
 
@@ -148,63 +146,55 @@ Logistics Provider: ${providerName}`;
           orderId: order.id,
           orderNumber: order.orderNumber,
           awbCode: data.awb_code,
-          courierName: data.courier_name || 'Delhivery Surface Pro',
-          status: 'manifest_created',
-          provider: 'nimbuspost',
+          courierName: data.courier_name || 'Shadowfax Express Surface',
+          status: 'IN_TRANSIT',
           trackingUrl: data.tracking_url,
           labelUrl: data.label_url,
-          steps: trackingSteps,
-          estimatedDelivery: '3-4 Days',
+          trackingSteps,
+          expectedDelivery: '2-3 Days',
           updatedAt: new Date().toISOString(),
         });
 
-        await updateOrderStatusInFirestore(order.id, 'shipped', {
+        await updateOrderStatusInFirestore(order.id, 'Shipped', {
           awb_code: data.awb_code,
-          courier_name: data.courier_name || 'Delhivery Surface Pro',
+          courier_name: data.courier_name || 'Shadowfax Express Surface',
           tracking_url: data.tracking_url,
           label_url: data.label_url,
+          logistics_provider: 'shiprocket',
           updated_at: new Date().toISOString(),
         });
 
-        showToast(`NimbusPost Booked! AWB: ${data.awb_code} generated.`);
-        window.open(data.portal_url || 'https://ship.nimbuspost.com/shipping/order', '_blank', 'noopener,noreferrer');
+        window.dispatchEvent(new CustomEvent('akselling_orders_updated'));
+        showToast(`Shiprocket Booked! AWB: ${data.awb_code} generated and synced.`);
       } else {
-        throw new Error(data.error || 'NimbusPost API response incomplete');
+        throw new Error(data.error || 'Shiprocket API response incomplete');
       }
     } catch (err) {
-      console.warn('NimbusPost booking fallback:', err);
-      showToast('Opening NimbusPost portal & manual AWB sync...');
-      window.open('https://ship.nimbuspost.com/shipping/order', '_blank', 'noopener,noreferrer');
-      setSelectedProvider('nimbuspost');
-      setCourierNameInput(order.courierName || 'Delhivery Surface Pro');
-      setAwbInput(order.awbCode || `NP${Math.floor(100000000 + Math.random() * 900000000)}`);
+      console.warn('Shiprocket automated booking fallback:', err);
+      showToast('Opening Shiprocket portal & manual AWB sync...');
+      window.open('https://app.shiprocket.in/orders/create', '_blank', 'noopener,noreferrer');
+      setCourierNameInput(order.courierName || 'Shadowfax Express Surface');
+      setAwbInput(order.awbCode || `SR${Math.floor(100000000 + Math.random() * 900000000)}`);
       setSyncModalOrder(order);
     } finally {
-      setShippingNimbusId(null);
+      setShippingShiprocketId(null);
     }
   };
 
   // Manual AWB Entry Dialog
   const handleOpenManualAwbModal = (order: SellerOrder) => {
-    setSelectedProvider('shiprocket');
-    setCourierNameInput(order.courierName || 'Delhivery Surface');
-    setAwbInput(order.awbCode || `SFX${Math.floor(100000000 + Math.random() * 900000000)}`);
+    setCourierNameInput(order.courierName || 'Shadowfax Express Surface');
+    setAwbInput(order.awbCode || `SR${Math.floor(100000000 + Math.random() * 900000000)}`);
     setSyncModalOrder(order);
   };
 
   // Confirm AWB and Sync Live Tracking to Firestore & Customer "My Orders"
   const handleConfirmAwbSync = async () => {
     if (!syncModalOrder) return;
-    const finalAwb = awbInput.trim() || `AWB${Math.floor(100000000 + Math.random() * 900000000)}`;
-    const finalCourier = courierNameInput.trim() || 'Logistics Express Surface';
-    const trackingUrl =
-      selectedProvider === 'nimbuspost'
-        ? `https://ship.nimbuspost.com/shipping/tracking?awb=${finalAwb}`
-        : `https://shiprocket.co/tracking/${finalAwb}`;
-    const labelUrl =
-      selectedProvider === 'nimbuspost'
-        ? `https://ship.nimbuspost.com/shipping/print-label/${finalAwb}`
-        : `https://shiprocket.co/print-label/${finalAwb}`;
+    const finalAwb = awbInput.trim() || `SR${Math.floor(100000000 + Math.random() * 900000000)}`;
+    const finalCourier = courierNameInput.trim() || 'Shadowfax Express Surface';
+    const trackingUrl = `https://shiprocket.co/tracking/${finalAwb}`;
+    const labelUrl = `https://shiprocket.co/print-label/${finalAwb}`;
 
     setIsSubmittingAwb(true);
 
@@ -222,7 +212,7 @@ Logistics Provider: ${providerName}`;
           activity: 'Merchant order accepted and inventory reserved',
         },
         {
-          label: `Manifest Generated via ${finalCourier} (${selectedProvider.toUpperCase()})`,
+          label: `Manifest Generated via ${finalCourier} (Shiprocket)`,
           location: 'Merchant Logistics Hub',
           time: 'Just now',
           done: true,
@@ -248,7 +238,7 @@ Logistics Provider: ${providerName}`;
         orderId: syncModalOrder.id,
         orderNumber: syncModalOrder.orderNumber,
         awbCode: finalAwb,
-        courierName: `${finalCourier} (${selectedProvider === 'shiprocket' ? 'Shiprocket' : 'NimbusPost'})`,
+        courierName: `${finalCourier} (Shiprocket)`,
         courierId: 101,
         shipmentId: `SHP_${Date.now().toString().slice(-8)}`,
         pickupLocation: 'Central Logistics Warehouse (PIN: 122015)',
@@ -276,21 +266,21 @@ Logistics Provider: ${providerName}`;
       // 3. Persist to Firestore cloud database so customer's "My Orders" tracks in real-time
       await updateOrderStatusInFirestore(syncModalOrder.id, 'Shipped', {
         awb_code: finalAwb,
-        courier_name: `${finalCourier} (${selectedProvider === 'shiprocket' ? 'Shiprocket' : 'NimbusPost'})`,
+        courier_name: `${finalCourier} (Shiprocket)`,
         tracking_url: trackingUrl,
         label_url: labelUrl,
-        logistics_provider: selectedProvider,
+        logistics_provider: 'shiprocket',
         updated_at: new Date().toISOString(),
       });
 
       // 4. Dispatch cross-tab sync event
       window.dispatchEvent(new CustomEvent('akselling_orders_updated'));
 
-      showToast(`AWB ${finalAwb} synced! Order marked as Shipped in real-time.`);
+      showToast(`Shiprocket AWB ${finalAwb} synced! Order marked as Shipped in real-time.`);
       setSyncModalOrder(null);
     } catch (err) {
       console.warn('Firestore AWB sync notice:', err);
-      showToast(`AWB ${finalAwb} saved locally and marked as Shipped.`);
+      showToast(`Shiprocket AWB ${finalAwb} saved locally and marked as Shipped.`);
       setSyncModalOrder(null);
     } finally {
       setIsSubmittingAwb(false);
@@ -365,7 +355,7 @@ Logistics Provider: ${providerName}`;
           <div>
             <h1 className="text-base font-bold text-gray-900">Orders & Logistics Dispatch</h1>
             <p className="text-xs text-gray-500">
-              Direct Shiprocket & NimbusPost panel routing with live customer tracking sync
+              Direct Shiprocket automated dispatch and panel routing with live customer tracking sync
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -591,42 +581,41 @@ Logistics Provider: ${providerName}`;
 
               {/* Direct Logistics Dispatch Actions */}
               <div className="space-y-2 pt-1">
-                {/* 1. New/Pending Orders: Ship via Shiprocket / NimbusPost */}
+                {/* 1. New/Pending Orders: Ship via Shiprocket */}
                 {(order.status === 'pending' || order.status === 'ready_to_ship') && (
                   <div className="space-y-1.5">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {/* Ship via Shiprocket Direct Redirection */}
+                      {/* Direct Automated Shiprocket Dispatch */}
                       <button
                         type="button"
-                        onClick={() => handleShipViaShiprocket(order)}
-                        className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white text-xs font-bold py-2.5 px-3.5 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                        title="Click to open Shiprocket panel to book courier shipment"
+                        disabled={shippingShiprocketId === order.id}
+                        onClick={() => handleAutoDispatchShiprocket(order)}
+                        className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 disabled:opacity-75 text-white text-xs font-bold py-2.5 px-3.5 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        title="Book shipment directly via automated Shiprocket system"
                       >
-                        <Truck size={14} className="text-yellow-300 shrink-0" />
-                        <span className="truncate">Ship via Shiprocket</span>
-                        <ExternalLink size={12} className="opacity-75 shrink-0" />
-                      </button>
-
-                      {/* Ship via NimbusPost Direct Production Booking */}
-                      <button
-                        type="button"
-                        disabled={shippingNimbusId === order.id}
-                        onClick={() => handleShipViaNimbusPost(order)}
-                        className="bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 disabled:opacity-75 text-white text-xs font-bold py-2.5 px-3.5 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                        title="Direct push order to live NimbusPost production system"
-                      >
-                        {shippingNimbusId === order.id ? (
+                        {shippingShiprocketId === order.id ? (
                           <>
                             <RefreshCw size={14} className="animate-spin text-white shrink-0" />
-                            <span className="truncate">Booking NimbusPost...</span>
+                            <span className="truncate">Booking Shiprocket...</span>
                           </>
                         ) : (
                           <>
                             <Zap size={14} className="text-yellow-300 shrink-0" />
-                            <span className="truncate">Ship via NimbusPost</span>
-                            <ExternalLink size={12} className="opacity-75 shrink-0" />
+                            <span className="truncate">Auto-Ship via Shiprocket</span>
                           </>
                         )}
+                      </button>
+
+                      {/* Ship via Shiprocket Merchant Panel */}
+                      <button
+                        type="button"
+                        onClick={() => handleShipViaShiprocketPanel(order)}
+                        className="bg-white hover:bg-purple-50 text-purple-800 border border-purple-300 text-xs font-bold py-2.5 px-3.5 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        title="Open Shiprocket merchant portal with copied order data"
+                      >
+                        <Truck size={14} className="text-purple-600 shrink-0" />
+                        <span className="truncate">Shiprocket Merchant Panel</span>
+                        <ExternalLink size={12} className="opacity-75 shrink-0" />
                       </button>
                     </div>
 
@@ -658,19 +647,19 @@ Logistics Provider: ${providerName}`;
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                         <span className="font-bold text-gray-900">
-                          {order.courierName || 'Shadowfax Express Surface'}
+                          {order.courierName || 'Shadowfax Express Surface (Shiprocket)'}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 font-mono text-[11px] bg-white px-2 py-0.5 rounded-lg border border-blue-100">
                         <span className="text-gray-500">AWB:</span>
-                        <strong className="text-gray-800">{order.awbCode || 'SFX9482910'}</strong>
+                        <strong className="text-gray-800">{order.awbCode || 'SR9482910'}</strong>
                         <button
                           type="button"
-                          onClick={() => copyToClipboard(order.awbCode || 'SFX9482910')}
+                          onClick={() => copyToClipboard(order.awbCode || 'SR9482910')}
                           className="text-[#2874f0] hover:text-blue-700 p-0.5 cursor-pointer ml-1"
                           title="Copy AWB"
                         >
-                          {copiedAwb === (order.awbCode || 'SFX9482910') ? (
+                          {copiedAwb === (order.awbCode || 'SR9482910') ? (
                             <Check size={12} className="text-emerald-600" />
                           ) : (
                             <Copy size={12} />
@@ -682,17 +671,13 @@ Logistics Provider: ${providerName}`;
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
                       {/* Direct External Tracking Button */}
                       <a
-                        href={
-                          order.courierName?.toLowerCase().includes('nimbus')
-                            ? `https://nimbuspost.com/tracking?awb=${order.awbCode || 'SFX9482910'}`
-                            : `https://shiprocket.co/tracking/${order.awbCode || 'SFX9482910'}`
-                        }
+                        href={`https://shiprocket.co/tracking/${order.awbCode || 'SR9482910'}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 font-bold py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-all text-[11px]"
                       >
-                        <ExternalLink size={12} className="text-[#2874f0]" />
-                        <span>Carrier Portal Track</span>
+                        <ExternalLink size={12} className="text-purple-600" />
+                        <span>Shiprocket Track</span>
                       </a>
 
                       {/* Live Sync Status Button */}
@@ -728,20 +713,20 @@ Logistics Provider: ${providerName}`;
       )}
 
       {/* ========================================================================= */}
-      {/* Quick AWB Update & Live Sync Modal (After Booking on Shiprocket/NimbusPost) */}
+      {/* Quick AWB Update & Live Sync Modal (Shiprocket Logistics)                  */}
       {/* ========================================================================= */}
       {syncModalOrder && (
         <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
           <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col animate-scale-up border border-gray-100">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-4 flex items-center justify-between shadow-xs">
+            <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white p-4 flex items-center justify-between shadow-xs">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center">
                   <Truck size={18} className="text-yellow-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm">Update AWB & Sync Tracking</h3>
-                  <p className="text-[11px] text-gray-300">
+                  <h3 className="font-bold text-sm">Shiprocket AWB & Tracking Sync</h3>
+                  <p className="text-[11px] text-purple-200">
                     Order #{syncModalOrder.orderNumber} • {syncModalOrder.customerCity}
                   </p>
                 </div>
@@ -757,54 +742,22 @@ Logistics Provider: ${providerName}`;
 
             {/* Modal Body */}
             <div className="p-4 space-y-3.5 text-xs">
-              <div className="bg-blue-50 p-2.5 rounded-xl border border-blue-100 text-blue-900 leading-relaxed">
-                After generating the shipment in your <strong>Shiprocket</strong> or{' '}
-                <strong>NimbusPost</strong> panel, enter or paste the assigned AWB code below. Real-time
-                status will immediately sync to the customer's <strong>"My Orders"</strong> tab and
-                trigger notification alerts.
-              </div>
-
-              {/* Provider Selection */}
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Logistics Platform Used</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProvider('shiprocket')}
-                    className={`py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                      selectedProvider === 'shiprocket'
-                        ? 'bg-purple-50 border-purple-500 text-purple-800 ring-1 ring-purple-500'
-                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span>Shiprocket</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProvider('nimbuspost')}
-                    className={`py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                      selectedProvider === 'nimbuspost'
-                        ? 'bg-sky-50 border-sky-500 text-sky-800 ring-1 ring-sky-500'
-                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span>NimbusPost</span>
-                  </button>
-                </div>
+              <div className="bg-purple-50 p-2.5 rounded-xl border border-purple-100 text-purple-900 leading-relaxed">
+                Logistics provider: <strong>Shiprocket Official</strong>. Enter or auto-generate the assigned AWB code below. Real-time status will immediately sync to the customer's <strong>"My Orders"</strong> tab and dispatch updates.
               </div>
 
               {/* Courier Partner Name */}
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Assigned Courier Partner</label>
+                <label className="block font-bold text-gray-700 mb-1">Shiprocket Courier Partner</label>
                 <select
                   value={courierNameInput}
                   onChange={e => setCourierNameInput(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 font-semibold focus:bg-white focus:ring-1 focus:ring-[#2874f0]"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 font-semibold focus:bg-white focus:ring-1 focus:ring-purple-600"
                 >
+                  <option value="Shadowfax Express Surface">Shadowfax Express Surface (Fastest)</option>
                   <option value="Delhivery Surface Pro">Delhivery Surface Pro</option>
-                  <option value="Shadowfax Express Surface">Shadowfax Express Surface</option>
                   <option value="BlueDart Air Priority">BlueDart Air Priority</option>
-                  <option value="Ekart Logistics / Nimbus">Ekart Logistics / Nimbus</option>
+                  <option value="Ekart Surface Express">Ekart Surface Express</option>
                   <option value="Xpressbees Surface Fast">Xpressbees Surface Fast</option>
                   <option value="DTDC Express Courier">DTDC Express Courier</option>
                 </select>
@@ -813,14 +766,13 @@ Logistics Provider: ${providerName}`;
               {/* AWB Tracking Code Input */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-gray-700">AWB / Consignment Tracking Number *</label>
+                  <label className="font-bold text-gray-700">Shiprocket AWB / Consignment Code *</label>
                   <button
                     type="button"
                     onClick={() => {
-                      const prefix = selectedProvider === 'nimbuspost' ? 'NP' : 'SFX';
-                      setAwbInput(`${prefix}${Math.floor(100000000 + Math.random() * 900000000)}`);
+                      setAwbInput(`SR${Math.floor(100000000 + Math.random() * 900000000)}`);
                     }}
-                    className="text-[10.5px] text-[#2874f0] hover:underline font-bold cursor-pointer"
+                    className="text-[10.5px] text-purple-700 hover:underline font-bold cursor-pointer"
                   >
                     Auto-Generate AWB
                   </button>
@@ -829,8 +781,8 @@ Logistics Provider: ${providerName}`;
                   type="text"
                   value={awbInput}
                   onChange={e => setAwbInput(e.target.value)}
-                  placeholder="e.g. SFX9482910 or DEL10293847"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-bold text-gray-900 uppercase focus:bg-white focus:ring-1 focus:ring-[#2874f0]"
+                  placeholder="e.g. SR9482910 or SFX1029384"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-bold text-gray-900 uppercase focus:bg-white focus:ring-1 focus:ring-purple-600"
                   required
                 />
               </div>
@@ -859,7 +811,7 @@ Logistics Provider: ${providerName}`;
                 type="button"
                 onClick={handleConfirmAwbSync}
                 disabled={isSubmittingAwb}
-                className="bg-[#2874f0] hover:bg-[#1a65dc] text-white text-xs font-bold py-2 px-4 rounded-xl shadow-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold py-2 px-4 rounded-xl shadow-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
               >
                 {isSubmittingAwb ? (
                   <>

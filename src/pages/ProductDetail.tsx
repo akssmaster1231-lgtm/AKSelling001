@@ -14,9 +14,11 @@ import {
   X,
 } from 'lucide-react';
 import type { Product } from '@/types';
-import { formatPrice, formatCount, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
+import { formatPrice, formatCount } from '@/data';
 import { useCart } from '@/cart-context';
 import { calculateProductDynamicRating } from '@/utils/orderSync';
+import ProductSwipeGallery from '@/components/ProductSwipeGallery';
+import PriceDropAlertToggle from '@/components/PriceDropAlertToggle';
 
 interface ProductDetailProps {
   product: Product;
@@ -27,7 +29,6 @@ interface ProductDetailProps {
 
 export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }: ProductDetailProps) {
   const dynamicRating = calculateProductDynamicRating(product);
-  const [selectedImage, setSelectedImage] = useState(0);
   const [wishlisted, setWishlisted] = useState(false);
   const [added, setAdded] = useState(false);
   const [selectedSize, setSelectedSize] = useState<string>(
@@ -79,42 +80,14 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         </button>
       </div>
 
-      {/* Image Gallery */}
-      <div className="bg-white">
-        <div className="relative aspect-square bg-gray-50">
-          <img
-            src={(product.images && product.images[selectedImage] && !product.images[selectedImage].includes('8532616')) ? product.images[selectedImage] : DEFAULT_PRODUCT_PLACEHOLDER}
-            alt={product.title}
-            className="w-full h-full object-cover"
-          />
-          {product.discount > 0 && (
-            <span className="absolute top-3 left-3 bg-flipkart-500 text-white text-sm font-bold px-2.5 py-1 rounded shadow-sm">
-              {product.discount}% Off
-            </span>
-          )}
-          {product.neckType && (
-            <span className="absolute top-3 right-3 bg-gray-900/80 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm">
-              {product.neckType}
-            </span>
-          )}
-        </div>
-        {/* Thumbnails */}
-        {product.images.length > 1 && (
-          <div className="flex gap-2 px-4 py-3 overflow-x-auto no-scrollbar">
-            {product.images.map((img, i) => (
-              <button
-                key={i}
-                onClick={() => setSelectedImage(i)}
-                className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                  selectedImage === i ? 'border-flipkart-500' : 'border-gray-200'
-                }`}
-              >
-                <img src={img} alt="" className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Flipkart-Style Touch-Friendly Image Swipe Gallery */}
+      <ProductSwipeGallery
+        images={product.images || []}
+        title={product.title}
+        discount={product.discount}
+        neckType={product.neckType}
+        fitType={product.fitType}
+      />
 
       {/* Product Info */}
       <div className="mt-2 bg-white px-4 py-4">
@@ -161,6 +134,9 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
           <span className="text-base font-bold text-success-500">{product.discount}% off</span>
         </div>
         <p className="text-sm text-gray-500 mt-1">{product.delivery}</p>
+
+        {/* Notify me of price drops toggle & preferences */}
+        <PriceDropAlertToggle product={product} />
       </div>
 
       {/* Key Features & Style Highlights (Neck Type, Sleeve, Fit, Fabric) */}

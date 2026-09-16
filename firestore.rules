@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
+    // Enterprise Security Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -12,51 +12,48 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email == 'support.akselling@gmail.com' ||
         request.auth.token.email == 'anojkumaryadav7290@gmail.com' ||
+        request.auth.token.email == 'support.akselling@gmail.com' ||
         (request.auth.token.keys().hasAny(['admin']) && request.auth.token.admin == true) ||
         request.auth.uid == 'admin'
       );
     }
 
-    // Public catalog items (anyone can browse; verified sellers and admins can manage)
+    // Public Product Catalog - Read open; write restricted to verified store owners/admins
     match /products/{productId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update, delete: if isAdmin() || (isAuthenticated() && request.auth.token.email == 'anojkumaryadav7290@gmail.com');
     }
 
+    // Dynamic Categories Engine - Read open; management strictly restricted to verified Admin
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isAdmin();
     }
 
+    // Homepage Hero & Marketing Banners - Read open; management strictly restricted to verified Admin
     match /banners/{bannerId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    match /reels/{reelId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
     // Customer & Seller Orders
-    // Placement allowed with order payload; immutable history; status updates restricted to admin
+    // Placement allowed with valid order payload; immutable history; status updates strictly admin
     match /orders/{orderId} {
       allow read: if true;
-      allow create: if true;
+      allow create: if request.resource.data.items != null && request.resource.data.totalAmount != null;
       allow update: if isAdmin();
       allow delete: if false;
     }
 
-    // Payment transaction audit records - Strictly Immutable
+    // Payment Transaction Audit Records - Strictly Immutable Ledger
     match /payments/{paymentId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if true;
+      allow create: if isAuthenticated() || isAdmin();
       allow update, delete: if false; // IMMUTABLE LEDGER - CANNOT BE ALTERED OR SPOOFED
     }
 
-    // Seller KYC and sensitive onboarding records
+    // Seller KYC and Sensitive Onboarding Records - Isolated to Owner/Admin
     match /sellers/{sellerId} {
       allow read: if isOwner(sellerId) || isAdmin();
       allow write: if isOwner(sellerId) || isAdmin();
@@ -67,7 +64,7 @@ service cloud.firestore {
       allow write: if isOwner(kycId) || isAdmin();
     }
 
-    // User profile documents and wallet balances - Strictly User/Admin Isolated
+    // User Profile Documents and Wallet Balances - Strictly User/Admin Isolated
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAuthenticated() || isOwner(userId);
@@ -90,12 +87,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // User carts
+    // User Carts - Isolated per User
     match /carts/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
-    // Default zero-trust fallback: deny all other collections
+    // Price Drop Alerts Subscriptions
+    match /PriceAlerts/{alertId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAuthenticated() || isAdmin();
+    }
+
+    // Default Zero-Trust Fallback: Deny all other collections
     match /{document=**} {
       allow read, write: if false;
     }

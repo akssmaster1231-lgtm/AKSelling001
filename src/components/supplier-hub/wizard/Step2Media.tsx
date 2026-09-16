@@ -10,6 +10,8 @@ import {
   ArrowRight,
   ArrowLeft,
   Info,
+  Tag,
+  X,
 } from 'lucide-react';
 import { compressImageFile } from '@/utils/imageCompressor';
 import type { WizardStepProps } from './types';
@@ -50,9 +52,43 @@ export default function Step2Media({
   const [urlInput, setUrlInput] = useState('');
   const [isCompressing, setIsCompressing] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [tagInput, setTagInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const images = formData.images || [];
+  const currentTags = formData.tags || [];
+
+  const handleAddTag = (rawTag: string) => {
+    const trimmed = rawTag.trim().replace(/^#/, '').replace(/,/g, '');
+    if (!trimmed) return;
+    if (currentTags.includes(trimmed)) {
+      setTagInput('');
+      return;
+    }
+    const nextTags = [...currentTags, trimmed];
+    setFormData(prev => ({
+      ...prev,
+      tags: nextTags,
+      keywords: nextTags,
+    }));
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (indexToRemove: number) => {
+    const nextTags = currentTags.filter((_, i) => i !== indexToRemove);
+    setFormData(prev => ({
+      ...prev,
+      tags: nextTags,
+      keywords: nextTags,
+    }));
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      handleAddTag(tagInput);
+    }
+  };
 
   // File upload handler
   const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -393,6 +429,74 @@ export default function Step2Media({
             placeholder="Describe product highlights, fabric quality, feel, printing technology, and sizing advice..."
             className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-flipkart-500 font-normal leading-relaxed"
           />
+        </div>
+
+        {/* Dedicated Search Keywords / Tags Input */}
+        <div className="pt-2 border-t border-gray-100">
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+              <Tag size={14} className="text-flipkart-600" />
+              <span>Search Keywords / Tags</span>
+              <span className="text-[11px] font-normal text-gray-500">(For high search discoverability)</span>
+            </label>
+            <span className="text-[11px] font-mono text-gray-500">
+              {currentTags.length} tags added
+            </span>
+          </div>
+
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              value={tagInput}
+              onChange={e => setTagInput(e.target.value)}
+              onKeyDown={handleTagKeyDown}
+              placeholder="Type keyword and press Enter or comma (e.g. Streetwear, Oversized, 240 GSM)"
+              className="flex-1 px-3.5 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-flipkart-500 font-medium"
+            />
+            <button
+              type="button"
+              onClick={() => handleAddTag(tagInput)}
+              className="px-4 py-2 bg-flipkart-50 hover:bg-flipkart-100 text-flipkart-700 text-xs font-bold rounded-xl border border-flipkart-200 transition-colors cursor-pointer"
+            >
+              Add Tag
+            </button>
+          </div>
+
+          {/* Active Tags Pills */}
+          {currentTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {currentTags.map((tag, idx) => (
+                <span
+                  key={idx}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-flipkart-50 text-flipkart-800 border border-flipkart-200/80 rounded-lg text-xs font-semibold"
+                >
+                  #{tag}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(idx)}
+                    className="hover:text-red-600 cursor-pointer ml-0.5"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Quick Tag Recommendations */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Quick Suggestions:</span>
+            {['Oversized Fit', 'Heavyweight 240 GSM', 'Streetwear', 'Graphic Tee', 'Drop Shoulder', 'Cotton Tee', 'Summer Trend', 'Anime Aesthetic'].map(sugg => (
+              <button
+                key={sugg}
+                type="button"
+                onClick={() => handleAddTag(sugg)}
+                className="text-[11px] px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-medium transition-colors cursor-pointer"
+              >
+                + {sugg}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

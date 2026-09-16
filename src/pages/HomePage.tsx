@@ -19,7 +19,23 @@ interface HomePageProps {
 export default function HomePage({ searchQuery, onProductClick, onCategoryClick, onBecomeSeller }: HomePageProps) {
   const { t } = useI18n();
   const [dbProducts, setDbProducts] = useState<Product[]>(() => getCachedProducts());
-  const [dbBanners, setDbBanners] = useState<Banner[]>([]);
+  const [dbBanners, setDbBanners] = useState<Banner[]>(() => {
+    try {
+      const raw = localStorage.getItem('akselling_master_banners');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const active = parsed.filter((b: { active?: boolean; isActive?: boolean }) => b.active !== false && b.isActive !== false);
+          if (active.length > 0) {
+            return active.sort((a: { display_order?: number }, b: { display_order?: number }) => (a.display_order || 0) - (b.display_order || 0));
+          }
+        }
+      }
+    } catch {
+      // fallback to default
+    }
+    return fallbackBanners;
+  });
   const [activeCategories, setActiveCategories] = useState<Category[]>(() => getAllCategories());
   const [loading, setLoading] = useState(() => getCachedProducts().length === 0);
 
@@ -96,7 +112,10 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
       p =>
         p.title.toLowerCase().includes(q) ||
         p.brand.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q)
+        p.category.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q) ||
+        (Array.isArray(p.tags) && p.tags.some(t => t.toLowerCase().includes(q))) ||
+        (Array.isArray(p.keywords) && p.keywords.some(k => k.toLowerCase().includes(q)))
     );
   }, [searchQuery, allProducts]);
 

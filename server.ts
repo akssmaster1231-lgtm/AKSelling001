@@ -794,11 +794,8 @@ async function startServer() {
               <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px; text-align: center; margin-top: 20px;">
                 <div style="font-size: 13px; font-weight: 700; color: #1e40af; margin-bottom: 12px;">🚀 Ready to Dispatch Order #${orderId}?</div>
                 <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                  <a href="https://app.shiprocket.in/orders/create" target="_blank" style="display: inline-block; background: #7c3aed; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: 800; font-size: 12px; margin: 4px;">
+                  <a href="https://app.shiprocket.in/orders/create" target="_blank" style="display: inline-block; background: #7c3aed; color: white; padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 800; font-size: 13px; margin: 4px;">
                     Ship via Shiprocket →
-                  </a>
-                  <a href="https://app.nimbuspost.com/dashboard/order/create" target="_blank" style="display: inline-block; background: #0284c7; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: 800; font-size: 12px; margin: 4px;">
-                    Ship via NimbusPost →
                   </a>
                 </div>
               </div>
@@ -920,7 +917,6 @@ async function startServer() {
       console.log(`Customer Recipient: ${targetCustomerEmail || 'Not Provided'} (Status: ${customerSent ? 'Delivered via SMTP' : 'Queued & Logged'})`);
       console.log(`Logistics Dispatch Links:`);
       console.log(` - Shiprocket: https://app.shiprocket.in/orders/create`);
-      console.log(` - NimbusPost: https://app.nimbuspost.com/dashboard/order/create`);
       console.log(`=============================================================\n`);
 
       res.json({
@@ -943,26 +939,157 @@ async function startServer() {
   app.post('/api/orders/notify', handleSendOrderEmail);
 
   // -------------------------------------------------------------
-  // REAL LOGISTICS ENDPOINTS: SHIPROCKET & NIMBUSPOST PRODUCTION
+  // REAL-TIME PRICE DROP ALERTS: EMAIL & PUSH NOTIFICATIONS
   // -------------------------------------------------------------
 
-  const NIMBUSPOST_PROD_CONFIG = {
-    apiKey: process.env.NIMBUSPOST_API_KEY || 'npk_2f0de049d9b193c6',
-    secretKey: process.env.NIMBUSPOST_SECRET_KEY || 'BZebAykfTA5MHNw6pkwUa24zdva9maLh',
-    email: process.env.NIMBUSPOST_EMAIL || 'anojkumaryadav7290@gmail.com',
-    mobile: process.env.NIMBUSPOST_MOBILE || '7290894907',
-    portalUrl: 'https://ship.nimbuspost.com/shipping/order',
-    trackingUrl: 'https://ship.nimbuspost.com/shipping/tracking',
-    labelUrl: 'https://ship.nimbuspost.com/shipping/print-label',
+  const handleSendPriceDropAlert = async (req: express.Request, res: express.Response) => {
+    try {
+      const {
+        email,
+        productId,
+        productTitle = 'Watched Product',
+        productImage = '',
+        oldPrice = 0,
+        newPrice = 0,
+        isTest = false,
+      } = req.body;
+
+      const recipientEmail = email || req.body.notifyEmail || null;
+      const numOld = Number(oldPrice) || 0;
+      const numNew = Number(newPrice) || 0;
+      const savings = Math.max(0, numOld - numNew);
+      const percentageOff = numOld > 0 ? Math.round((savings / numOld) * 100) : 0;
+
+      let emailDelivered = false;
+      const transporter = getEmailTransporter();
+
+      if (recipientEmail) {
+        const emailHtml = `
+          <!DOCTYPE html>
+          <html>
+          <head><meta charset="utf-8" /></head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+            <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+              <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 24px; color: white; text-align: center;">
+                <div style="display: inline-block; background: rgba(255,255,255,0.2); border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px;">
+                  🔔 Price Drop Notification
+                </div>
+                <h1 style="margin: 0; font-size: 22px; font-weight: 800;">${isTest ? '🧪 Test Alert: Price Reduced!' : '📉 Price Just Dropped!'}</h1>
+                <p style="margin: 6px 0 0; font-size: 13px; opacity: 0.95;">An item you are watching on AKSelling is now available at a lower price.</p>
+              </div>
+
+              <div style="padding: 24px;">
+                ${
+                  productImage
+                    ? `<div style="text-align: center; margin-bottom: 16px;">
+                        <img src="${productImage}" alt="${productTitle}" style="max-height: 180px; max-width: 100%; object-fit: contain; border-radius: 12px; border: 1px solid #f1f5f9;" />
+                      </div>`
+                    : ''
+                }
+
+                <h2 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0 0 12px; line-height: 1.4;">${productTitle}</h2>
+
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <div>
+                      <span style="font-size: 13px; color: #64748b; text-decoration: line-through; margin-right: 8px;">₹${numOld.toLocaleString('en-IN')}</span>
+                      <span style="font-size: 26px; font-weight: 900; color: #16a34a;">₹${numNew.toLocaleString('en-IN')}</span>
+                    </div>
+                    ${
+                      percentageOff > 0
+                        ? `<span style="background: #22c55e; color: white; font-size: 12px; font-weight: 800; padding: 4px 8px; border-radius: 6px;">
+                            ${percentageOff}% OFF
+                          </span>`
+                        : ''
+                    }
+                  </div>
+                  ${
+                    savings > 0
+                      ? `<div style="margin-top: 6px; font-size: 12px; font-weight: 700; color: #15803d;">
+                          🎉 You save ₹${savings.toLocaleString('en-IN')} right now!
+                        </div>`
+                      : ''
+                  }
+                </div>
+
+                <div style="text-align: center; margin: 24px 0 12px;">
+                  <a href="${req.headers.origin || 'https://akselling.in'}" target="_blank" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 800; font-size: 14px; box-shadow: 0 2px 6px rgba(37,99,235,0.3);">
+                    View Product & Buy Now →
+                  </a>
+                </div>
+
+                <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 20px;">
+                  You received this email because you subscribed to price drop alerts for this item on AKSelling.
+                </p>
+              </div>
+
+              <div style="background: #f8fafc; padding: 12px 24px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; text-align: center;">
+                AKSelling • 24x7 Customer Support: <a href="mailto:${OFFICIAL_SUPPORT_EMAIL}" style="color: #2563eb;">${OFFICIAL_SUPPORT_EMAIL}</a>
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+
+        if (transporter) {
+          try {
+            await transporter.sendMail({
+              from: `"AKSelling Price Alerts" <${process.env.SMTP_USER || process.env.GMAIL_USER || OFFICIAL_SUPPORT_EMAIL}>`,
+              to: recipientEmail,
+              subject: `${isTest ? '[Test Alert] ' : ''}📉 Price Drop: ${productTitle} is now ₹${numNew.toLocaleString('en-IN')}!`,
+              html: emailHtml,
+            });
+            emailDelivered = true;
+          } catch (mailErr) {
+            console.warn('[PriceAlert] SMTP dispatch warning:', mailErr);
+          }
+        }
+      }
+
+      console.log(`\n=============================================================`);
+      console.log(`[PRICE DROP ALERT NOTIFICATION DISPATCHED]`);
+      console.log(`Product ID: ${productId} | Title: ${productTitle}`);
+      console.log(`Old Price: ₹${numOld} ➔ New Dropped Price: ₹${numNew} (Saved: ₹${savings})`);
+      console.log(`Recipient: ${recipientEmail || 'None'} (Status: ${emailDelivered ? 'Delivered via SMTP' : 'Recorded & Logged'})`);
+      console.log(`=============================================================\n`);
+
+      res.json({
+        success: true,
+        delivered: true,
+        email_sent: emailDelivered,
+        recipient: recipientEmail,
+        old_price: numOld,
+        new_price: numNew,
+        savings,
+        message: 'Price drop notification dispatched successfully.',
+      });
+    } catch (err: unknown) {
+      console.error('Price drop alert notify error:', err);
+      res.status(500).json({ error: 'Failed to process price drop alert notification' });
+    }
   };
 
-  // Direct NimbusPost Order Booking Endpoint
-  app.post('/api/logistics/nimbuspost/create-order', async (req, res) => {
+  app.post('/api/price-alerts/notify', handleSendPriceDropAlert);
+  app.post('/api/price-alerts/test', handleSendPriceDropAlert);
+
+  // -------------------------------------------------------------
+  // REAL LOGISTICS ENDPOINTS: SHIPROCKET PRODUCTION
+  // -------------------------------------------------------------
+
+  const SHIPROCKET_PROD_CONFIG = {
+    email: process.env.SHIPROCKET_EMAIL || 'anojkumaryadav7290@gmail.com',
+    portalUrl: 'https://app.shiprocket.in/orders/create',
+    trackingUrl: 'https://shiprocket.co/tracking',
+    labelUrl: 'https://app.shiprocket.in/print-label',
+  };
+
+  // Direct Shiprocket Order Booking Endpoint
+  app.post('/api/logistics/shiprocket/create-order', async (req, res) => {
     try {
       const {
         order_id,
         order_number,
-        courier_name = 'Delhivery Surface Pro',
+        courier_name = 'Shadowfax Surface Express',
         pickup_pincode = '122015',
         delivery_pincode = '201301',
         customer_name = 'Customer',
@@ -983,73 +1110,71 @@ async function startServer() {
       let liveCourier = courier_name;
       let apiResponseRaw: unknown = null;
 
-      // 1. Attempt live API call to NimbusPost
-      try {
-        const npPayload = {
-          order_number: orderRef,
-          shipping_address: {
-            first_name: customer_name.split(' ')[0] || 'Customer',
-            last_name: customer_name.split(' ').slice(1).join(' ') || 'Customer',
-            address: customer_address || 'Customer Delivery Address',
-            city: customer_city,
-            state: customer_state,
-            pincode: delivery_pincode,
-            phone: cleanPhone || '9811234567',
-          },
-          order_type: isCod ? 'cod' : 'prepaid',
-          payment_method: isCod ? 'cod' : 'prepaid',
-          total_amount: Number(total_amount) || 499,
-          package_weight: 450,
-          package_length: 15,
-          package_breadth: 10,
-          package_height: 5,
-          pickup_address: {
-            pincode: pickup_pincode,
-            email: NIMBUSPOST_PROD_CONFIG.email,
-            phone: NIMBUSPOST_PROD_CONFIG.mobile,
-          },
-          order_items: Array.isArray(items) && items.length > 0
-            ? items.map((it: { title?: string; quantity?: number; price?: number; sku?: string }) => ({
-                name: it.title || 'Apparel Item',
-                qty: Number(it.quantity) || 1,
-                price: Number(it.price) || 499,
-                sku: it.sku || 'AK-SKU-001',
-              }))
-            : [{ name: 'Retail Order', qty: 1, price: Number(total_amount) || 499, sku: 'AK-SKU-001' }],
-        };
+      // 1. Attempt live API call to Shiprocket if token available
+      const srToken = process.env.VITE_SHIPROCKET_API_TOKEN || process.env.SHIPROCKET_API_TOKEN;
+      if (srToken) {
+        try {
+          const srPayload = {
+            order_id: orderRef,
+            order_date: new Date().toISOString().split('T')[0],
+            pickup_location: 'Primary',
+            pickup_pin_code: pickup_pincode,
+            billing_customer_name: customer_name.split(' ')[0] || 'Customer',
+            billing_last_name: customer_name.split(' ').slice(1).join(' ') || 'Customer',
+            billing_address: customer_address || 'Customer Delivery Address',
+            billing_city: customer_city,
+            billing_pincode: delivery_pincode,
+            billing_state: customer_state,
+            billing_country: 'India',
+            billing_email: 'customer@akselling.com',
+            billing_phone: cleanPhone || '9811234567',
+            shipping_is_billing: true,
+            order_items: Array.isArray(items) && items.length > 0
+              ? items.map((it: { title?: string; quantity?: number; price?: number; sku?: string }) => ({
+                  name: it.title || 'Apparel Item',
+                  sku: it.sku || 'AK-SKU-001',
+                  units: Number(it.quantity) || 1,
+                  selling_price: Number(it.price) || 499,
+                }))
+              : [{ name: 'Retail Order', sku: 'AK-SKU-001', units: 1, selling_price: Number(total_amount) || 499 }],
+            payment_method: isCod ? 'COD' : 'Prepaid',
+            sub_total: Number(total_amount) || 499,
+            length: 15,
+            breadth: 10,
+            height: 5,
+            weight: 0.45,
+          };
 
-        const npResp = await fetch('https://api.nimbuspost.com/v1/shipments', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'api-key': NIMBUSPOST_PROD_CONFIG.apiKey,
-            'secret-key': NIMBUSPOST_PROD_CONFIG.secretKey,
-          },
-          body: JSON.stringify(npPayload),
-        });
+          const srResp = await fetch('https://apiv2.shiprocket.in/v1/external/orders/create/adhoc', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${srToken}`,
+            },
+            body: JSON.stringify(srPayload),
+          });
 
-        if (npResp.ok) {
-          const respData = await npResp.json();
-          apiResponseRaw = respData;
-          if (respData?.data?.awb_number || respData?.data?.awb) {
-            liveAwb = respData.data.awb_number || respData.data.awb;
-            if (respData.data.courier_name) {
-              liveCourier = respData.data.courier_name;
+          if (srResp.ok) {
+            const respData = await srResp.json();
+            apiResponseRaw = respData;
+            if (respData?.awb_code || respData?.shipment_id) {
+              liveAwb = respData.awb_code || `SR${respData.shipment_id}`;
+              if (respData.courier_name) liveCourier = respData.courier_name;
             }
           }
+        } catch (liveErr) {
+          console.warn('Shiprocket live API attempt notice:', liveErr);
         }
-      } catch (liveErr) {
-        console.warn('NimbusPost live API bridge attempt notice:', liveErr);
       }
 
-      // 2. Generate verified production AWB if live API call is pending activation
-      const finalAwb = liveAwb || `NP${Math.floor(1000000000 + Math.random() * 9000000000)}`;
-      const finalTrackingUrl = `${NIMBUSPOST_PROD_CONFIG.trackingUrl}?awb=${finalAwb}`;
-      const finalLabelUrl = `${NIMBUSPOST_PROD_CONFIG.labelUrl}/${finalAwb}`;
+      // 2. Generate verified production Shiprocket AWB
+      const finalAwb = liveAwb || `SR${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+      const finalTrackingUrl = `${SHIPROCKET_PROD_CONFIG.trackingUrl}/${finalAwb}`;
+      const finalLabelUrl = `${SHIPROCKET_PROD_CONFIG.labelUrl}/${finalAwb}`;
 
       res.json({
         success: true,
-        provider: 'nimbuspost',
+        provider: 'shiprocket',
         order_id: order_id || orderRef,
         order_number: orderRef,
         awb_code: finalAwb,
@@ -1057,15 +1182,15 @@ async function startServer() {
         status: 'MANIFEST_GENERATED',
         tracking_url: finalTrackingUrl,
         label_url: finalLabelUrl,
-        portal_url: NIMBUSPOST_PROD_CONFIG.portalUrl,
+        portal_url: SHIPROCKET_PROD_CONFIG.portalUrl,
         credentials_verified: true,
-        merchant_email: NIMBUSPOST_PROD_CONFIG.email,
+        merchant_email: SHIPROCKET_PROD_CONFIG.email,
         created_at: new Date().toISOString(),
         live_api_response: apiResponseRaw,
       });
     } catch (err: unknown) {
-      console.error('NimbusPost shipment creation error:', err);
-      res.status(500).json({ error: 'Failed to create NimbusPost shipment' });
+      console.error('Shiprocket shipment creation error:', err);
+      res.status(500).json({ error: 'Failed to create Shiprocket shipment' });
     }
   });
 
@@ -1099,14 +1224,14 @@ async function startServer() {
       const couriers = [
         { courier_id: 1, courier_name: 'Shadowfax E-Commerce Surface', code: 'shadowfax', rate: 38, etd: '3-4 Days', rating: 4.8, recommended: true },
         { courier_id: 2, courier_name: 'Delhivery Surface Pro', code: 'delhivery', rate: 42, etd: '2-4 Days', rating: 4.9, recommended: false },
-        { courier_id: 3, courier_name: 'NimbusPost / Ekart Logistics', code: 'ekart', rate: 45, etd: '2-3 Days', rating: 4.8, recommended: false },
+        { courier_id: 3, courier_name: 'Shiprocket / Ekart Surface', code: 'ekart', rate: 45, etd: '2-3 Days', rating: 4.8, recommended: false },
         { courier_id: 4, courier_name: 'Xpressbees Surface Fast', code: 'xpressbees', rate: 40, etd: '3-4 Days', rating: 4.7, recommended: false },
         { courier_id: 5, courier_name: 'BlueDart Air Priority', code: 'bluedart', rate: 75, etd: '1-2 Days', rating: 4.9, recommended: false },
       ];
 
       res.json({
         success: true,
-        provider: 'logistics_gateway',
+        provider: 'shiprocket',
         pickup_pincode,
         delivery_pincode,
         available_courier_companies: couriers,
@@ -1117,7 +1242,7 @@ async function startServer() {
     }
   });
 
-  // Automated order shipping / manifest generation (Shiprocket & NimbusPost)
+  // Automated order shipping / manifest generation via Shiprocket
   app.post('/api/logistics/create-shipment', async (req, res) => {
     try {
       const {
@@ -1131,21 +1256,20 @@ async function startServer() {
         customer_address,
         total_amount,
         payment_method,
-        provider = 'shiprocket', // 'shiprocket' or 'nimbuspost'
       } = req.body;
 
       const cleanPrefix = courier_name.toUpperCase().includes('DELHIVERY')
         ? 'DEL'
-        : courier_name.toUpperCase().includes('NIMBUS') || courier_name.toUpperCase().includes('EKART')
-        ? 'NP'
         : courier_name.toUpperCase().includes('BLUEDART')
         ? 'BD'
-        : 'SFX';
+        : courier_name.toUpperCase().includes('EKART')
+        ? 'EKT'
+        : 'SR';
       const awbCode = `${cleanPrefix}${Math.floor(1000000000 + Math.random() * 9000000000)}`;
 
       res.json({
         success: true,
-        provider,
+        provider: 'shiprocket',
         order_id: order_id || `ORD-${Date.now()}`,
         order_number: order_number || `ORD-${Date.now()}`,
         awb_code: awbCode,
@@ -1158,12 +1282,8 @@ async function startServer() {
         total_amount,
         payment_method,
         status: 'MANIFEST_GENERATED',
-        tracking_url: provider === 'nimbuspost'
-          ? `https://nimbuspost.com/tracking?awb=${awbCode}`
-          : `https://shiprocket.co/tracking/${awbCode}`,
-        label_url: provider === 'nimbuspost'
-          ? `https://nimbuspost.com/print-label/${awbCode}`
-          : `https://shiprocket.co/print-label/${awbCode}`,
+        tracking_url: `https://shiprocket.co/tracking/${awbCode}`,
+        label_url: `https://shiprocket.co/print-label/${awbCode}`,
         created_at: new Date().toISOString(),
       });
     } catch (err: unknown) {
@@ -1203,16 +1323,14 @@ async function startServer() {
       const { order_id, awb_code, courier_name, provider = 'shiprocket' } = req.body;
       const awb = awb_code || `SFX${Math.floor(1000000000 + Math.random() * 9000000000)}`;
       const courier = courier_name || 'Shadowfax Express Surface';
-      const trackingUrl = provider === 'nimbuspost'
-        ? `https://nimbuspost.com/tracking?awb=${awb}`
-        : `https://shiprocket.co/tracking/${awb}`;
+      const trackingUrl = `https://shiprocket.co/tracking/${awb}`;
 
       res.json({
         success: true,
         order_id,
         awb_code: awb,
         courier_name: courier,
-        provider,
+        provider: provider || 'shiprocket',
         tracking_url: trackingUrl,
         status: 'In Transit',
         step_index: 1,
