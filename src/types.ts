@@ -69,23 +69,6 @@ export interface Category {
   color: string;
 }
 
-export interface VideoReel {
-  id: string;
-  title: string;
-  product?: Product;
-  likes: number;
-  comments: number;
-  shares: number;
-  liked: boolean;
-  thumbnail: string;
-  description: string;
-  videoUrl?: string;
-  sellerStoreName?: string;
-  sellerId?: string;
-  createdAt?: string;
-  views?: number;
-}
-
 export interface Banner {
   id: string;
   title: string;

@@ -6,10 +6,22 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+    overscroll-behavior-y: auto;
+  }
   body {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: #f1f3f6;
-    overscroll-behavior: none;
+    color: #1e293b;
+    min-height: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-overflow-scrolling: touch;
+  }
+  #root {
+    min-height: 100%;
   }
 }
 
@@ -28,6 +40,20 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background: #cbd5e1;
     border-radius: 3px;
+  }
+
+  /* Ultra-Fast 60/120 FPS Native Touch & Scrolling */
+  .touch-scroll-container {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .horizontal-shelf-row {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+    scroll-behavior: auto;
   }
 }
 

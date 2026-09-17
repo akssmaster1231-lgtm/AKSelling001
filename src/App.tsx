@@ -6,8 +6,8 @@ import Header from '@/components/Header';
 import BottomNav, { type TabId } from '@/components/BottomNav';
 import HomePage from '@/pages/HomePage';
 import ProductDetail from '@/pages/ProductDetail';
-import PlayPage from '@/pages/PlayPage';
 import CategoriesPage from '@/pages/CategoriesPage';
+import BestDealsPage from '@/pages/BestDealsPage';
 import AccountPage from '@/pages/AccountPage';
 import CartPage from '@/pages/CartPage';
 import AuthPage from '@/pages/AuthPage';
@@ -104,6 +104,11 @@ function AppContent() {
     setActiveTab(tab);
     setSelectedProduct(null);
     if (tab === 'home') setSearchQuery('');
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    } catch {
+      window.scrollTo(0, 0);
+    }
   };
 
   useEffect(() => {
@@ -138,8 +143,8 @@ function AppContent() {
   // they can log in via AuthPage.
   if (appMode === 'selling') {
     return (
-      <div className="min-h-screen bg-slate-100 flex justify-center overflow-x-hidden w-full">
-        <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-gray-200 overflow-x-hidden">
+      <div className="min-h-screen bg-slate-100 flex justify-center w-full touch-scroll-container">
+        <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-gray-200">
           <SellerDashboard onBack={() => handleSwitchMode('buying')} />
         </div>
       </div>
@@ -147,20 +152,18 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex justify-center overflow-x-hidden w-full">
-      <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-gray-200 flex flex-col overflow-x-hidden">
-        {activeTab !== 'play' && (
-          <Header
-            onSearch={handleSearch}
-            onCartClick={() => setActiveTab('cart')}
-            onAccountClick={() => setActiveTab('account')}
-            onNavigateHome={() => {
-              setActiveTab('home');
-              setSearchQuery('');
-              setSelectedProduct(null);
-            }}
-          />
-        )}
+    <div className="min-h-screen bg-slate-100 flex justify-center w-full touch-scroll-container">
+      <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-gray-200 flex flex-col">
+        <Header
+          onSearch={handleSearch}
+          onCartClick={() => setActiveTab('cart')}
+          onAccountClick={() => setActiveTab('account')}
+          onNavigateHome={() => {
+            setActiveTab('home');
+            setSearchQuery('');
+            setSelectedProduct(null);
+          }}
+        />
 
       <main className="pb-16 min-h-[calc(100vh-60px)]">
         {activeTab === 'home' && (
@@ -168,15 +171,30 @@ function AppContent() {
             searchQuery={searchQuery}
             onProductClick={handleProductClick}
             onCategoryClick={handleCategoryClick}
+            onNavigateDeals={() => setActiveTab('deals')}
             onBecomeSeller={handleOpenSellerMode}
           />
         )}
-        {activeTab === 'play' && <PlayPage onProductClick={handleProductClick} />}
         {activeTab === 'categories' && (
           <CategoriesPage
             onProductClick={handleProductClick}
             initialCategory={initialCategory}
           />
+        )}
+        {activeTab === 'deals' && (
+          <BestDealsPage
+            onProductClick={handleProductClick}
+            onNavigateHome={() => setActiveTab('home')}
+          />
+        )}
+        {activeTab === 'cart' && (
+          <ErrorBoundary fallbackTitle="Unable to load Cart">
+            <CartPage
+              onProductClick={handleProductClick}
+              onContinueShopping={() => setActiveTab('home')}
+              onBuyNow={(prod) => setBuyNowProduct(prod)}
+            />
+          </ErrorBoundary>
         )}
         {activeTab === 'account' && (
           <AccountPage
@@ -188,15 +206,6 @@ function AppContent() {
             onOrders={() => setShowOrders(true)}
             onAdminPanel={() => setShowAdmin(true)}
           />
-        )}
-        {activeTab === 'cart' && (
-          <ErrorBoundary fallbackTitle="Unable to load Cart">
-            <CartPage
-              onProductClick={handleProductClick}
-              onContinueShopping={() => setActiveTab('home')}
-              onBuyNow={(prod) => setBuyNowProduct(prod)}
-            />
-          </ErrorBoundary>
         )}
       </main>
 

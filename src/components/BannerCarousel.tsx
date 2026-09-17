@@ -18,6 +18,7 @@ export default function BannerCarousel({ banners }: BannerCarouselProps) {
   useEffect(() => {
     if (safeBanners.length <= 1) return;
     const timer = setInterval(() => {
+      if (document.hidden) return;
       setIndex(prev => (prev + 1) % safeBanners.length);
     }, 4500);
     return () => clearInterval(timer);
@@ -56,10 +57,10 @@ export default function BannerCarousel({ banners }: BannerCarouselProps) {
       onTouchEnd={handleTouchEnd}
     >
       <div
-        className="flex h-full transition-transform duration-500 ease-out"
-        style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+        className="flex h-full transition-transform duration-500 ease-out will-change-transform"
+        style={{ transform: `translate3d(-${activeIndex * 100}%, 0, 0)` }}
       >
-        {safeBanners.map(banner => (
+        {safeBanners.map((banner, idx) => (
           <div
             key={banner.id}
             className={`relative w-full h-full shrink-0 bg-gradient-to-br ${banner.gradient || 'from-blue-600 to-indigo-800'}`}
@@ -69,6 +70,7 @@ export default function BannerCarousel({ banners }: BannerCarouselProps) {
               <img
                 src={banner.image}
                 alt={banner.title}
+                loading={idx === 0 ? 'eager' : 'lazy'}
                 decoding="async"
                 referrerPolicy="no-referrer"
                 className="absolute inset-0 w-full h-full object-cover object-center"

@@ -14,7 +14,6 @@ import {
   ArrowRightLeft,
   Truck,
   Landmark,
-  Film,
   RotateCcw,
   Grid,
 } from 'lucide-react';
@@ -32,7 +31,6 @@ interface SupplierMenuTabProps {
   onOpenAnalytics: () => void;
   onOpenSettings: () => void;
   onSwitchToBuying: () => void;
-  onOpenReelsStudio?: () => void;
   onResetStartupData?: () => void;
   onOpenCategoryManagement?: () => void;
 }
@@ -50,7 +48,6 @@ export default function SupplierMenuTab({
   onOpenAnalytics,
   onOpenSettings,
   onSwitchToBuying,
-  onOpenReelsStudio,
   onResetStartupData,
   onOpenCategoryManagement,
 }: SupplierMenuTabProps) {
@@ -76,18 +73,6 @@ export default function SupplierMenuTab({
   const sellerId = sellerInfo?.seller_id || sellerInfo?.id || 'SLR-DIA-10293';
 
   const menuItems = [
-    ...(onOpenReelsStudio
-      ? [
-          {
-            icon: <Film size={20} className="text-[#2874f0]" />,
-            bg: 'bg-blue-100',
-            title: 'Video Reels & Shorts Studio',
-            subtitle: 'Upload product showcase, dance and styling video reels to Play feed',
-            badge: 'NEW STUDIO',
-            onClick: onOpenReelsStudio,
-          },
-        ]
-      : []),
     ...(onOpenCategoryManagement
       ? [
           {

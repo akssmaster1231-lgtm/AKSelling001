@@ -1,4 +1,4 @@
-import type { Product, Category, VideoReel, Banner } from './types';
+import type { Product, Category, Banner } from './types';
 import { safeLocalStorageGetItem } from './utils/storageHelper';
 import { db, getCachedProducts, setCachedProducts, getCachedCategories, getDeletedCategoryIds } from './firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
@@ -250,9 +250,6 @@ export const banners: Banner[] = [
 
 // Production Clean: Zero dummy products. Only real products listed by verified sellers or stored in database.
 export const products: Product[] = [];
-
-// Clean Video Reels - only active when real product reels exist
-export const videoReels: VideoReel[] = [];
 
 export function formatPrice(price: number): string {
   return '₹' + (Number(price) || 0).toLocaleString('en-IN');

@@ -92,6 +92,9 @@ export function recordPlacedOrder(order: CustomerPlacedOrder): void {
     supplierOrders.unshift(sellerOrder);
     safeLocalStorageSetItem('akselling_supplier_orders', JSON.stringify(supplierOrders));
 
+    // Invalidate cached sales & ratings immediately
+    invalidateDynamicRatingCache();
+
     // 3. Dispatch global cross-tab event
     window.dispatchEvent(new CustomEvent('akselling_orders_updated', { detail: sellerOrder }));
   } catch (err) {
@@ -105,9 +108,76 @@ export interface DynamicProductRating {
   formattedRating: string;
 }
 
+// In-memory cache to eliminate repetitive synchronous localStorage & JSON.parse loops during scroll
+let cachedSalesMap: Map<string, number> | null = null;
+const ratingResultCache = new Map<string, DynamicProductRating>();
+
+export function invalidateDynamicRatingCache(): void {
+  cachedSalesMap = null;
+  ratingResultCache.clear();
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('akselling_orders_updated', () => invalidateDynamicRatingCache());
+  window.addEventListener('storage', (e) => {
+    if (e.key?.includes('akselling_')) {
+      invalidateDynamicRatingCache();
+    }
+  });
+}
+
+function getOrBuildSalesMap(): Map<string, number> {
+  if (cachedSalesMap) return cachedSalesMap;
+
+  const map = new Map<string, number>();
+  try {
+    // 1. Check customer placed orders
+    const localOrdersRaw = safeLocalStorageGetItem('akselling_local_orders');
+    if (localOrdersRaw) {
+      const localOrders = JSON.parse(localOrdersRaw);
+      if (Array.isArray(localOrders)) {
+        for (const ord of localOrders) {
+          if (ord.items && Array.isArray(ord.items)) {
+            for (const itm of ord.items) {
+              const pid = itm.product_id || itm.id;
+              if (pid) {
+                map.set(pid, (map.get(pid) || 0) + (Number(itm.quantity) || 1));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Check supplier hub orders
+    const suppOrdersRaw = safeLocalStorageGetItem('akselling_supplier_orders');
+    if (suppOrdersRaw) {
+      const suppOrders = JSON.parse(suppOrdersRaw);
+      if (Array.isArray(suppOrders)) {
+        for (const ord of suppOrders) {
+          if (ord.items && Array.isArray(ord.items)) {
+            for (const itm of ord.items) {
+              const pid = itm.sku || itm.title;
+              if (pid) {
+                map.set(pid, (map.get(pid) || 0) + (Number(itm.quantity) || 1));
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  cachedSalesMap = map;
+  return map;
+}
+
 /**
  * Calculates a dynamic rating starting at 0.00 for new items and growing proportionally
  * with business volume, placed orders, and verified customer reviews.
+ * Memoized with 0ms in-memory cache for 60/120 FPS buttery-smooth scrolling.
  */
 export function calculateProductDynamicRating(product?: {
   id?: string;
@@ -119,46 +189,13 @@ export function calculateProductDynamicRating(product?: {
     return { rating: 0.0, ratingCount: 0, formattedRating: '0.00' };
   }
 
-  let salesCount = 0;
-  try {
-    // 1. Check customer placed orders
-    const localOrdersRaw = safeLocalStorageGetItem('akselling_local_orders') || '[]';
-    if (localOrdersRaw) {
-      const localOrders = JSON.parse(localOrdersRaw);
-      if (Array.isArray(localOrders)) {
-        for (const ord of localOrders) {
-          if (ord.items && Array.isArray(ord.items)) {
-            for (const itm of ord.items) {
-              if (itm.product_id === product.id || itm.id === product.id) {
-                salesCount += Number(itm.quantity) || 1;
-              }
-            }
-          }
-        }
-      }
-    }
+  const cached = ratingResultCache.get(product.id);
+  if (cached) return cached;
 
-    // 2. Check supplier hub orders
-    const suppOrdersRaw = safeLocalStorageGetItem('akselling_supplier_orders') || '[]';
-    if (suppOrdersRaw) {
-      const suppOrders = JSON.parse(suppOrdersRaw);
-      if (Array.isArray(suppOrders)) {
-        for (const ord of suppOrders) {
-          if (ord.items && Array.isArray(ord.items)) {
-            for (const itm of ord.items) {
-              if (itm.sku?.includes(product.id.slice(0, 6)) || itm.title === product.id) {
-                salesCount += Number(itm.quantity) || 1;
-              }
-            }
-          }
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
+  const salesMap = getOrBuildSalesMap();
+  const salesCount = salesMap.get(product.id) || 0;
 
-  // 3. Check customer submitted reviews
+  // 3. Check customer submitted reviews (only once per product)
   let reviewsCount = 0;
   let reviewsSum = 0;
   try {
@@ -181,15 +218,16 @@ export function calculateProductDynamicRating(product?: {
 
   // Base state: If 0 sales & 0 reviews, star rating is strictly 0.00 (0 reviews)
   if (totalVolume === 0) {
-    return {
+    const result: DynamicProductRating = {
       rating: 0.0,
       ratingCount: 0,
       formattedRating: '0.00',
     };
+    ratingResultCache.set(product.id, result);
+    return result;
   }
 
   // Dynamically grows as sales and reviews increase:
-  // Starts with positive growth from 4.0 upwards to 5.0 as sales occur
   let calculatedScore = 4.0;
   if (reviewsCount > 0) {
     calculatedScore = (reviewsSum + salesCount * 4.8) / totalVolume;
@@ -198,10 +236,12 @@ export function calculateProductDynamicRating(product?: {
   }
 
   const finalScore = Number(calculatedScore.toFixed(2));
-  return {
+  const result: DynamicProductRating = {
     rating: finalScore,
     ratingCount: totalVolume,
     formattedRating: finalScore.toFixed(2),
   };
+  ratingResultCache.set(product.id, result);
+  return result;
 }
 

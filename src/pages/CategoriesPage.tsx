@@ -87,7 +87,7 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
       </div>
 
       <div className="mt-3 px-3">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar horizontal-shelf-row pb-1">
           {allCategories.map(cat => (
             <button
               key={cat.id}

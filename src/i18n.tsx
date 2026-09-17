@@ -3,7 +3,7 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 export type Language = 'English' | 'Hindi' | 'Tamil' | 'Telugu' | 'Kannada' | 'Bengali' | 'Marathi' | 'Gujarati';
 
 type TranslationKey =
-  | 'home' | 'play' | 'categories' | 'account' | 'cart'
+  | 'home' | 'play' | 'categories' | 'bestDeals' | 'account' | 'cart'
   | 'searchPlaceholder' | 'myCart' | 'placeOrder' | 'addToCart' | 'buyNow'
   | 'topDeals' | 'bestOf' | 'trendingNow' | 'lightningDeals' | 'becomeSeller'
   | 'orders' | 'wishlist' | 'coupons' | 'help' | 'manageDevices' | 'editProfile'
@@ -16,7 +16,7 @@ type TranslationKey =
   | 'deliveryDetails' | 'paymentMethod' | 'cashOnDelivery' | 'upi' | 'card'
   | 'confirmOrder' | 'fullName' | 'phoneNumber' | 'address' | 'city' | 'pincode'
   | 'sellOnAKSelling' | 'sellerDashboard' | 'addProduct' | 'bankAccount'
-  | 'returns' | 'sellerVideos' | 'totalOrders' | 'availableStock'
+  | 'returns' | 'totalOrders' | 'availableStock'
   | 'liveProducts' | 'views' | 'analytics' | 'adminPanel' | 'manageBanners'
   | 'noOrders' | 'orderTracking' | 'estimatedDelivery' | 'securePayment'
   | 'fastDelivery' | 'easyReturns' | 'youSave' | 'qty' | 'backToCart'
@@ -27,7 +27,7 @@ type TranslationKey =
 type Translations = Record<TranslationKey, string>;
 
 const en: Translations = {
-  home: 'Home', play: 'Play', categories: 'Categories', account: 'Account', cart: 'Cart',
+  home: 'Home', play: 'Play', categories: 'Categories', bestDeals: 'Best Deals', account: 'Account', cart: 'Cart',
   searchPlaceholder: 'Search for products, brands and more',
   myCart: 'My Cart', placeOrder: 'Place Order', addToCart: 'Add to Cart', buyNow: 'Buy Now',
   topDeals: 'Top Deals', bestOf: 'Best of AKSelling', trendingNow: 'Trending Now',
@@ -52,7 +52,7 @@ const en: Translations = {
   address: 'Delivery Address', city: 'City', pincode: 'Pincode',
   sellOnAKSelling: 'Sell on AKSelling', sellerDashboard: 'Seller Dashboard',
   addProduct: 'Add Product', bankAccount: 'Bank Account', returns: 'Returns',
-  sellerVideos: 'Seller Videos', totalOrders: 'Total Orders', availableStock: 'Available Stock',
+  totalOrders: 'Total Orders', availableStock: 'Available Stock',
   liveProducts: 'Live Products', views: 'Views', analytics: 'Analytics',
   adminPanel: 'Admin Panel', manageBanners: 'Manage Banners',
   noOrders: 'No orders yet', orderTracking: 'Order Tracking',
@@ -67,7 +67,7 @@ const en: Translations = {
 };
 
 const hi: Translations = {
-  home: 'होम', play: 'प्ले', categories: 'श्रेणियाँ', account: 'खाता', cart: 'कार्ट',
+  home: 'होम', play: 'प्ले', categories: 'श्रेणियाँ', bestDeals: 'बेस्ट डील्स', account: 'खाता', cart: 'कार्ट',
   searchPlaceholder: 'उत्पाद, ब्रांड और अधिक खोजें',
   myCart: 'मेरा कार्ट', placeOrder: 'ऑर्डर करें', addToCart: 'कार्ट में डालें', buyNow: 'अभी खरीदें',
   topDeals: 'टॉप डील्स', bestOf: 'AKSelling का बेस्ट', trendingNow: 'अभी ट्रेंडिंग',
@@ -92,7 +92,7 @@ const hi: Translations = {
   address: 'डिलीवरी पता', city: 'शहर', pincode: 'पिनकोड',
   sellOnAKSelling: 'AKSelling पर बेचें', sellerDashboard: 'विक्रेता डैशबोर्ड',
   addProduct: 'उत्पाद जोड़ें', bankAccount: 'बैंक खाता', returns: 'रिटर्न',
-  sellerVideos: 'विक्रेता वीडियो', totalOrders: 'कुल ऑर्डर', availableStock: 'उपलब्ध स्टॉक',
+  totalOrders: 'कुल ऑर्डर', availableStock: 'उपलब्ध स्टॉक',
   liveProducts: 'लाइव उत्पाद', views: 'व्यूज', analytics: 'एनालिटिक्स',
   adminPanel: 'एडमिन पैनल', manageBanners: 'बैनर प्रबंधित करें',
   noOrders: 'अभी तक कोई ऑर्डर नहीं', orderTracking: 'ऑर्डर ट्रैकिंग',

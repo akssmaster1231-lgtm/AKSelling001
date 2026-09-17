@@ -15,8 +15,6 @@ import {
   Store,
   CheckCircle2,
   Clock,
-  Film,
-  Play,
   Star,
   IndianRupee,
 } from 'lucide-react';
@@ -29,7 +27,6 @@ interface SupplierHomeTabProps {
   onNavigateTab: (tab: SupplierTab, subFilter?: string) => void;
   onOpenScanner: () => void;
   onOpenLabelModal?: (order?: SellerOrder) => void;
-  onOpenReelsStudio?: () => void;
 }
 
 interface DailySalesData {
@@ -48,7 +45,6 @@ export default function SupplierHomeTab({
   onNavigateTab,
   onOpenScanner,
   onOpenLabelModal,
-  onOpenReelsStudio,
 }: SupplierHomeTabProps) {
   const [dateRange, setDateRange] = useState<'7days' | 'today' | '30days'>('7days');
   const [activeMetric, setActiveMetric] = useState<'revenue' | 'orders' | 'views' | 'reviews'>('revenue');
@@ -666,38 +662,6 @@ export default function SupplierHomeTab({
           </div>
         </div>
       </div>
-
-      {/* Video Reels Studio Action Card */}
-      {onOpenReelsStudio && (
-        <div
-          onClick={onOpenReelsStudio}
-          className="bg-gradient-to-r from-blue-900 via-indigo-900 to-gray-950 text-white rounded-2xl p-4 shadow-sm border border-blue-700/60 hover:border-yellow-400/80 transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#2874f0] to-blue-600 flex items-center justify-center text-yellow-300 shadow-md group-hover:scale-105 transition-transform">
-                <Film size={22} />
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-sm font-black text-white">Seller Video Reels Studio</h3>
-                  <span className="bg-yellow-400 text-gray-950 text-[9px] font-black px-1.5 py-0.2 rounded">
-                    FLIPKART STYLE
-                  </span>
-                </div>
-                <p className="text-xs text-blue-100 mt-0.5">
-                  Upload video reels, product demo & styling clips with direct tagging
-                </p>
-              </div>
-            </div>
-
-            <button className="bg-[#2874f0] hover:bg-[#1a65dc] text-white text-xs font-black px-3.5 py-2 rounded-xl shadow-xs shrink-0 flex items-center gap-1">
-              <Play size={13} className="fill-white" />
-              <span>Upload Video</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Growth Recommendations Card */}
       <div className="bg-gradient-to-r from-amber-500/10 via-blue-500/10 to-indigo-500/10 rounded-2xl p-4 border border-amber-200/60 shadow-2xs">

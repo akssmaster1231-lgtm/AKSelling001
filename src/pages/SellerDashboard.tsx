@@ -40,7 +40,6 @@ import {
 } from '@/components/supplier-hub/SupplierModals';
 import BankDetailsModal from '@/components/supplier-hub/BankDetailsModal';
 import ShiprocketSettingsModal from '@/components/supplier-hub/ShiprocketSettingsModal';
-import SupplierReelsStudio from '@/components/supplier-hub/SupplierReelsStudio';
 import { safeLocalStorageSetItem, safeLocalStorageGetItem, getCleanSellerStoreName } from '@/utils/storageHelper';
 import {
   saveProductToFirestore,
@@ -179,7 +178,6 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showReelsStudio, setShowReelsStudio] = useState(false);
   const [trackingOrder, setTrackingOrder] = useState<SellerOrder | ReturnItem | null>(null);
 
   // Reset to fresh startup numbers if requested
@@ -556,7 +554,6 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
             onNavigateTab={handleNavigateTab}
             onOpenScanner={() => setShowScannerModal(true)}
             onOpenLabelModal={ord => setActiveLabelOrder(ord || orders[0])}
-            onOpenReelsStudio={() => setShowReelsStudio(true)}
           />
         )}
 
@@ -623,7 +620,6 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
             onOpenAnalytics={() => setShowAnalyticsModal(true)}
             onOpenSettings={() => setShowSettingsModal(true)}
             onSwitchToBuying={onBack}
-            onOpenReelsStudio={() => setShowReelsStudio(true)}
             onResetStartupData={handleResetStartupData}
           />
         )}
@@ -781,15 +777,6 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
           storeName={storeName}
           onSaveStoreName={handleSaveStoreName}
           onClose={() => setShowSettingsModal(false)}
-        />
-      )}
-
-      {showReelsStudio && (
-        <SupplierReelsStudio
-          isOpen={showReelsStudio}
-          onClose={() => setShowReelsStudio(false)}
-          storeName={storeName}
-          products={products}
         />
       )}
 

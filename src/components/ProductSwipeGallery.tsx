@@ -33,6 +33,13 @@ export default function ProductSwipeGallery({
   const thumbnailsContainerRef = useRef<HTMLDivElement>(null);
   const touchStartXRef = useRef<number>(0);
   const touchStartYRef = useRef<number>(0);
+  const rafIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+    };
+  }, []);
 
   // Scroll to index smoothly
   const scrollToIndex = useCallback((index: number) => {
@@ -62,14 +69,18 @@ export default function ProductSwipeGallery({
     scrollToIndex(currentIndex + 1);
   };
 
-  // Synchronize index on user manual swipe / scroll
+  // Synchronize index on user manual swipe / scroll without layout thrashing
   const handleScroll = () => {
-    const container = scrollContainerRef.current;
-    if (!container || container.clientWidth === 0) return;
-    const newIndex = Math.round(container.scrollLeft / container.clientWidth);
-    if (newIndex !== currentIndex && newIndex >= 0 && newIndex < safeImages.length) {
-      setCurrentIndex(newIndex);
-    }
+    if (rafIdRef.current) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const container = scrollContainerRef.current;
+      if (!container || container.clientWidth === 0) return;
+      const newIndex = Math.round(container.scrollLeft / container.clientWidth);
+      if (newIndex !== currentIndex && newIndex >= 0 && newIndex < safeImages.length) {
+        setCurrentIndex(newIndex);
+      }
+    });
   };
 
   // Touch gesture handlers for fast swipe detection

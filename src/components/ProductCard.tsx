@@ -1,4 +1,4 @@
-import { useState, memo } from 'react';
+import { memo } from 'react';
 import { Star } from 'lucide-react';
 import type { Product } from '@/types';
 import { formatPrice, formatCount, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
@@ -9,8 +9,6 @@ interface ProductCardProps {
   onClick: () => void;
 }
 
-const loadedImagesCache = new Set<string>();
-
 const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardProps) {
   const dynamicRating = calculateProductDynamicRating(product);
 
@@ -19,47 +17,32 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
   const isBrokenUrl = typeof rawImage === 'string' && rawImage.includes('8532616');
   const imageUrl = isBrokenUrl || !rawImage ? DEFAULT_PRODUCT_PLACEHOLDER : rawImage;
 
-  const [imageLoaded, setImageLoaded] = useState(() => Boolean(imageUrl && loadedImagesCache.has(imageUrl)));
-  const [hasError, setHasError] = useState(false);
-
-  const handleImageLoad = () => {
-    if (imageUrl) loadedImagesCache.add(imageUrl);
-    setImageLoaded(true);
-  };
-
-  const handleImageError = () => {
-    setHasError(true);
-    setImageLoaded(true);
-  };
-
-  const finalSrc = hasError ? DEFAULT_PRODUCT_PLACEHOLDER : imageUrl;
-
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="bg-white rounded-lg shadow-card hover:shadow-card-hover transition-shadow overflow-hidden text-left flex flex-col group cursor-pointer"
+      className="bg-white rounded-lg shadow-card hover:shadow-card-hover transition-shadow overflow-hidden text-left flex flex-col group cursor-pointer w-full select-none"
     >
-      <div className="relative aspect-square bg-gray-100 overflow-hidden">
-        {/* Shimmering Skeleton while loading image */}
-        {!imageLoaded && !hasError && (
-          <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse z-0" />
-        )}
-
+      <div className="relative aspect-square bg-gray-100 overflow-hidden w-full">
         <img
-          src={finalSrc}
+          src={imageUrl}
           alt={product.title}
           loading="lazy"
           decoding="async"
+          width="240"
+          height="240"
           referrerPolicy="no-referrer"
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-          className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-300 relative z-10 ${
-            imageLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (target.src !== DEFAULT_PRODUCT_PLACEHOLDER) {
+              target.src = DEFAULT_PRODUCT_PLACEHOLDER;
+            }
+          }}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
         />
 
         {product.discount > 0 && (
-          <span className="absolute top-2 left-2 bg-flipkart-500 text-white text-xs font-bold px-1.5 py-0.5 rounded shadow-xs z-20">
+          <span className="absolute top-2 left-2 bg-flipkart-500 text-white text-xs font-bold px-1.5 py-0.5 rounded shadow-xs z-10">
             {product.discount}% Off
           </span>
         )}

@@ -460,6 +460,12 @@ export async function deleteProductFromFirestore(productId: string): Promise<voi
   try {
     if (!productId) return;
     await deleteDoc(doc(db, 'products', productId));
+    const current = getCachedProducts();
+    const updated = current.filter(p => p.id !== productId);
+    setCachedProducts(updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('akselling_products_updated', { detail: { products: updated } }));
+    }
   } catch (err) {
     handleFirestoreError(err, 'deleteProductFromFirestore');
   }
@@ -1073,51 +1079,6 @@ export async function logPaymentTransactionToFirestore(
     );
   } catch (err) {
     handleFirestoreError(err, 'logPaymentTransactionToFirestore');
-  }
-}
-
-// -------------------------------------------------------------
-// VIDEO REELS FIRESTORE SYNC & PERSISTENCE
-// -------------------------------------------------------------
-
-export function subscribeReelsFromFirestore(
-  callback: (reels: unknown[]) => void
-): () => void {
-  try {
-    const reelsRef = collection(db, 'reels');
-    return onSnapshot(
-      reelsRef,
-      (snapshot) => {
-        const items: unknown[] = [];
-        snapshot.forEach((docSnap) => {
-          items.push({
-            ...docSnap.data(),
-            id: docSnap.id,
-          });
-        });
-        callback(items);
-      },
-      (err) => {
-        handleFirestoreError(err, 'subscribeReelsFromFirestore');
-      }
-    );
-  } catch (err) {
-    handleFirestoreError(err, 'subscribeReelsFromFirestore');
-    return () => {};
-  }
-}
-
-export async function saveReelToFirestore(reel: Record<string, unknown> & { id: string }): Promise<void> {
-  if (isQuotaExhausted()) return;
-  try {
-    if (!reel.id) return;
-    const docRef = doc(db, 'reels', reel.id);
-    await setDoc(docRef, sanitizeForFirestore({
-      ...reel,
-      updatedAt: new Date().toISOString(),
-    }), { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, 'saveReelToFirestore');
   }
 }
 

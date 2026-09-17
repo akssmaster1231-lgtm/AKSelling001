@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, Zap, TrendingUp, Gift } from 'lucide-react';
+import { ChevronRight, Zap, Gift } from 'lucide-react';
 import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice } from '@/data';
 import { fetchBanners } from '@/banner-api';
 import { subscribeProducts, subscribeBanners, getCachedProducts, subscribeCategories } from '@/firebase';
@@ -13,10 +13,11 @@ interface HomePageProps {
   searchQuery: string;
   onProductClick: (product: Product) => void;
   onCategoryClick: (categoryId: string) => void;
+  onNavigateDeals?: () => void;
   onBecomeSeller?: () => void;
 }
 
-export default function HomePage({ searchQuery, onProductClick, onCategoryClick, onBecomeSeller }: HomePageProps) {
+export default function HomePage({ searchQuery, onProductClick, onCategoryClick, onNavigateDeals, onBecomeSeller }: HomePageProps) {
   const { t } = useI18n();
   const [dbProducts, setDbProducts] = useState<Product[]>(() => getCachedProducts());
   const [dbBanners, setDbBanners] = useState<Banner[]>(() => {
@@ -44,7 +45,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
     // 1. Initial async fetch
     fetchProducts().then(prods => {
-      if (isMounted && prods.length > 0) {
+      if (isMounted) {
         setDbProducts(prods);
         setLoading(false);
       }
@@ -57,15 +58,15 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
     // 2. Real-time Firestore subscriptions
     const unsubProducts = subscribeProducts((remoteProducts) => {
-      if (isMounted && remoteProducts.length > 0) {
+      if (isMounted) {
         setDbProducts(remoteProducts);
         setLoading(false);
       }
     });
 
     const unsubBanners = subscribeBanners((remoteBanners) => {
-      if (isMounted && remoteBanners.length > 0) {
-        setDbBanners(remoteBanners);
+      if (isMounted) {
+        setDbBanners(remoteBanners.length > 0 ? remoteBanners : fallbackBanners);
       }
     });
 
@@ -75,10 +76,10 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
       }
     });
 
-    // 3. Local events fallback
+    // 3. Local events fallback for immediate 0ms local reflection
     const handleUpdate = () => {
-      fetchProducts().then(p => isMounted && p.length > 0 && setDbProducts(p));
-      fetchBanners().then(b => isMounted && b.length > 0 && setDbBanners(b));
+      fetchProducts().then(p => isMounted && setDbProducts(p));
+      fetchBanners().then(b => isMounted && setDbBanners(b.length > 0 ? b : fallbackBanners));
       setActiveCategories(getAllCategories());
     };
 
@@ -88,7 +89,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
     const safetyTimer = setTimeout(() => {
       if (isMounted) setLoading(false);
-    }, 600);
+    }, 400);
 
     return () => {
       isMounted = false;
@@ -119,9 +120,35 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
     );
   }, [searchQuery, allProducts]);
 
-  const trendingProducts = [...allProducts].sort((a, b) => b.ratingCount - a.ratingCount).slice(0, 6);
-  const topDeals = [...allProducts].sort((a, b) => b.discount - a.discount).slice(0, 6);
-  const minPrice = allProducts.length > 0 ? Math.min(...allProducts.map(p => p.price)) : 0;
+  const lightningDeals = useMemo(() => {
+    return [...allProducts]
+      .filter(p => p.discount >= 10 || p.discount > 0)
+      .sort((a, b) => b.discount - a.discount)
+      .slice(0, 8);
+  }, [allProducts]);
+
+  const trendingProducts = useMemo(() => {
+    return [...allProducts]
+      .sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0))
+      .slice(0, 6);
+  }, [allProducts]);
+
+  const categoryShelves = useMemo(() => {
+    return activeCategories
+      .filter(c => c.id !== 'all')
+      .map(cat => {
+        const catProds = allProducts.filter(p => 
+          p.category?.toLowerCase() === cat.id.toLowerCase() ||
+          p.category?.toLowerCase() === cat.name.toLowerCase()
+        );
+        return { category: cat, products: catProds };
+      })
+      .filter(shelf => shelf.products.length > 0);
+  }, [activeCategories, allProducts]);
+
+  const minPrice = useMemo(() => {
+    return allProducts.length > 0 ? Math.min(...allProducts.map(p => p.price)) : 0;
+  }, [allProducts]);
 
   if (loading) {
     return (
@@ -159,19 +186,19 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
   }
 
   return (
-    <div className="pb-4">
+    <div className="pb-4 touch-scroll-container">
       <div className="px-3 pt-3">
         <BannerCarousel banners={displayBanners} />
       </div>
 
       <div className="mt-4 px-3">
         <div className="bg-white rounded-xl shadow-card p-3">
-          <div className="flex gap-3 overflow-x-auto no-scrollbar touch-pan-x overscroll-x-contain scroll-smooth">
+          <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row">
             {activeCategories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => onCategoryClick(cat.id)}
-                className="flex flex-col items-center gap-1.5 shrink-0 w-16 group"
+                className="flex flex-col items-center gap-1.5 shrink-0 w-16 group cursor-pointer"
               >
                 <div
                   className="w-14 h-14 rounded-full flex items-center justify-center transition-transform group-hover:scale-110"
@@ -254,32 +281,40 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
         </div>
       ) : (
         <>
-          <div className="mt-4 px-3">
-            <div className="bg-gradient-to-r from-flipkart-500 to-flipkart-600 rounded-xl p-4 flex items-center gap-3 shadow-card">
-              <div className="bg-white/20 rounded-full p-2">
-                <Zap size={24} className="text-white" />
-              </div>
-              <div className="flex-1">
-                <p className="text-white font-bold text-sm">{t('lightningDeals')}</p>
-                <p className="text-white/80 text-xs">Limited time offers - grab them fast!</p>
-              </div>
-            </div>
-          </div>
-
-          <section className="mt-4 px-3">
-            <div className="bg-white rounded-xl shadow-card overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <TrendingUp size={18} className="text-flipkart-500" />
-                  <h2 className="text-base font-bold text-gray-800">{t('topDeals')}</h2>
+          {/* Lightning Deals Section */}
+          <section className="mt-4 px-3" id="home-lightning-deals">
+            <div className="bg-white rounded-xl shadow-card overflow-hidden border border-amber-100">
+              <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-flipkart-500 px-4 py-3 flex items-center justify-between text-white">
+                <div className="flex items-center gap-2.5">
+                  <div className="bg-white/20 p-1.5 rounded-lg">
+                    <Zap size={20} className="text-yellow-200 fill-yellow-200" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-extrabold tracking-tight text-white">{t('lightningDeals')}</h2>
+                      <span className="bg-yellow-400 text-gray-950 text-[10px] font-black px-1.5 py-0.5 rounded shadow-2xs animate-pulse">
+                        LIVE
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-white/90">Flash discounts ending soon</p>
+                  </div>
                 </div>
-                <button className="flex items-center text-sm text-flipkart-500 font-medium">
-                  See all <ChevronRight size={16} />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onNavigateDeals || (() => onCategoryClick('all'))}
+                    className="bg-black/25 hover:bg-black/35 backdrop-blur-xs px-2.5 py-1 rounded-lg text-right transition-colors cursor-pointer"
+                  >
+                    <span className="text-[10px] uppercase font-bold text-yellow-300 block">All Deals →</span>
+                    <span className="text-xs font-mono font-black tracking-wider text-white">Flash Live</span>
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-3 overflow-x-auto no-scrollbar touch-pan-x overscroll-x-contain scroll-smooth p-3">
-                {topDeals.map(p => (
-                  <div key={p.id} className="shrink-0 w-36">
+
+              <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3 bg-gradient-to-b from-amber-50/40 to-white">
+                {(lightningDeals.length > 0 ? lightningDeals : allProducts.slice(0, 6)).map(p => (
+                  <div key={`lightning-${p.id}`} className="shrink-0 w-36 sm:w-44">
                     <ProductCard product={p} onClick={() => onProductClick(p)} />
                   </div>
                 ))}
@@ -287,36 +322,67 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
             </div>
           </section>
 
-          <section className="mt-4 px-3">
-            <div className="bg-white rounded-xl shadow-card overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                <h2 className="text-base font-bold text-gray-800">{t('bestOf')}</h2>
-                <button className="flex items-center text-sm text-flipkart-500 font-medium">
-                  See all <ChevronRight size={16} />
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-3 p-3">
-                {allProducts.map(p => (
-                  <ProductCard key={p.id} product={p} onClick={() => onProductClick(p)} />
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="mt-4 px-3">
-            <div className="bg-white rounded-xl shadow-card overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <Gift size={18} className="text-flipkart-500" />
-                  <h2 className="text-base font-bold text-gray-800">{t('trendingNow')}</h2>
+          {/* Trending Products Carousel */}
+          {trendingProducts.length > 0 && (
+            <section className="mt-4 px-3" id="home-trending-now">
+              <div className="bg-white rounded-xl shadow-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-md bg-rose-50 text-rose-500">
+                      <Gift size={18} />
+                    </div>
+                    <h2 className="text-sm sm:text-base font-bold text-gray-800">{t('trendingNow')}</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onCategoryClick('all')}
+                    className="flex items-center text-xs font-bold text-flipkart-600 cursor-pointer"
+                  >
+                    See all <ChevronRight size={14} />
+                  </button>
                 </div>
-                <button className="flex items-center text-sm text-flipkart-500 font-medium">
-                  See all <ChevronRight size={16} />
+                <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
+                  {trendingProducts.map(p => (
+                    <div key={`trending-${p.id}`} className="shrink-0 w-36 sm:w-44">
+                      <ProductCard product={p} onClick={() => onProductClick(p)} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Full Catalog / Best of AKSelling */}
+          <section className="mt-4 px-3" id="home-explore-all">
+            <div className="bg-white rounded-xl shadow-card overflow-hidden border border-gray-100">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-slate-50/60">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#2874f0] to-blue-600 text-white font-black text-xs flex items-center justify-center shadow-xs">
+                    AK
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-bold text-gray-800 leading-tight">
+                        {t('bestOf')} AKSelling
+                      </h2>
+                      <span className="bg-blue-50 text-blue-700 text-[10px] font-black px-1.5 py-0.5 rounded">
+                        CATALOGUE
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">Curated products across all verified sellers ({allProducts.length} items)</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onCategoryClick('all')}
+                  className="flex items-center text-xs font-bold text-flipkart-600 hover:text-flipkart-700 transition-colors cursor-pointer"
+                >
+                  View All <ChevronRight size={14} />
                 </button>
               </div>
-              <div className="flex gap-3 overflow-x-auto no-scrollbar touch-pan-x overscroll-x-contain scroll-smooth p-3">
-                {trendingProducts.map(p => (
-                  <div key={p.id} className="shrink-0 w-36">
+              <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
+                {allProducts.slice(0, 10).map(p => (
+                  <div key={`all-${p.id}`} className="shrink-0 w-36 sm:w-44">
                     <ProductCard product={p} onClick={() => onProductClick(p)} />
                   </div>
                 ))}
@@ -324,6 +390,51 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
             </div>
           </section>
 
+          {/* Dynamic Category & Catalogue Shelves (Smooth Horizontal Feeds) */}
+          {categoryShelves.map(shelf => (
+            <section key={`shelf-${shelf.category.id}`} className="mt-4 px-3" id={`home-shelf-${shelf.category.id}`}>
+              <div className="bg-white rounded-xl shadow-card overflow-hidden border border-gray-100">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-slate-50/60">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 shadow-2xs"
+                      style={{ backgroundColor: shelf.category.color || '#2874f0' }}
+                    >
+                      <CategoryIcon name={shelf.category.icon} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm sm:text-base font-bold text-gray-800 leading-tight">
+                          {shelf.category.name}
+                        </h2>
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-gray-100 text-gray-600">
+                          {shelf.products.length} {shelf.products.length === 1 ? 'item' : 'items'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500">Popular picks in {shelf.category.name}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onCategoryClick(shelf.category.id)}
+                    className="flex items-center text-xs font-bold text-flipkart-600 hover:text-flipkart-700 transition-colors cursor-pointer"
+                  >
+                    See all <ChevronRight size={14} />
+                  </button>
+                </div>
+
+                <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
+                  {shelf.products.slice(0, 8).map(p => (
+                    <div key={`shelf-${shelf.category.id}-${p.id}`} className="shrink-0 w-36 sm:w-44">
+                      <ProductCard product={p} onClick={() => onProductClick(p)} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          ))}
+
+          {/* Become a Seller Card */}
           <div className="mt-4 px-3">
             <div
               onClick={onBecomeSeller}
