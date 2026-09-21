@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Maximize2, X, ZoomIn } from 'lucide-react';
+import { resolveProductImages, getProductFallbackImage } from '@/utils/productImageMapper';
 
 interface ProductSwipeGalleryProps {
   images: string[];
@@ -9,9 +10,6 @@ interface ProductSwipeGalleryProps {
   fitType?: string;
 }
 
-const CLEAN_IMAGE_PLACEHOLDER =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f8fafc'/%3E%3Cpath d='M140 260 L180 200 L210 240 L250 180 L300 260 Z' fill='%23e2e8f0'/%3E%3Ccircle cx='170' cy='160' r='20' fill='%23e2e8f0'/%3E%3C/svg%3E";
-
 export default function ProductSwipeGallery({
   images,
   title,
@@ -19,10 +17,9 @@ export default function ProductSwipeGallery({
   neckType,
   fitType,
 }: ProductSwipeGalleryProps) {
-  // Sanitize images to ensure no broken or placeholder glitch urls
-  const safeImages = (images && images.length > 0 ? images : [CLEAN_IMAGE_PLACEHOLDER]).map(
-    img => (typeof img === 'string' && img.includes('8532616') ? CLEAN_IMAGE_PLACEHOLDER : img)
-  );
+  // Contextually resolve valid product images or clean fallback
+  const fallback = getProductFallbackImage({ title, neckType, fitType });
+  const safeImages = resolveProductImages({ images, title, neckType, fitType });
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loadedImages, setLoadedImages] = useState<Record<number, boolean>>({});
@@ -252,7 +249,13 @@ export default function ProductSwipeGallery({
                   draggable={false}
                   referrerPolicy="no-referrer"
                   onLoad={() => setLoadedImages(prev => ({ ...prev, [idx]: true }))}
-                  onError={() => setLoadedImages(prev => ({ ...prev, [idx]: true }))}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (target.src !== fallback) {
+                      target.src = fallback;
+                    }
+                    setLoadedImages(prev => ({ ...prev, [idx]: true }));
+                  }}
                   className={`w-full h-full object-cover transition-opacity duration-250 relative z-10 pointer-events-none select-none ${
                     isLoaded ? 'opacity-100' : 'opacity-0'
                   }`}

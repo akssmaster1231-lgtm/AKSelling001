@@ -1,8 +1,9 @@
 import { memo } from 'react';
 import { Star } from 'lucide-react';
 import type { Product } from '@/types';
-import { formatPrice, formatCount, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
+import { formatPrice, formatCount } from '@/data';
 import { calculateProductDynamicRating } from '@/utils/orderSync';
+import { resolveProductImages, getProductFallbackImage } from '@/utils/productImageMapper';
 
 interface ProductCardProps {
   product: Product;
@@ -12,10 +13,10 @@ interface ProductCardProps {
 const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardProps) {
   const dynamicRating = calculateProductDynamicRating(product);
 
-  // Safe image determination
-  const rawImage = product.images && product.images[0] ? product.images[0] : '';
-  const isBrokenUrl = typeof rawImage === 'string' && rawImage.includes('8532616');
-  const imageUrl = isBrokenUrl || !rawImage ? DEFAULT_PRODUCT_PLACEHOLDER : rawImage;
+  // Safe image determination across all candidate fields (images, imageUrl, image, etc.)
+  const resolvedImages = resolveProductImages(product);
+  const fallbackImage = getProductFallbackImage(product);
+  const imageUrl = resolvedImages[0] || fallbackImage;
 
   return (
     <button
@@ -32,8 +33,8 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
           referrerPolicy="no-referrer"
           onError={(e) => {
             const target = e.currentTarget;
-            if (target.src !== DEFAULT_PRODUCT_PLACEHOLDER) {
-              target.src = DEFAULT_PRODUCT_PLACEHOLDER;
+            if (target.src !== fallbackImage) {
+              target.src = fallbackImage;
             }
           }}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 subpixel-antialiased"

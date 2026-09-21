@@ -20,6 +20,7 @@ import { calculateProductDynamicRating } from '@/utils/orderSync';
 import ProductSwipeGallery from '@/components/ProductSwipeGallery';
 import PriceDropAlertToggle from '@/components/PriceDropAlertToggle';
 import ShareModal from '@/components/ShareModal';
+import { resolveProductImages } from '@/utils/productImageMapper';
 
 interface ProductDetailProps {
   product: Product;
@@ -160,7 +161,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
 
       {/* Flipkart-Style Touch-Friendly Image Swipe Gallery */}
       <ProductSwipeGallery
-        images={product.images || []}
+        images={resolveProductImages(product)}
         title={product.title}
         discount={product.discount}
         neckType={product.neckType}

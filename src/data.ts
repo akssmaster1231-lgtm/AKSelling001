@@ -3,11 +3,23 @@ import { safeLocalStorageGetItem } from './utils/storageHelper';
 import { db, getCachedProducts, setCachedProducts, getCachedCategories, getDeletedCategoryIds } from './firebase';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { deduplicateProducts, getProductDesignKey, DisplayDeduplicator } from './utils/productDeduplication';
+import {
+  resolveProductImages,
+  getProductFallbackImage,
+  DEFAULT_PRODUCT_IMAGE,
+  isPlaceholderOrBroken,
+} from './utils/productImageMapper';
 
-export { deduplicateProducts, getProductDesignKey, DisplayDeduplicator };
+export {
+  deduplicateProducts,
+  getProductDesignKey,
+  DisplayDeduplicator,
+  resolveProductImages,
+  getProductFallbackImage,
+  DEFAULT_PRODUCT_IMAGE,
+};
 
-export const DEFAULT_PRODUCT_PLACEHOLDER =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f8fafc'/%3E%3Cpath d='M150 160 C150 132 172 110 200 110 C228 110 250 132 250 160 M120 160 L280 160 L295 300 L105 300 Z' fill='none' stroke='%23cbd5e1' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+export const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;
 
 export async function fetchProducts(): Promise<Product[]> {
   const localSellerProducts = getLocalSellerProducts();
@@ -22,8 +34,7 @@ export async function fetchProducts(): Promise<Product[]> {
       snap.forEach(docSnap => {
         const d = docSnap.data();
         if (!localIds.has(docSnap.id)) {
-          const rawImages = Array.isArray(d.images) && d.images.length > 0 ? d.images : (d.image ? [d.image] : [DEFAULT_PRODUCT_PLACEHOLDER]);
-          const sanitizedImages = rawImages.map((img: string) => (typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img));
+          const resolvedImgs = resolveProductImages({ id: docSnap.id, ...d });
           dbItems.push({
             id: docSnap.id,
             title: d.title || '',
@@ -32,7 +43,9 @@ export async function fetchProducts(): Promise<Product[]> {
             mrp: Number(d.mrp) || Number(d.price) || 0,
             discount: Number(d.discount) || 0,
             category: d.category || 'fashion',
-            images: sanitizedImages,
+            images: resolvedImgs,
+            imageUrl: resolvedImgs[0],
+            image: resolvedImgs[0],
             rating: typeof d.rating === 'number' ? d.rating : 4.2,
             ratingCount: Number(d.ratingCount || d.rating_count || 120),
             brand: d.brand || 'AKSelling',
@@ -81,8 +94,7 @@ export async function fetchProductById(productId: string): Promise<Product | nul
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const d = snap.data();
-      const rawImages = Array.isArray(d.images) && d.images.length > 0 ? d.images : (d.image ? [d.image] : [DEFAULT_PRODUCT_PLACEHOLDER]);
-      const sanitizedImages = rawImages.map((img: string) => (typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img));
+      const resolvedImgs = resolveProductImages({ id: snap.id, ...d });
       return {
         id: snap.id,
         title: d.title || '',
@@ -91,7 +103,9 @@ export async function fetchProductById(productId: string): Promise<Product | nul
         mrp: Number(d.mrp) || Number(d.price) || 0,
         discount: Number(d.discount) || 0,
         category: d.category || 'fashion',
-        images: sanitizedImages,
+        images: resolvedImgs,
+        imageUrl: resolvedImgs[0],
+        image: resolvedImgs[0],
         rating: typeof d.rating === 'number' ? d.rating : 4.2,
         ratingCount: Number(d.ratingCount || d.rating_count || 120),
         brand: d.brand || 'AKSelling',
@@ -139,8 +153,7 @@ export async function fetchProductsByCategory(category: string): Promise<Product
       snap.forEach(docSnap => {
         const d = docSnap.data();
         if (!localIds.has(docSnap.id)) {
-          const rawImages = Array.isArray(d.images) && d.images.length > 0 ? d.images : (d.image ? [d.image] : [DEFAULT_PRODUCT_PLACEHOLDER]);
-          const sanitizedImages = rawImages.map((img: string) => (typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img));
+          const resolvedImgs = resolveProductImages({ id: docSnap.id, ...d });
           dbItems.push({
             id: docSnap.id,
             title: d.title || '',
@@ -149,7 +162,9 @@ export async function fetchProductsByCategory(category: string): Promise<Product
             mrp: Number(d.mrp) || Number(d.price) || 0,
             discount: Number(d.discount) || 0,
             category: d.category || 'fashion',
-            images: sanitizedImages,
+            images: resolvedImgs,
+            imageUrl: resolvedImgs[0],
+            image: resolvedImgs[0],
             rating: typeof d.rating === 'number' ? d.rating : 4.2,
             ratingCount: Number(d.ratingCount || d.rating_count || 120),
             brand: d.brand || 'AKSelling',
@@ -186,8 +201,7 @@ function getLocalSellerProducts(): Product[] {
     return parsed
       .filter(p => !p.id?.startsWith('sp_') && p.catalogId !== 'CAT-98421' && p.catalogId !== 'CAT-89302' && p.catalogId !== 'CAT-74910' && p.catalogId !== 'CAT-62914' && p.catalogId !== 'CAT-51928' && p.catalogId !== 'CAT-41092')
       .map(p => {
-        const rawImgs = p.images && p.images.length > 0 ? p.images : [DEFAULT_PRODUCT_PLACEHOLDER];
-        const sanitizedImgs = rawImgs.map((img: string) => (typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img));
+        const resolvedImgs = resolveProductImages(p);
         return {
           id: p.id,
           title: p.title,
@@ -196,7 +210,9 @@ function getLocalSellerProducts(): Product[] {
           mrp: Number(p.mrp) || Number(p.price) || 0,
           discount: p.discount || (p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0),
           category: p.category || 'fashion',
-          images: sanitizedImgs,
+          images: resolvedImgs,
+          imageUrl: resolvedImgs[0],
+          image: resolvedImgs[0],
           rating: typeof p.rating === 'number' ? p.rating : 0.0,
           ratingCount: p.salesCount || 0,
           brand: p.brand || 'AKSelling',
@@ -216,15 +232,18 @@ function getLocalSellerProducts(): Product[] {
 }
 
 export function mapDbProduct(row: Record<string, unknown>): Product {
+  const resolvedImgs = resolveProductImages(row);
   return {
     id: row.id as string,
-    title: row.title as string,
-    description: row.description as string,
-    price: row.price as number,
-    mrp: row.mrp as number,
-    discount: row.discount as number,
-    category: row.category as string,
-    images: (row.images as string[]) || [],
+    title: (row.title as string) || '',
+    description: (row.description as string) || '',
+    price: Number(row.price) || 0,
+    mrp: Number(row.mrp) || Number(row.price) || 0,
+    discount: Number(row.discount) || 0,
+    category: (row.category as string) || 'fashion',
+    images: resolvedImgs,
+    imageUrl: resolvedImgs[0],
+    image: resolvedImgs[0],
     rating: Number(row.rating || 4.2),
     ratingCount: (row.rating_count as number) || (row.ratingCount as number) || 120,
     brand: (row.brand as string) || 'AKSelling',

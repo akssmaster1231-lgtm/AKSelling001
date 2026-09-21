@@ -28,6 +28,7 @@ import type { UserProfile } from '@/auth-context';
 import type { SellerProduct } from '@/types/supplier';
 import type { AppNotification } from '@/types/notification';
 import { deduplicateProducts } from './utils/productDeduplication';
+import { resolveProductImages, DEFAULT_PRODUCT_IMAGE } from './utils/productImageMapper';
 
 /**
  * ------------------------------------------------------------------
@@ -246,8 +247,7 @@ export function handleFirestoreError(err: unknown, operationName?: string): void
 
 const PRODUCTS_CACHE_KEY = 'akselling_firestore_products_cache';
 
-const DEFAULT_PRODUCT_PLACEHOLDER =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f8fafc'/%3E%3Cpath d='M150 160 C150 132 172 110 200 110 C228 110 250 132 250 160 M120 160 L280 160 L295 300 L105 300 Z' fill='none' stroke='%23cbd5e1' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;
 
 export function getCachedProducts(): Product[] {
   try {
@@ -257,12 +257,15 @@ export function getCachedProducts(): Product[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed
           .filter(p => !p.id?.startsWith('sp_') && p.id !== 'demo_tshirt')
-          .map(p => ({
-            ...p,
-            images: (p.images || []).map((img: string) =>
-              typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img
-            ),
-          }));
+          .map(p => {
+            const resolvedImgs = resolveProductImages(p);
+            return {
+              ...p,
+              images: resolvedImgs,
+              imageUrl: resolvedImgs[0],
+              image: resolvedImgs[0],
+            };
+          });
       }
     }
   } catch {
@@ -307,6 +310,7 @@ export function subscribeProducts(
           const items: Product[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
+            const resolvedImgs = resolveProductImages({ id: docSnap.id, ...data });
             items.push({
               id: docSnap.id,
               title: data.title || '',
@@ -315,12 +319,9 @@ export function subscribeProducts(
               mrp: Number(data.mrp) || Number(data.price) || 0,
               discount: Number(data.discount) || 0,
               category: data.category || 'fashion',
-              images: (Array.isArray(data.images) && data.images.length > 0
-                ? data.images
-                : [data.image || DEFAULT_PRODUCT_PLACEHOLDER]
-              ).map((img: string) =>
-                typeof img === 'string' && img.includes('8532616') ? DEFAULT_PRODUCT_PLACEHOLDER : img
-              ),
+              images: resolvedImgs,
+              imageUrl: resolvedImgs[0],
+              image: resolvedImgs[0],
               rating: typeof data.rating === 'number' ? data.rating : 4.2,
               ratingCount: Number(data.ratingCount || data.rating_count || 120),
               brand: data.brand || 'AKSelling',
@@ -366,6 +367,8 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
     if (!prodId) return;
     const docRef = doc(db, 'products', prodId);
     
+    const resolvedImgs = resolveProductImages(product);
+
     // Normalizing attributes
     const rawData: Record<string, unknown> = {
       id: prodId,
@@ -375,9 +378,10 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
       mrp: Number(product.mrp) || Number(product.price) || 0,
       discount: Number(product.discount) || 0,
       category: product.category || 'fashion',
-      images: Array.isArray(product.images) && product.images.length > 0
-        ? product.images
-        : ('image' in product && product.image ? [product.image] : []),
+      images: resolvedImgs,
+      image: resolvedImgs[0],
+      imageUrl: resolvedImgs[0],
+      image_url: resolvedImgs[0],
       rating: typeof product.rating === 'number' ? product.rating : 4.2,
       ratingCount: ('salesCount' in product ? product.salesCount : product.ratingCount) || 0,
       brand: product.brand || 'AKSelling',

@@ -7,6 +7,11 @@ export interface Product {
   discount: number;
   category: string;
   images: string[];
+  image?: string;
+  imageUrl?: string;
+  image_url?: string;
+  photo?: string;
+  thumbnail?: string;
   rating: number;
   ratingCount: number;
   brand: string;
