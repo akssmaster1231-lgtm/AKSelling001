@@ -686,7 +686,7 @@ export function SupplierSettingsModal({
         setBannerImage(compressedDataUrl);
       }
     } catch (err) {
-      console.error('Failed to process phone image:', err);
+      console.warn('Process phone image notice:', err);
       alert('Could not process selected image. Please try another image.');
     } finally {
       setIsUploadingImage(false);

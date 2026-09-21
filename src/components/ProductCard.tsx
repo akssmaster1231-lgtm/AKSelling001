@@ -21,16 +21,14 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
     <button
       type="button"
       onClick={onClick}
-      className="bg-white rounded-lg shadow-card hover:shadow-card-hover transition-shadow overflow-hidden text-left flex flex-col group cursor-pointer w-full select-none"
+      className="bg-white rounded-xl border border-slate-200/90 shadow-card hover:shadow-card-hover transition-all duration-200 overflow-hidden text-left flex flex-col group cursor-pointer w-full select-none"
     >
-      <div className="relative aspect-square bg-gray-100 overflow-hidden w-full">
+      <div className="relative aspect-square bg-slate-50 overflow-hidden w-full">
         <img
           src={imageUrl}
           alt={product.title}
           loading="lazy"
           decoding="async"
-          width="240"
-          height="240"
           referrerPolicy="no-referrer"
           onError={(e) => {
             const target = e.currentTarget;
@@ -38,19 +36,20 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
               target.src = DEFAULT_PRODUCT_PLACEHOLDER;
             }
           }}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 subpixel-antialiased"
+          style={{ imageRendering: 'auto' }}
         />
 
         {product.discount > 0 && (
-          <span className="absolute top-2 left-2 bg-flipkart-500 text-white text-xs font-bold px-1.5 py-0.5 rounded shadow-xs z-10">
+          <span className="absolute top-2 left-2 bg-gradient-to-r from-[#1b365d] to-slate-900 text-amber-300 text-xs font-black px-2 py-0.5 rounded-md shadow-md z-10 border border-amber-400/40">
             {product.discount}% Off
           </span>
         )}
       </div>
 
       <div className="p-2.5 flex flex-col gap-1 flex-1">
-        <p className="text-xs text-gray-500 uppercase tracking-wide truncate">{product.brand}</p>
-        <h3 className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug min-h-[2.5rem]">
+        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">{product.brand}</p>
+        <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 leading-snug min-h-[2.5rem]">
           {product.title}
         </h3>
         {/* Star Rating above price - starts at 0.00 and increases with sales/orders */}
@@ -58,7 +57,7 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
           <span
             className={`flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded ${
               dynamicRating.rating > 0
-                ? 'bg-success-500 text-white'
+                ? 'bg-emerald-700 text-white shadow-2xs'
                 : 'bg-amber-50 text-amber-900 border border-amber-200'
             }`}
           >
@@ -70,11 +69,11 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
               }
             />
           </span>
-          <span className="text-xs text-gray-400">({formatCount(dynamicRating.ratingCount)})</span>
+          <span className="text-xs text-slate-400">({formatCount(dynamicRating.ratingCount)})</span>
         </div>
         <div className="flex items-baseline gap-1.5 mt-0.5">
-          <span className="text-base font-bold text-gray-900">{formatPrice(product.price)}</span>
-          <span className="text-xs text-gray-400 line-through">{formatPrice(product.mrp)}</span>
+          <span className="text-base font-extrabold text-slate-950">{formatPrice(product.price)}</span>
+          <span className="text-xs text-slate-400 line-through">{formatPrice(product.mrp)}</span>
         </div>
       </div>
     </button>

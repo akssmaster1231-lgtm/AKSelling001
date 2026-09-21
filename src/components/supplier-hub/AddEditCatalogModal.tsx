@@ -49,7 +49,7 @@ export default function AddEditCatalogModal({
         images: product.images || [],
         title: product.title || '',
         description: product.description || '',
-        weightGsm: product.weightGsm || '240 GSM',
+        weightGsm: product.weightGsm ? String(product.weightGsm) : '240 GSM',
         colors: product.colors && product.colors.length > 0 ? product.colors : ['Black'],
         fabric: product.fabric || '100% Combed Cotton',
         productType: product.productType || 'T-Shirt',
@@ -60,14 +60,14 @@ export default function AddEditCatalogModal({
         isFreeShipping: product.isFreeShipping ?? true,
         shippingCharge: product.shippingCharge ?? 0,
         deliveryEstimate: 'Free delivery in 2-3 days',
-        pickupAddress: product.pickupAddress || {
-          businessName: 'AK Yadav Print Dispatch Hub',
-          street: 'Shop 14, Ground Floor, Textile Market, Ring Road',
-          city: 'Indore',
-          state: 'Madhya Pradesh',
-          country: 'India',
-          pincode: '452001',
-          phone: '+91 98765 43210',
+        pickupAddress: {
+          businessName: product.pickupAddress?.businessName || 'AK Yadav Print Dispatch Hub',
+          street: product.pickupAddress?.street || 'Shop 14, Ground Floor, Textile Market, Ring Road',
+          city: product.pickupAddress?.city || 'Indore',
+          state: product.pickupAddress?.state || 'Madhya Pradesh',
+          country: (product.pickupAddress as Record<string, unknown> | undefined)?.country ? String((product.pickupAddress as Record<string, unknown>).country) : 'India',
+          pincode: product.pickupAddress?.pincode || '452001',
+          phone: product.pickupAddress?.phone || '+91 98765 43210',
         },
         sleeveType: product.sleeveType || 'Half Sleeve',
         neckType: product.neckType || 'Round Neck / Crew Neck',
@@ -81,10 +81,10 @@ export default function AddEditCatalogModal({
           stock: v.stock,
           price: v.price || product.price,
         })),
-        storefrontPlacement: product.storefrontPlacement || {
-          homepage: true,
-          categoryPages: true,
-          bestDeals: true,
+        storefrontPlacement: {
+          homepage: product.storefrontPlacement?.homepage ?? true,
+          categoryPages: product.storefrontPlacement?.categoryPages ?? true,
+          bestDeals: product.storefrontPlacement?.bestDeals ?? true,
         },
       };
     }
@@ -93,8 +93,8 @@ export default function AddEditCatalogModal({
     return {
       id: `prod_${Date.now()}`,
       catalogId: `CAT-${Math.floor(10000 + Math.random() * 90000)}`,
-      category: 'fashion',
-      categoryName: 'Fashion',
+      category: 'apparel-manufacturing',
+      categoryName: 'Apparel & Garments',
       images: [],
       title: '',
       description: '',

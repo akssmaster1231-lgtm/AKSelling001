@@ -70,6 +70,7 @@ export interface ShipmentDetails {
   trackingUrl?: string;
   expectedDelivery?: string;
   createdAt?: string;
+  updatedAt?: string;
   trackingSteps?: TrackingStep[];
   currentLocation?: string;
 }

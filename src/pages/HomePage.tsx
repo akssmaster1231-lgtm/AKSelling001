@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, Zap, Gift } from 'lucide-react';
-import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice } from '@/data';
+import { ChevronRight, Gift } from 'lucide-react';
+import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, DisplayDeduplicator } from '@/data';
 import { fetchBanners } from '@/banner-api';
 import { subscribeProducts, subscribeBanners, getCachedProducts, subscribeCategories } from '@/firebase';
 import { useI18n } from '@/i18n';
@@ -103,7 +103,8 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
     };
   }, []);
 
-  const allProducts = dbProducts.length > 0 ? dbProducts : fallbackProducts;
+  const rawProducts = dbProducts.length > 0 ? dbProducts : fallbackProducts;
+  const allProducts = useMemo(() => deduplicateProducts(rawProducts), [rawProducts]);
   const displayBanners = dbBanners.length > 0 ? dbBanners : fallbackBanners;
 
   const filteredProducts = useMemo(() => {
@@ -120,31 +121,55 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
     );
   }, [searchQuery, allProducts]);
 
-  const lightningDeals = useMemo(() => {
-    return [...allProducts]
-      .filter(p => p.discount >= 10 || p.discount > 0)
-      .sort((a, b) => b.discount - a.discount)
-      .slice(0, 8);
-  }, [allProducts]);
+  // Non-repeating product allocation across sections
+  // Guarantees each product design is displayed at most once on the entire Home Page
+  const {
+    trendingProducts,
+    categoryShelves,
+    exploreCatalogProducts,
+  } = useMemo(() => {
+    const dedup = new DisplayDeduplicator();
 
-  const trendingProducts = useMemo(() => {
-    return [...allProducts]
-      .sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0))
-      .slice(0, 6);
-  }, [allProducts]);
+    // 1. Trending Products (top rating/popular items)
+    const trendingCandidates = [...allProducts]
+      .filter(p => !dedup.isDisplayed(p))
+      .sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
 
-  const categoryShelves = useMemo(() => {
-    return activeCategories
-      .filter(c => c.id !== 'all')
-      .map(cat => {
-        const catProds = allProducts.filter(p => 
-          p.category?.toLowerCase() === cat.id.toLowerCase() ||
-          p.category?.toLowerCase() === cat.name.toLowerCase()
-        );
-        return { category: cat, products: catProds };
-      })
-      .filter(shelf => shelf.products.length > 0);
-  }, [activeCategories, allProducts]);
+    const maxTrending = allProducts.length <= 6 ? Math.max(1, Math.floor(allProducts.length / 2)) : 8;
+    const trending = dedup.filterAndMark(trendingCandidates, maxTrending);
+
+    // 2. Category Shelves (unique un-displayed items per category)
+    const shelves: { category: Category; products: Product[] }[] = [];
+    for (const cat of activeCategories) {
+      if (cat.id === 'all') continue;
+      const catRemaining = allProducts.filter(
+        p =>
+          !dedup.isDisplayed(p) &&
+          (p.category?.toLowerCase() === cat.id.toLowerCase() ||
+            p.category?.toLowerCase() === cat.name.toLowerCase())
+      );
+
+      if (catRemaining.length > 0) {
+        const shelfItems = dedup.filterAndMark(catRemaining, 8);
+        if (shelfItems.length > 0) {
+          shelves.push({
+            category: cat,
+            products: shelfItems,
+          });
+        }
+      }
+    }
+
+    // 3. Explore Catalog / Best of AKSelling (any remaining un-displayed products)
+    const remainingCatalog = allProducts.filter(p => !dedup.isDisplayed(p));
+    const exploreItems = dedup.filterAndMark(remainingCatalog, 12);
+
+    return {
+      trendingProducts: trending,
+      categoryShelves: shelves,
+      exploreCatalogProducts: exploreItems,
+    };
+  }, [allProducts, activeCategories]);
 
   const minPrice = useMemo(() => {
     return allProducts.length > 0 ? Math.min(...allProducts.map(p => p.price)) : 0;
@@ -152,7 +177,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
   if (loading) {
     return (
-      <div className="pb-4">
+      <div className="pb-4 w-full overflow-x-hidden">
         {/* Banner Skeleton */}
         <div className="px-3 pt-3">
           <div className="w-full aspect-[21/9] sm:aspect-[3/1] bg-gray-200 rounded-xl animate-pulse" />
@@ -186,12 +211,12 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
   }
 
   return (
-    <div className="pb-4 touch-scroll-container">
+    <div className="pb-4 w-full overflow-x-hidden touch-scroll-container">
       <div className="px-3 pt-3">
         <BannerCarousel banners={displayBanners} />
       </div>
 
-      <div className="mt-4 px-3">
+      <div className="mt-3 px-3">
         <div className="bg-white rounded-xl shadow-card p-3">
           <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row">
             {activeCategories.map(cat => (
@@ -222,9 +247,11 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
       {searchQuery.trim() ? (
         <section className="mt-4 px-3">
-          <h2 className="text-base font-bold text-gray-800 mb-3">
-            {t('searchPlaceholder').split(',')[0]} ({filteredProducts.length})
-          </h2>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="text-sm sm:text-base font-bold text-gray-800 truncate">
+              Results for "<span className="text-[#1b365d]">{searchQuery}</span>" ({filteredProducts.length})
+            </h2>
+          </div>
           {filteredProducts.length === 0 ? (
             <div className="bg-white rounded-xl shadow-card p-8 text-center">
               <p className="text-gray-500 text-sm">No products found for "{searchQuery}"</p>
@@ -281,62 +308,21 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
         </div>
       ) : (
         <>
-          {/* Lightning Deals Section */}
-          <section className="mt-4 px-3" id="home-lightning-deals">
-            <div className="bg-white rounded-xl shadow-card overflow-hidden border border-amber-100">
-              <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-flipkart-500 px-4 py-3 flex items-center justify-between text-white">
-                <div className="flex items-center gap-2.5">
-                  <div className="bg-white/20 p-1.5 rounded-lg">
-                    <Zap size={20} className="text-yellow-200 fill-yellow-200" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-sm sm:text-base font-extrabold tracking-tight text-white">{t('lightningDeals')}</h2>
-                      <span className="bg-yellow-400 text-gray-950 text-[10px] font-black px-1.5 py-0.5 rounded shadow-2xs animate-pulse">
-                        LIVE
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-white/90">Flash discounts ending soon</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={onNavigateDeals || (() => onCategoryClick('all'))}
-                    className="bg-black/25 hover:bg-black/35 backdrop-blur-xs px-2.5 py-1 rounded-lg text-right transition-colors cursor-pointer"
-                  >
-                    <span className="text-[10px] uppercase font-bold text-yellow-300 block">All Deals →</span>
-                    <span className="text-xs font-mono font-black tracking-wider text-white">Flash Live</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3 bg-gradient-to-b from-amber-50/40 to-white">
-                {(lightningDeals.length > 0 ? lightningDeals : allProducts.slice(0, 6)).map(p => (
-                  <div key={`lightning-${p.id}`} className="shrink-0 w-36 sm:w-44">
-                    <ProductCard product={p} onClick={() => onProductClick(p)} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
           {/* Trending Products Carousel */}
           {trendingProducts.length > 0 && (
             <section className="mt-4 px-3" id="home-trending-now">
-              <div className="bg-white rounded-xl shadow-card overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div className="bg-white rounded-xl shadow-card overflow-hidden border border-slate-200/80">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/60">
                   <div className="flex items-center gap-2">
-                    <div className="p-1 rounded-md bg-rose-50 text-rose-500">
+                    <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60">
                       <Gift size={18} />
                     </div>
-                    <h2 className="text-sm sm:text-base font-bold text-gray-800">{t('trendingNow')}</h2>
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900">{t('trendingNow')}</h2>
                   </div>
                   <button
                     type="button"
-                    onClick={() => onCategoryClick('all')}
-                    className="flex items-center text-xs font-bold text-flipkart-600 cursor-pointer"
+                    onClick={() => (onNavigateDeals ? onNavigateDeals() : onCategoryClick('all'))}
+                    className="flex items-center text-xs font-bold text-[#1b365d] hover:text-amber-600 transition-colors cursor-pointer"
                   >
                     See all <ChevronRight size={14} />
                   </button>
@@ -352,43 +338,45 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
             </section>
           )}
 
-          {/* Full Catalog / Best of AKSelling */}
-          <section className="mt-4 px-3" id="home-explore-all">
-            <div className="bg-white rounded-xl shadow-card overflow-hidden border border-gray-100">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-slate-50/60">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#2874f0] to-blue-600 text-white font-black text-xs flex items-center justify-center shadow-xs">
-                    AK
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-sm sm:text-base font-bold text-gray-800 leading-tight">
-                        {t('bestOf')} AKSelling
-                      </h2>
-                      <span className="bg-blue-50 text-blue-700 text-[10px] font-black px-1.5 py-0.5 rounded">
-                        CATALOGUE
-                      </span>
+          {/* Full Catalog / Best of AKSelling - only shows remaining distinct designs */}
+          {exploreCatalogProducts.length > 0 && (
+            <section className="mt-4 px-3" id="home-explore-all">
+              <div className="bg-white rounded-xl shadow-card overflow-hidden border border-slate-200/80">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#1b365d] to-slate-800 text-amber-400 font-black text-xs flex items-center justify-center shadow-xs border border-amber-500/30">
+                      AK
                     </div>
-                    <p className="text-[11px] text-gray-500">Curated products across all verified sellers ({allProducts.length} items)</p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+                          {t('bestOf')} AKSelling
+                        </h2>
+                        <span className="bg-[#1b365d]/10 text-[#1b365d] text-[10px] font-black px-1.5 py-0.5 rounded border border-[#1b365d]/20">
+                          CATALOGUE
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium">More unique designs ({exploreCatalogProducts.length} items)</p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => onCategoryClick('all')}
+                    className="flex items-center text-xs font-bold text-[#1b365d] hover:text-amber-600 transition-colors cursor-pointer"
+                  >
+                    View All <ChevronRight size={14} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onCategoryClick('all')}
-                  className="flex items-center text-xs font-bold text-flipkart-600 hover:text-flipkart-700 transition-colors cursor-pointer"
-                >
-                  View All <ChevronRight size={14} />
-                </button>
+                <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
+                  {exploreCatalogProducts.map(p => (
+                    <div key={`all-${p.id}`} className="shrink-0 w-36 sm:w-44">
+                      <ProductCard product={p} onClick={() => onProductClick(p)} />
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
-                {allProducts.slice(0, 10).map(p => (
-                  <div key={`all-${p.id}`} className="shrink-0 w-36 sm:w-44">
-                    <ProductCard product={p} onClick={() => onProductClick(p)} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
 
           {/* Dynamic Category & Catalogue Shelves (Smooth Horizontal Feeds) */}
           {categoryShelves.map(shelf => (
@@ -417,7 +405,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
                   <button
                     type="button"
                     onClick={() => onCategoryClick(shelf.category.id)}
-                    className="flex items-center text-xs font-bold text-flipkart-600 hover:text-flipkart-700 transition-colors cursor-pointer"
+                    className="flex items-center text-xs font-bold text-[#1b365d] hover:text-amber-600 transition-colors cursor-pointer"
                   >
                     See all <ChevronRight size={14} />
                   </button>
@@ -438,14 +426,14 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
           <div className="mt-4 px-3">
             <div
               onClick={onBecomeSeller}
-              className="bg-gradient-to-r from-accent-400 to-accent-600 rounded-xl p-4 flex items-center gap-3 shadow-card cursor-pointer hover:opacity-95 transition-opacity"
+              className="bg-gradient-to-r from-slate-900 via-[#1b365d] to-amber-600 rounded-xl p-4 flex items-center gap-3 shadow-card cursor-pointer hover:opacity-95 transition-opacity border border-slate-700/60"
             >
-              <div className="bg-white/20 rounded-full p-2 shrink-0">
-                <Gift size={24} className="text-white" />
+              <div className="bg-amber-400/20 border border-amber-400/30 rounded-full p-2 shrink-0">
+                <Gift size={24} className="text-amber-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-white font-bold text-sm">{t('becomeSeller')}</p>
-                <p className="text-white/80 text-xs truncate">Start selling on AKSelling with auto-verified KYC</p>
+                <p className="text-amber-100/80 text-xs truncate">Start selling on AKSelling with auto-verified KYC</p>
               </div>
               <button
                 type="button"
@@ -453,7 +441,7 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
                   e.stopPropagation();
                   onBecomeSeller?.();
                 }}
-                className="bg-white text-flipkart-700 text-xs font-bold px-4 py-2 rounded-full shadow-xs hover:bg-slate-50 active:scale-95 transition-all shrink-0 cursor-pointer"
+                className="bg-amber-400 text-slate-950 text-xs font-black px-4 py-2 rounded-full shadow-md hover:bg-amber-300 active:scale-95 transition-all shrink-0 cursor-pointer"
                 id="home-join-seller-btn"
               >
                 Join Now
@@ -463,12 +451,12 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
 
           {minPrice > 0 && (
             <div className="mt-4 px-3">
-              <div className="bg-white rounded-xl shadow-card p-4 text-center">
-                <p className="text-xs text-gray-400 mb-1">Top deals starting from</p>
-                <p className="text-2xl font-extrabold text-flipkart-600">
+              <div className="bg-white rounded-xl shadow-card border border-slate-200/80 p-4 text-center">
+                <p className="text-xs text-slate-400 font-medium mb-1">Top deals starting from</p>
+                <p className="text-2xl font-black text-[#1b365d]">
                   {formatPrice(minPrice)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Shop from our widest collection</p>
+                <p className="text-xs text-slate-500 mt-1 font-medium">Shop verified collections on AKSelling</p>
               </div>
             </div>
           )}

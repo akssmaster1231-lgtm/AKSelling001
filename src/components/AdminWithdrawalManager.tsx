@@ -70,13 +70,11 @@ export const AdminWithdrawalManager: React.FC = () => {
 
     try {
       const finalUtr = utrInput.trim() || `MANUAL/SETTLED/${Date.now()}`;
-      const result = await settleWithdrawalRequest(
-        settlingRequest.id,
-        settlingRequest.userId,
-        settlingRequest.amount,
-        finalUtr,
-        adminNotes.trim()
-      );
+      const result = await settleWithdrawalRequest({
+        requestId: settlingRequest.id,
+        adminUtr: finalUtr,
+        adminNotes: adminNotes.trim(),
+      });
 
       // Create completed object with receipt for immediate Parchi display
       const completedReq: WithdrawalRequest = {
@@ -84,7 +82,7 @@ export const AdminWithdrawalManager: React.FC = () => {
         status: 'COMPLETED',
         utr: finalUtr,
         receiptNumber: result.receiptNumber,
-        settledAt: Date.now(),
+        settledAt: new Date().toISOString(),
         adminNotes: adminNotes.trim(),
       };
 
@@ -92,7 +90,7 @@ export const AdminWithdrawalManager: React.FC = () => {
       // Automatically show generated digital receipt (Parchi)
       setParchiRequest(completedReq);
     } catch (err: unknown) {
-      console.error('Settlement error:', err);
+      console.warn('Settlement notice:', err);
       const msg = err instanceof Error ? err.message : 'Failed to settle request';
       setSettleError(msg);
     } finally {

@@ -16,6 +16,7 @@ import {
   Building,
   Navigation,
   Globe,
+  Mail,
 } from 'lucide-react';
 import { formatPrice } from '@/data';
 import { initiateRazorpayPayment } from '@/razorpay';
@@ -69,6 +70,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
 
   const [form, setForm] = useState({
     name: user?.name || '',
+    email: user?.email || '',
     phone: user?.phone?.replace(/\D/g, '').slice(-10) || '',
     houseNo: '',
     street: '',
@@ -90,6 +92,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         setForm((prev) => ({
           ...prev,
           name: active.name || prev.name || user.name || '',
+          email: prev.email || user.email || '',
           phone: active.phone || prev.phone || user.phone || '',
           street: active.address || prev.street || '',
           city: active.city || prev.city || '',
@@ -252,8 +255,11 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         product_image: product.images[0],
         quantity,
         price: product.price,
-        size: selectedSize,
-        color: selectedColor,
+        size: selectedSize || product.sizes?.[0] || 'Standard',
+        color: selectedColor || product.colors?.[0] || 'Default',
+        design: product.printDesign || product.pattern || 'Original Design',
+        fabric: product.fabric || 'Premium Cotton',
+        brand: product.brand || 'AKSelling Fashion',
       }];
 
       const parts = [
@@ -268,12 +274,15 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
 
       const generatedId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
 
+      const customerEmailToUse = form.email.trim() || user?.email || undefined;
       const isPrepaid = form.paymentMethod !== 'cod';
       const orderPayload: FirestoreOrder = {
         id: generatedId,
         customer_name: form.name,
+        customer_email: customerEmailToUse,
         customer_phone: form.phone,
         customer_address: fullAddress,
+        user_id: user?.id,
         items: orderItems,
         total_amount: finalAmount,
         payment_method: isPrepaid ? 'Prepaid (Razorpay / UPI / Card)' : 'Cash on Delivery (10% Advance Paid Online)',
@@ -315,7 +324,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           order: orderPayload,
-          customerEmail: user?.email || undefined,
+          customerEmail: customerEmailToUse,
           sellerEmail: 'anojkumaryadav7290@gmail.com',
         }),
       }).catch((e) => console.warn('Email notification dispatch notice:', e));
@@ -351,7 +360,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
       setOrderId(generatedId);
       setState('success');
     } catch (err) {
-      console.error('Order placement error:', err);
+      console.warn('Order placement notice:', err);
       setError('Failed to place order. Please try again.');
       setState('form');
     }
@@ -647,6 +656,23 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Email for Instant Order Confirmation Notifications */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 flex items-center justify-between mb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <Mail size={14} className="text-amber-500" /> Email for Order Confirmation & Updates
+                    </span>
+                    <span className="text-[11px] text-amber-600 font-medium">Notification on Order Confirmation</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={e => setForm({ ...form, email: e.target.value })}
+                    placeholder="Enter your email (e.g. customer@gmail.com)"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
+                  />
                 </div>
 
                 {/* Smart Pincode Lookup Field */}

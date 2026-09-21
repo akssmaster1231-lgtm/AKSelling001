@@ -25,6 +25,7 @@ import { useAuth } from '@/auth-context';
 import OrderStatusStepper from '@/components/OrderStatusStepper';
 import { getStepIndexFromStatus } from '@/utils/orderTracking';
 import OrderTrackingModal from '@/components/OrderTrackingModal';
+import OrderActivityDashboard from '@/components/OrderActivityDashboard';
 
 interface OrdersPageProps {
   onBack: () => void;
@@ -172,7 +173,7 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
       total_amount: 699,
       payment_method: 'Prepaid (UPI / Card)',
       payment_status: 'Paid',
-      status: 'Ordered',
+      status: 'Order Placed',
       created_at: new Date().toISOString(),
       awb_code: `SFX${Math.floor(10000000 + Math.random() * 90000000)}`,
       courier_name: 'Shadowfax Express Surface',
@@ -233,7 +234,7 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
   if (loading) {
     return (
       <div className="fixed inset-0 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-[480px] sm:w-full z-[65] bg-slate-50 flex flex-col items-center justify-center">
-        <Loader2 size={36} className="animate-spin text-[#2874f0] mb-3" />
+        <Loader2 size={36} className="animate-spin text-[#1b365d] mb-3" />
         <p className="text-xs font-bold text-slate-600">Loading your live orders...</p>
       </div>
     );
@@ -268,10 +269,13 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
       </div>
 
       <div className="px-3.5 py-4 pb-16 space-y-4">
+        {/* Order Activity & Monthly Volume Trends Dashboard */}
+        <OrderActivityDashboard orders={orders} />
+
         {/* Empty State */}
         {orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-3xl border border-slate-200 shadow-2xs">
-            <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mb-4 text-[#2874f0]">
+            <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-[#1b365d]">
               <Package size={38} strokeWidth={1.75} />
             </div>
             <h3 className="text-base font-bold text-slate-900">{t('noOrders')}</h3>
@@ -282,9 +286,9 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
             <button
               type="button"
               onClick={handleCreateSampleOrder}
-              className="mt-6 bg-[#2874f0] hover:bg-[#1a65dc] text-white font-bold text-xs py-3 px-5 rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              className="mt-6 bg-[#1b365d] hover:bg-slate-900 text-amber-300 font-bold text-xs py-3 px-5 rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer border border-amber-400/40"
             >
-              <Sparkles size={15} />
+              <Sparkles size={15} className="text-amber-400" />
               <span>Simulate Sample Order to View Live Stepper</span>
             </button>
           </div>
@@ -323,7 +327,7 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                         <p className="text-xs text-slate-400 font-mono">
                           ID: {order.id.slice(0, 10).toUpperCase()}
                         </p>
-                        <span className="text-sm font-black text-slate-900">
+                        <span className="text-sm font-black text-[#1b365d]">
                           {formatPrice(order.total_amount)}
                         </span>
                       </div>
@@ -385,13 +389,13 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                     {isExpanded && (
                       <div className="p-4 pt-1 border-t border-slate-100 space-y-3.5 animate-fade-in text-xs">
                         {/* Courier & AWB banner */}
-                        <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-3 flex items-center justify-between">
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                            <div className="w-7 h-7 rounded-lg bg-[#1b365d] text-amber-300 flex items-center justify-center">
                               <Truck size={14} />
                             </div>
                             <div>
-                              <p className="text-[10px] text-blue-700 font-bold uppercase">Logistics Express</p>
+                              <p className="text-[10px] text-amber-700 font-bold uppercase">Logistics Express</p>
                               <p className="text-xs font-bold text-slate-800">{displayCourier}</p>
                             </div>
                           </div>
@@ -402,7 +406,7 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                             <button
                               type="button"
                               onClick={() => copyAwb(displayAwb)}
-                              className="text-[#2874f0] hover:text-blue-700 p-0.5 cursor-pointer"
+                              className="text-[#1b365d] hover:text-amber-600 p-0.5 cursor-pointer"
                               title="Copy AWB"
                             >
                               {copiedAwb === displayAwb ? (
@@ -437,6 +441,9 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                                   <p className="text-[11px] text-slate-500">
                                     Qty: {item.quantity} • {formatPrice(item.price)}
                                     {item.size ? ` • Size: ${item.size}` : ''}
+                                    {item.color ? ` • Color: ${item.color}` : ''}
+                                    {item.design ? ` • Design: ${item.design}` : ''}
+                                    {item.fabric ? ` • Fabric: ${item.fabric}` : ''}
                                   </p>
                                 </div>
                               </div>
@@ -446,11 +453,14 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
 
                         {/* Delivery Address */}
                         <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200/80 flex items-start gap-2.5">
-                          <MapPin size={15} className="text-[#2874f0] mt-0.5 shrink-0" />
+                          <MapPin size={15} className="text-[#1b365d] mt-0.5 shrink-0" />
                           <div className="space-y-0.5">
                             <p className="text-xs font-bold text-slate-800">{order.customer_name}</p>
                             <p className="text-xs text-slate-600 leading-relaxed">{order.customer_address}</p>
                             <p className="text-[11px] text-slate-500">Phone: +91 {order.customer_phone}</p>
+                            {order.customer_email && (
+                              <p className="text-[11px] text-amber-700 font-medium">Email: {order.customer_email}</p>
+                            )}
                           </div>
                         </div>
 
@@ -459,9 +469,9 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                           <button
                             type="button"
                             onClick={() => setTrackingModalOrder(order)}
-                            className="w-full bg-[#2874f0] hover:bg-[#1a65dc] text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                            className="w-full bg-[#1b365d] hover:bg-slate-900 text-amber-300 border border-amber-400/40 font-bold text-xs py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                           >
-                            <Truck size={14} />
+                            <Truck size={14} className="text-amber-400" />
                             <span>Open Full Live Tracking Radar</span>
                           </button>
 

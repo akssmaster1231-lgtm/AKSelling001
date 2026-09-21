@@ -164,7 +164,7 @@ export default function Step5InventoryPreview({
       setPublishSuccess(true);
       onPublishSuccess(sellerProductData);
     } catch (err) {
-      console.error('Failed to publish product to Firestore:', err);
+      console.warn('Publish product to Firestore notice:', err);
       alert('Error saving to cloud. Please check network connection and try again.');
     } finally {
       setIsPublishing(false);
@@ -183,9 +183,12 @@ export default function Step5InventoryPreview({
             Status: Live & Verified On Storefront
           </span>
           <h2 className="text-xl font-black text-gray-900">
-            Product Successfully Published!
+            Product & Catalog Successfully Published!
           </h2>
-          <p className="text-xs text-gray-600 max-w-md mx-auto mt-1">
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100/80 px-3 py-1 rounded-full mt-2 border border-amber-300">
+            <span>✨ Live Notification Broadcasted to all App Users!</span>
+          </div>
+          <p className="text-xs text-gray-600 max-w-md mx-auto mt-2">
             "{publishedProduct.title}" is now active with {totalStock} total units across {formData.variants.length} variant combinations.
           </p>
         </div>

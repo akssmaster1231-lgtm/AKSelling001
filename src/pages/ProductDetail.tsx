@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   ChevronLeft,
   Star,
@@ -19,6 +19,7 @@ import { useCart } from '@/cart-context';
 import { calculateProductDynamicRating } from '@/utils/orderSync';
 import ProductSwipeGallery from '@/components/ProductSwipeGallery';
 import PriceDropAlertToggle from '@/components/PriceDropAlertToggle';
+import ShareModal from '@/components/ShareModal';
 
 interface ProductDetailProps {
   product: Product;
@@ -31,6 +32,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
   const dynamicRating = calculateProductDynamicRating(product);
   const [wishlisted, setWishlisted] = useState(false);
   const [added, setAdded] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [selectedSize, setSelectedSize] = useState<string>(
     product.sizes && product.sizes.length > 0 ? product.sizes[0] : ''
   );
@@ -39,26 +41,94 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
   );
   const [showSizeChart, setShowSizeChart] = useState(false);
   const [sizeAlert, setSizeAlert] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
   const { addToCart } = useCart();
 
-  const handleAddToCart = () => {
-    if (product.sizes && product.sizes.length > 0 && !selectedSize) {
-      setSizeAlert(true);
-      setTimeout(() => setSizeAlert(false), 2500);
+  // Generate canonical direct URL for this product
+  const productShareUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    return `${origin}${pathname}?productId=${encodeURIComponent(product.id)}`;
+  }, [product.id]);
+
+  // Uses Web Share API or native fallback modal to safely share the current product link
+  const handleNativeShare = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const isSandboxedIframe = typeof window !== 'undefined' && window.self !== window.top;
+    if (isSandboxedIframe) {
+      setShowShareModal(true);
       return;
     }
-    addToCart(product, 1, selectedSize, selectedColor);
-    setAdded(true);
-    setTimeout(() => setAdded(false), 2000);
+
+    const shareData = {
+      title: `${product.title} | AKSelling`,
+      text: `Check out ${product.title} at ${formatPrice(product.price)} (${product.discount}% OFF) on AKSelling!\n\nShop here:`,
+      url: productShareUrl,
+    };
+
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
+      }
+    }
+
+    // Fallback: Copy product link to clipboard and show toast
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(productShareUrl);
+        setShareToast('Product link copied to clipboard!');
+        setTimeout(() => setShareToast(null), 2500);
+      } else {
+        setShowShareModal(true);
+      }
+    } catch {
+      setShowShareModal(true);
+    }
   };
 
-  const handleBuyNow = () => {
-    if (product.sizes && product.sizes.length > 0 && !selectedSize) {
-      setSizeAlert(true);
-      setTimeout(() => setSizeAlert(false), 2500);
-      return;
+  const handleAddToCart = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
-    onBuyNow(product, selectedSize, selectedColor);
+    try {
+      if (product.sizes && product.sizes.length > 0 && !selectedSize) {
+        setSizeAlert(true);
+        setTimeout(() => setSizeAlert(false), 2500);
+        return;
+      }
+      addToCart(product, 1, selectedSize, selectedColor);
+      setAdded(true);
+      setTimeout(() => setAdded(false), 2000);
+    } catch {
+      // safe fallback
+    }
+  };
+
+  const handleBuyNow = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    try {
+      if (product.sizes && product.sizes.length > 0 && !selectedSize) {
+        setSizeAlert(true);
+        setTimeout(() => setSizeAlert(false), 2500);
+        return;
+      }
+      onBuyNow(product, selectedSize, selectedColor);
+    } catch {
+      // safe fallback
+    }
   };
 
   return (
@@ -72,11 +142,19 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         <button
           onClick={() => setWishlisted(!wishlisted)}
           className="p-1 text-gray-700 hover:text-error-500"
+          title="Wishlist"
         >
           <Heart size={22} className={wishlisted ? 'fill-error-500 text-error-500' : ''} />
         </button>
-        <button className="p-1 text-gray-700 hover:text-flipkart-500">
+        <button
+          onClick={handleNativeShare}
+          className="p-1.5 text-gray-700 hover:text-flipkart-600 rounded-lg hover:bg-gray-100 transition-colors relative flex items-center gap-1 cursor-pointer"
+          title="Share Product"
+          id="product-share-btn"
+          aria-label="Share Product"
+        >
           <Share2 size={20} />
+          <span className="text-xs font-semibold text-gray-700 hidden xs:inline">Share</span>
         </button>
       </div>
 
@@ -137,6 +215,39 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
 
         {/* Notify me of price drops toggle & preferences */}
         <PriceDropAlertToggle product={product} />
+
+        {/* Quick Share with Friends Bar */}
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-blue-50 text-flipkart-600 flex items-center justify-center shrink-0">
+              <Share2 size={16} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-gray-900">Share Product</p>
+              <p className="text-[11px] text-gray-500 truncate">Tap Share for native apps & direct link</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              id="product-detail-native-share-btn"
+              onClick={handleNativeShare}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-flipkart-600 to-blue-600 hover:from-flipkart-700 hover:to-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+              title="Share via Native Dialog"
+            >
+              <Share2 size={13} />
+              <span>Share</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowShareModal(true)}
+              className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              title="More sharing options"
+            >
+              More
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Key Features & Style Highlights (Neck Type, Sleeve, Fit, Fabric) */}
@@ -330,13 +441,24 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
       </div>
 
       {/* Bottom Action Buttons */}
-      <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex gap-3 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
+      <div className="sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-3 flex items-center gap-2.5 shadow-[0_-3px_12px_rgba(15,23,42,0.08)]">
+        <button
+          type="button"
+          id="product-detail-bottom-share-btn"
+          onClick={handleNativeShare}
+          className="flex flex-col items-center justify-center px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all cursor-pointer active:scale-95 shrink-0"
+          title="Share Product via Native Dialog"
+          aria-label="Share Product"
+        >
+          <Share2 size={18} />
+          <span className="text-[10px] font-bold mt-0.5">Share</span>
+        </button>
         <button
           onClick={handleAddToCart}
-          className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all ${
+          className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all border ${
             added
-              ? 'bg-success-500 text-white'
-              : 'bg-flipkart-50 text-flipkart-700 hover:bg-flipkart-100'
+              ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+              : 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200'
           }`}
         >
           {added ? (
@@ -351,9 +473,9 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         </button>
         <button
           onClick={handleBuyNow}
-          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm bg-accent-400 text-white hover:bg-accent-600 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 hover:from-amber-400 hover:to-orange-400 shadow-lg active:scale-95 transition-all border border-amber-300"
         >
-          <Zap size={18} /> Buy Now
+          <Zap size={18} className="fill-slate-950 text-slate-950" /> Buy Now
         </button>
       </div>
 
@@ -410,6 +532,21 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
           </button>
         </div>
       )}
+
+      {/* Share Toast */}
+      {shareToast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-2xl z-[75] flex items-center gap-2 border border-slate-700 animate-fade-in">
+          <Check size={15} className="text-emerald-400" />
+          <span>{shareToast}</span>
+        </div>
+      )}
+
+      {/* Social & Direct Link Share Modal */}
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        product={product}
+      />
     </div>
   );
 }

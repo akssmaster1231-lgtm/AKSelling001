@@ -97,7 +97,7 @@ export default function AdminCategoryManagementModal({
       setSuccessMsg(`Deleted category "${cat.name}" successfully.`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
-      console.error('Delete category error:', err);
+      console.warn('Delete category notice:', err);
       setErrorMsg('Failed to delete category.');
     }
   };
@@ -126,7 +126,7 @@ export default function AdminCategoryManagementModal({
       setSuccessMsg(editingCatId ? `Category "${cleanName}" updated!` : `New category "${cleanName}" created!`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
-      console.error('Save category error:', err);
+      console.warn('Save category notice:', err);
       setErrorMsg('Failed to save category.');
     } finally {
       setIsSubmitting(false);
@@ -319,19 +319,19 @@ export default function AdminCategoryManagementModal({
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">Select Icon Symbol</label>
                 <div className="grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-40 overflow-y-auto p-1.5 bg-white rounded-xl border border-gray-200">
-                  {POPULAR_CATEGORY_ICONS.map(iconName => (
+                  {POPULAR_CATEGORY_ICONS.map(item => (
                     <button
-                      key={iconName}
+                      key={item.id}
                       type="button"
-                      onClick={() => setCatIcon(iconName)}
+                      onClick={() => setCatIcon(item.iconName)}
                       className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all cursor-pointer ${
-                        catIcon === iconName
+                        catIcon === item.iconName
                           ? 'bg-flipkart-500 text-white shadow-xs font-bold'
                           : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
                       }`}
                     >
-                      <CategoryIcon name={iconName} />
-                      <span className="text-[9px] mt-1 truncate max-w-[42px]">{iconName}</span>
+                      <CategoryIcon name={item.iconName} />
+                      <span className="text-[9px] mt-1 truncate max-w-[42px]">{item.label}</span>
                     </button>
                   ))}
                 </div>

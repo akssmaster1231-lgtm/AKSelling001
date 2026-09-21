@@ -125,7 +125,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
   }, [userId]);
 
   const activeProcessingRequest = withdrawalRequests.find(
-    (r) => r.status === 'PROCESSING' || r.status === 'PENDING'
+    (r) => r.status === 'PROCESSING' || (r.status as string) === 'PENDING'
   );
   const latestCompletedRequest = withdrawalRequests.find((r) => r.status === 'COMPLETED');
 
@@ -188,16 +188,14 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
 
     try {
       // 1. Submit Request to Firestore withdrawal_requests collection
-      const newReq = await submitWithdrawalRequest(
+      const newReq = await submitWithdrawalRequest({
         userId,
-        amt,
-        withdrawForm,
-        {
-          userName: user?.name || 'AKSelling Customer',
-          userPhone: user?.phone || '',
-          userEmail: user?.email || '',
-        }
-      );
+        amount: amt,
+        formData: withdrawForm,
+        userName: user?.name || 'AKSelling Customer',
+        userPhone: user?.phone || '',
+        userEmail: user?.email || '',
+      });
 
       // 2. Also dispatch to server endpoint for sync logging
       fetch('/api/wallet/withdraw', {
@@ -218,7 +216,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
       setWithdrawalSuccess({
         amount: amt,
         utr: 'PROCESSING_BY_ADMIN',
-        transferId: newReq.id,
+        transferId: newReq.requestId,
         method: withdrawForm.method,
         destination: withdrawForm.method === 'upi' ? withdrawForm.upiId : 'Bank Account',
         provider: 'AKSelling Admin Finance Desk',
@@ -230,7 +228,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
         amount: Math.min(balance, 100) >= 100 ? 100 : 0,
       }));
     } catch (err: unknown) {
-      console.error('Payout request error:', err);
+      console.warn('Payout request notice:', err);
       const msg = err instanceof Error ? err.message : 'Payout request failed';
       setWithdrawalError(msg);
     } finally {
@@ -423,7 +421,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
                   Withdrawal of ₹{activeProcessingRequest.amount} Under Manual Review
                 </p>
                 <p className="mt-1 text-amber-900/90 leading-relaxed">
-                  Your payout request has been received by AKSelling Finance Admin. The admin will manually transfer ₹{activeProcessingRequest.amount} to your {activeProcessingRequest.method === 'upi' ? `UPI ID (${activeProcessingRequest.upiId})` : `Bank Account (${activeProcessingRequest.bankName || 'Bank'})`}, and issue your official payment receipt (parchi). Your wallet balance will be cleared once settled.
+                  Your payout request has been received by AKSelling Finance Admin. The admin will manually transfer ₹{activeProcessingRequest.amount} to your {activeProcessingRequest.method === 'upi' ? `UPI ID (${activeProcessingRequest.upiId || activeProcessingRequest.payoutDetails?.upiId || 'UPI'})` : `Bank Account (${activeProcessingRequest.bankName || activeProcessingRequest.payoutDetails?.bankName || 'Bank'})`}, and issue your official payment receipt (parchi). Your wallet balance will be cleared once settled.
                 </p>
               </div>
             </div>

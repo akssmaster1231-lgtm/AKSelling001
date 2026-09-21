@@ -106,9 +106,9 @@ export default function Step2Media({
       for (const file of filesToProcess) {
         if (!file.type.startsWith('image/')) continue;
         const compressedBase64 = await compressImageFile(file, {
-          maxWidth: 1200,
-          maxHeight: 1200,
-          quality: 0.85,
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 0.92,
         });
         processedUrls.push(compressedBase64);
       }
@@ -120,7 +120,7 @@ export default function Step2Media({
         }));
       }
     } catch (err) {
-      console.error('Error compressing images:', err);
+      console.warn('Compressing images notice:', err);
       setValidationError('Failed to process image file. Please try another image.');
     } finally {
       setIsCompressing(false);
@@ -276,13 +276,13 @@ export default function Step2Media({
             </div>
             <p className="text-xs font-bold text-gray-800">
               {isCompressing
-                ? 'Compressing and optimizing images...'
+                ? 'Processing & optimizing Ultra-HD images (Retina clarity)...'
                 : images.length >= 5
                 ? 'Maximum 5 images reached'
-                : 'Click or Drag & Drop Product Images'}
+                : 'Click or Drag & Drop Product Images (Ultra-HD / 100% Fresh)'}
             </p>
             <p className="text-[11px] text-gray-500 mt-0.5">
-              Supports JPEG, PNG, WEBP • Auto-compressed for fast buyer loading
+              Supports High-Res JPEG, PNG, WEBP • Zero-blur multi-step downscaling preserves pristine crispness & vivid colors
             </p>
           </div>
 

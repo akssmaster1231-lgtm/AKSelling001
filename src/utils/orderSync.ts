@@ -10,11 +10,15 @@ export interface CustomerOrderItem {
   sku?: string;
   size?: string;
   color?: string;
+  design?: string;
+  fabric?: string;
+  brand?: string;
 }
 
 export interface CustomerPlacedOrder {
   id: string;
   customer_name: string;
+  customer_email?: string;
   customer_phone: string;
   customer_address: string;
   items: CustomerOrderItem[];
@@ -51,6 +55,7 @@ export function recordPlacedOrder(order: CustomerPlacedOrder): void {
       id: order.id,
       orderNumber: order.id.startsWith('ORD-') ? order.id : `ORD-${order.id.slice(-6).toUpperCase()}`,
       customerName: order.customer_name || 'Customer',
+      customerEmail: order.customer_email,
       customerCity: order.customer_address?.split(',').slice(-2, -1)[0]?.trim() || 'New Delhi',
       customerAddress: order.customer_address,
       customerPhone: order.customer_phone,
@@ -63,6 +68,9 @@ export function recordPlacedOrder(order: CustomerPlacedOrder): void {
         sku: item.sku || `AK-${item.product_id.slice(0, 8).toUpperCase()}`,
         size: item.size,
         color: item.color,
+        design: item.design,
+        fabric: item.fabric,
+        brand: item.brand,
       })),
       totalAmount: order.total_amount,
       paymentMethod: order.payment_method || 'Prepaid (UPI / Card)',
@@ -98,7 +106,7 @@ export function recordPlacedOrder(order: CustomerPlacedOrder): void {
     // 3. Dispatch global cross-tab event
     window.dispatchEvent(new CustomEvent('akselling_orders_updated', { detail: sellerOrder }));
   } catch (err) {
-    console.error('Error synchronizing customer order to supplier hub:', err);
+    console.warn('Order sync notice:', err);
   }
 }
 

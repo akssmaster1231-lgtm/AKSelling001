@@ -20,7 +20,12 @@ import SellerLockedModal from '@/components/SellerLockedModal';
 import { isWhitelistedSellerEmail } from '@/utils/sellerWhitelist';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import type { Product } from '@/types';
+import { fetchProductById } from '@/data';
 import { Loader2 } from 'lucide-react';
+import { NotificationProvider } from '@/notification-context';
+import NotificationToastBanner from '@/components/NotificationToastBanner';
+import NotificationCenterModal from '@/components/NotificationCenterModal';
+import { addRecentlyViewedProduct } from '@/utils/searchHistory';
 
 function AppContent() {
   const { user, authInitialized } = useAuth();
@@ -46,8 +51,35 @@ function AppContent() {
   const [showSellerLockedModal, setShowSellerLockedModal] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [buyNowProduct, setBuyNowProduct] = useState<Product | null>(null);
+  const [buyNowSize, setBuyNowSize] = useState<string | undefined>(undefined);
+  const [buyNowColor, setBuyNowColor] = useState<string | undefined>(undefined);
   const { cartCount } = useCart();
+
+  const handleOpenProductById = async (productId: string) => {
+    try {
+      const prod = await fetchProductById(productId);
+      if (prod) {
+        addRecentlyViewedProduct(prod);
+        setSelectedProduct(prod);
+        setShowNotifications(false);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    const handleOpenProdEvent = (e: Event) => {
+      const custom = e as CustomEvent<string>;
+      if (custom.detail) {
+        handleOpenProductById(custom.detail);
+      }
+    };
+    window.addEventListener('akselling_open_product_id', handleOpenProdEvent);
+    return () => window.removeEventListener('akselling_open_product_id', handleOpenProdEvent);
+  }, []);
 
   const handleSwitchMode = (mode: 'buying' | 'selling') => {
     setAppMode(mode);
@@ -87,6 +119,7 @@ function AppContent() {
   };
 
   const handleProductClick = (product: Product) => {
+    addRecentlyViewedProduct(product);
     setSelectedProduct(product);
   };
 
@@ -106,16 +139,112 @@ function AppContent() {
     if (tab === 'home') setSearchQuery('');
     try {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      if (typeof document !== 'undefined') {
+        document.documentElement.scrollLeft = 0;
+        document.body.scrollLeft = 0;
+      }
     } catch {
       window.scrollTo(0, 0);
     }
   };
 
+  // Deep-linking: Automatically load and open full product page if ?productId=... is in URL
   useEffect(() => {
+    let isMounted = true;
+
+    const loadProductFromUrl = async () => {
+      try {
+        if (typeof window === 'undefined') return;
+        const searchParams = new URLSearchParams(window.location.search);
+        let targetId = searchParams.get('productId') || searchParams.get('product') || searchParams.get('p');
+
+        // Hash fallback if shared as hash anchor (e.g., #product=123)
+        if (!targetId && window.location.hash) {
+          const hash = window.location.hash.replace(/^#/, '');
+          const hashParams = new URLSearchParams(hash.includes('?') ? hash.split('?')[1] : hash);
+          targetId = hashParams.get('productId') || hashParams.get('product') || hashParams.get('p');
+          if (!targetId && hash.startsWith('product=')) {
+            targetId = hash.split('product=')[1];
+          }
+        }
+
+        if (targetId && isMounted) {
+          const product = await fetchProductById(targetId);
+          if (product && isMounted) {
+            setSelectedProduct(product);
+          }
+        }
+      } catch (err) {
+        console.warn('Error loading product from URL deep link:', err);
+      }
+    };
+
+    loadProductFromUrl();
+
+    // Listen to browser Back / Forward buttons
+    const handlePopState = async () => {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const targetId = searchParams.get('productId') || searchParams.get('product') || searchParams.get('p');
+        if (targetId) {
+          const product = await fetchProductById(targetId);
+          if (product && isMounted) {
+            setSelectedProduct(product);
+          }
+        } else if (isMounted) {
+          setSelectedProduct(null);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  // Synchronize browser URL query param whenever product modal opens or closes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isSandboxed = window.self !== window.top;
+
     if (selectedProduct) {
       document.body.style.overflow = 'hidden';
+      if (!isSandboxed) {
+        try {
+          const currentUrl = new URL(window.location.href);
+          if (currentUrl.searchParams.get('productId') !== selectedProduct.id) {
+            currentUrl.searchParams.set('productId', selectedProduct.id);
+            const targetPath = currentUrl.pathname + (currentUrl.search || '');
+            window.history.replaceState({ productId: selectedProduct.id }, '', targetPath);
+          }
+        } catch {
+          // ignore in sandboxed environments
+        }
+      }
     } else {
       document.body.style.overflow = '';
+      if (!isSandboxed) {
+        try {
+          const currentUrl = new URL(window.location.href);
+          if (
+            currentUrl.searchParams.has('productId') ||
+            currentUrl.searchParams.has('product') ||
+            currentUrl.searchParams.has('p')
+          ) {
+            currentUrl.searchParams.delete('productId');
+            currentUrl.searchParams.delete('product');
+            currentUrl.searchParams.delete('p');
+            const cleanPath = currentUrl.pathname + (currentUrl.search || '');
+            window.history.replaceState({}, '', cleanPath);
+          }
+        } catch {
+          // ignore in sandboxed environments
+        }
+      }
     }
     return () => {
       document.body.style.overflow = '';
@@ -125,15 +254,15 @@ function AppContent() {
   // 1. Initializing authentication state check
   if (!authInitialized) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#2874f0] to-blue-600 shadow-lg shadow-blue-500/25 flex items-center justify-center mb-4 animate-pulse">
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#1b365d] via-slate-800 to-amber-500 shadow-xl shadow-black/40 flex items-center justify-center mb-4 animate-pulse border border-amber-500/30">
           <span className="text-3xl font-black text-white tracking-wider">AK</span>
         </div>
-        <div className="flex items-center gap-2 text-flipkart-600 font-bold text-base mb-1">
-          <Loader2 size={20} className="animate-spin" />
+        <div className="flex items-center gap-2 text-amber-400 font-bold text-base mb-1">
+          <Loader2 size={20} className="animate-spin text-amber-400" />
           <span>Verifying Secure Session...</span>
         </div>
-        <p className="text-xs text-gray-400 font-medium max-w-xs">Connecting to AKSelling Identity Cloud</p>
+        <p className="text-xs text-slate-400 font-medium max-w-xs">Connecting to AKSelling Identity Cloud</p>
       </div>
     );
   }
@@ -143,8 +272,8 @@ function AppContent() {
   // they can log in via AuthPage.
   if (appMode === 'selling') {
     return (
-      <div className="min-h-screen bg-slate-100 flex justify-center w-full touch-scroll-container">
-        <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-gray-200">
+      <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
+        <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 overflow-x-hidden">
           <SellerDashboard onBack={() => handleSwitchMode('buying')} />
         </div>
       </div>
@@ -152,12 +281,14 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex justify-center w-full touch-scroll-container">
-      <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-gray-200 flex flex-col">
+    <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
+      <div className="min-h-screen bg-slate-50 max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 flex flex-col overflow-x-hidden">
         <Header
           onSearch={handleSearch}
           onCartClick={() => setActiveTab('cart')}
           onAccountClick={() => setActiveTab('account')}
+          onNotificationClick={() => setShowNotifications(true)}
+          onOpenProduct={handleOpenProductById}
           onNavigateHome={() => {
             setActiveTab('home');
             setSearchQuery('');
@@ -165,27 +296,35 @@ function AppContent() {
           }}
         />
 
-      <main className="pb-16 min-h-[calc(100vh-60px)]">
+        <NotificationToastBanner onOpenProduct={handleOpenProductById} />
+
+      <main className="pb-16 min-h-[calc(100vh-60px)] flex-1 w-full">
         {activeTab === 'home' && (
-          <HomePage
-            searchQuery={searchQuery}
-            onProductClick={handleProductClick}
-            onCategoryClick={handleCategoryClick}
-            onNavigateDeals={() => setActiveTab('deals')}
-            onBecomeSeller={handleOpenSellerMode}
-          />
+          <ErrorBoundary fallbackTitle="Unable to load Home Page">
+            <HomePage
+              searchQuery={searchQuery}
+              onProductClick={handleProductClick}
+              onCategoryClick={handleCategoryClick}
+              onNavigateDeals={() => setActiveTab('deals')}
+              onBecomeSeller={handleOpenSellerMode}
+            />
+          </ErrorBoundary>
         )}
         {activeTab === 'categories' && (
-          <CategoriesPage
-            onProductClick={handleProductClick}
-            initialCategory={initialCategory}
-          />
+          <ErrorBoundary fallbackTitle="Unable to load Categories">
+            <CategoriesPage
+              onProductClick={handleProductClick}
+              initialCategory={initialCategory}
+            />
+          </ErrorBoundary>
         )}
         {activeTab === 'deals' && (
-          <BestDealsPage
-            onProductClick={handleProductClick}
-            onNavigateHome={() => setActiveTab('home')}
-          />
+          <ErrorBoundary fallbackTitle="Unable to load Best Deals">
+            <BestDealsPage
+              onProductClick={handleProductClick}
+              onNavigateHome={() => setActiveTab('home')}
+            />
+          </ErrorBoundary>
         )}
         {activeTab === 'cart' && (
           <ErrorBoundary fallbackTitle="Unable to load Cart">
@@ -197,15 +336,17 @@ function AppContent() {
           </ErrorBoundary>
         )}
         {activeTab === 'account' && (
-          <AccountPage
-            onLogout={() => setActiveTab('home')}
-            onLogin={() => setShowAuth(true)}
-            onSwitchToSeller={handleOpenSellerMode}
-            onSellOnAKSelling={handleOpenSellerMode}
-            onSellerDashboard={handleOpenSellerMode}
-            onOrders={() => setShowOrders(true)}
-            onAdminPanel={() => setShowAdmin(true)}
-          />
+          <ErrorBoundary fallbackTitle="Unable to load Account">
+            <AccountPage
+              onLogout={() => setActiveTab('home')}
+              onLogin={() => setShowAuth(true)}
+              onSwitchToSeller={handleOpenSellerMode}
+              onSellOnAKSelling={handleOpenSellerMode}
+              onSellerDashboard={handleOpenSellerMode}
+              onOrders={() => setShowOrders(true)}
+              onAdminPanel={() => setShowAdmin(true)}
+            />
+          </ErrorBoundary>
         )}
       </main>
 
@@ -215,8 +356,10 @@ function AppContent() {
         <ProductDetail
           product={selectedProduct}
           onBack={() => setSelectedProduct(null)}
-          onBuyNow={() => {
-            setBuyNowProduct(selectedProduct);
+          onBuyNow={(prod, size, color) => {
+            setBuyNowProduct(prod);
+            setBuyNowSize(size);
+            setBuyNowColor(color);
             setSelectedProduct(null);
           }}
           onGoToCart={() => {
@@ -230,9 +373,17 @@ function AppContent() {
         <BuyNowCheckout
           product={buyNowProduct}
           quantity={1}
-          onBack={() => setBuyNowProduct(null)}
+          selectedSize={buyNowSize}
+          selectedColor={buyNowColor}
+          onBack={() => {
+            setBuyNowProduct(null);
+            setBuyNowSize(undefined);
+            setBuyNowColor(undefined);
+          }}
           onSuccess={() => {
             setBuyNowProduct(null);
+            setBuyNowSize(undefined);
+            setBuyNowColor(undefined);
             setActiveTab('home');
           }}
         />
@@ -273,6 +424,12 @@ function AppContent() {
       {showAdmin && (
         <AdminPanel onBack={() => setShowAdmin(false)} />
       )}
+
+      <NotificationCenterModal
+        isOpen={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        onOpenProduct={handleOpenProductById}
+      />
       </div>
     </div>
   );
@@ -283,7 +440,9 @@ export default function App() {
     <I18nProvider>
       <AuthProvider>
         <CartProvider>
-          <AppContent />
+          <NotificationProvider>
+            <AppContent />
+          </NotificationProvider>
         </CartProvider>
       </AuthProvider>
     </I18nProvider>

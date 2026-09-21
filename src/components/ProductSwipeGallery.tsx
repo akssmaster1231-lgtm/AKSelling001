@@ -31,33 +31,106 @@ export default function ProductSwipeGallery({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const thumbnailsContainerRef = useRef<HTMLDivElement>(null);
-  const touchStartXRef = useRef<number>(0);
-  const touchStartYRef = useRef<number>(0);
-  const rafIdRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-    };
-  }, []);
+  // Tap vs Swipe disambiguation ref
+  const pointerStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
-  // Scroll to index smoothly
+  // Desktop mouse drag scrolling state
+  const isMouseDownRef = useRef(false);
+  const mouseStartXRef = useRef(0);
+  const mouseScrollLeftRef = useRef(0);
+  const hasMouseMovedRef = useRef(false);
+
+  // Programmatic scroll to index smoothly (for arrows, dots, and thumbnail clicks)
   const scrollToIndex = useCallback((index: number) => {
     const container = scrollContainerRef.current;
     if (!container) return;
     const clamped = Math.max(0, Math.min(index, safeImages.length - 1));
+    const containerWidth = container.clientWidth || container.offsetWidth || 360;
+    const targetScroll = clamped * containerWidth;
     setCurrentIndex(clamped);
-    const targetScroll = clamped * container.clientWidth;
-    container.scrollTo({ left: targetScroll, behavior: 'smooth' });
-
-    // Scroll thumbnail into view
-    if (thumbnailsContainerRef.current) {
-      const thumb = thumbnailsContainerRef.current.children[clamped] as HTMLElement;
-      if (thumb) {
-        thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    try {
+      if (typeof container.scrollTo === 'function') {
+        container.scrollTo({ left: targetScroll, behavior: 'smooth' });
+      } else {
+        container.scrollLeft = targetScroll;
+      }
+    } catch {
+      try {
+        container.scrollLeft = targetScroll;
+      } catch {
+        // ignore
       }
     }
   }, [safeImages.length]);
+
+  // Keep currentIndex accurately synchronized via IntersectionObserver (zero scroll jank, 60/120fps)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    try {
+      const slides = container.querySelectorAll<HTMLDivElement>('[data-gallery-slide]');
+      if (slides.length === 0) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              const idxAttr = entry.target.getAttribute('data-gallery-slide');
+              if (idxAttr !== null) {
+                const idx = parseInt(idxAttr, 10);
+                if (!isNaN(idx)) {
+                  setCurrentIndex(idx);
+                }
+              }
+            }
+          }
+        },
+        {
+          root: container,
+          threshold: 0.55,
+        }
+      );
+
+      slides.forEach(slide => observer.observe(slide));
+      return () => {
+        try {
+          observer.disconnect();
+        } catch {
+          // ignore
+        }
+      };
+    } catch {
+      // ignore
+    }
+  }, [safeImages.length]);
+
+  // Smoothly scroll active thumbnail into view when current index changes
+  useEffect(() => {
+    try {
+      if (thumbnailsContainerRef.current) {
+        const thumb = thumbnailsContainerRef.current.children[currentIndex] as HTMLElement;
+        if (thumb) {
+          if (typeof thumb.scrollIntoView === 'function') {
+            thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          }
+        }
+      }
+    } catch {
+      try {
+        if (thumbnailsContainerRef.current) {
+          const thumb = thumbnailsContainerRef.current.children[currentIndex] as HTMLElement;
+          if (thumb && typeof thumb.scrollIntoView === 'function') {
+            thumb.scrollIntoView();
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [currentIndex]);
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -69,38 +142,58 @@ export default function ProductSwipeGallery({
     scrollToIndex(currentIndex + 1);
   };
 
-  // Synchronize index on user manual swipe / scroll without layout thrashing
-  const handleScroll = () => {
-    if (rafIdRef.current) return;
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null;
-      const container = scrollContainerRef.current;
-      if (!container || container.clientWidth === 0) return;
-      const newIndex = Math.round(container.scrollLeft / container.clientWidth);
-      if (newIndex !== currentIndex && newIndex >= 0 && newIndex < safeImages.length) {
-        setCurrentIndex(newIndex);
-      }
-    });
+  // Track pointer down to differentiate between a tap (to view lightbox) and a swipe
+  const handlePointerDown = (e: React.PointerEvent) => {
+    pointerStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() };
   };
 
-  // Touch gesture handlers for fast swipe detection
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartXRef.current = e.touches[0].clientX;
-    touchStartYRef.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const diffX = touchStartXRef.current - e.changedTouches[0].clientX;
-    const diffY = touchStartYRef.current - e.changedTouches[0].clientY;
-
-    // Horizontal intent check (more horizontal than vertical and > 40px)
-    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 40) {
-      if (diffX > 0 && currentIndex < safeImages.length - 1) {
-        scrollToIndex(currentIndex + 1);
-      } else if (diffX < 0 && currentIndex > 0) {
-        scrollToIndex(currentIndex - 1);
+  const handleSlideClick = (idx: number, e: React.MouseEvent) => {
+    if (pointerStartRef.current) {
+      const dx = Math.abs(e.clientX - pointerStartRef.current.x);
+      const dy = Math.abs(e.clientY - pointerStartRef.current.y);
+      const dt = Date.now() - pointerStartRef.current.time;
+      // If user moved more than 7px or held down longer than 350ms, this was a swipe/scroll gesture
+      if (dx > 7 || dy > 7 || dt > 350) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
       }
     }
+    setCurrentIndex(idx);
+    setLightboxOpen(true);
+  };
+
+  // Mouse drag support for desktop browsers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    isMouseDownRef.current = true;
+    hasMouseMovedRef.current = false;
+    mouseStartXRef.current = e.pageX - container.offsetLeft;
+    mouseScrollLeftRef.current = container.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isMouseDownRef.current) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - mouseStartXRef.current) * 1.2;
+    if (Math.abs(walk) > 5) {
+      hasMouseMovedRef.current = true;
+    }
+    container.scrollLeft = mouseScrollLeftRef.current - walk;
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (!isMouseDownRef.current) return;
+    isMouseDownRef.current = false;
+    const container = scrollContainerRef.current;
+    if (!container || !hasMouseMovedRef.current) return;
+
+    // Settle to nearest slide on mouse release
+    const nearestIndex = Math.round(container.scrollLeft / container.clientWidth);
+    scrollToIndex(nearestIndex);
   };
 
   // Keyboard navigation when focused
@@ -117,26 +210,34 @@ export default function ProductSwipeGallery({
   return (
     <div className="bg-white select-none">
       {/* Main Carousel Viewport */}
-      <div className="relative aspect-square bg-slate-50 overflow-hidden group">
-        {/* Scroll / Swipe Container with CSS Scroll Snap */}
+      <div className="relative aspect-square bg-slate-50 overflow-hidden group touch-pan-y">
+        {/* Scroll / Swipe Container with 100% Native CSS Scroll Snap & Zero Jerk */}
         <div
           ref={scrollContainerRef}
-          onScroll={handleScroll}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-          className="flex w-full h-full overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
-          style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+          onPointerDown={handlePointerDown}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+          className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar cursor-grab active:cursor-grabbing"
+          style={{
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehaviorX: 'contain',
+          }}
         >
           {safeImages.map((imgUrl, idx) => {
             const isLoaded = loadedImages[idx];
             return (
               <div
                 key={idx}
+                data-gallery-slide={idx}
                 className="w-full h-full shrink-0 snap-center relative flex items-center justify-center bg-slate-50 cursor-zoom-in"
-                onClick={() => {
-                  setCurrentIndex(idx);
-                  setLightboxOpen(true);
+                style={{
+                  scrollSnapAlign: 'center',
+                  scrollSnapStop: 'always',
                 }}
+                onClick={(e) => handleSlideClick(idx, e)}
               >
                 {/* Shimmering Skeleton Loader */}
                 {!isLoaded && (
@@ -147,9 +248,12 @@ export default function ProductSwipeGallery({
                   src={imgUrl}
                   alt={`${title} - Angle ${idx + 1}`}
                   loading={idx === 0 ? 'eager' : 'lazy'}
+                  decoding={idx === 0 ? 'sync' : 'async'}
+                  draggable={false}
+                  referrerPolicy="no-referrer"
                   onLoad={() => setLoadedImages(prev => ({ ...prev, [idx]: true }))}
                   onError={() => setLoadedImages(prev => ({ ...prev, [idx]: true }))}
-                  className={`w-full h-full object-cover transition-opacity duration-300 relative z-10 ${
+                  className={`w-full h-full object-cover transition-opacity duration-250 relative z-10 pointer-events-none select-none ${
                     isLoaded ? 'opacity-100' : 'opacity-0'
                   }`}
                 />
@@ -160,13 +264,13 @@ export default function ProductSwipeGallery({
 
         {/* Discount & Spec Badges */}
         {discount !== undefined && discount > 0 && (
-          <span className="absolute top-3 left-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-black px-2.5 py-1 rounded-md shadow-md z-20">
+          <span className="absolute top-3 left-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-black px-2.5 py-1 rounded-md shadow-md z-20 pointer-events-none">
             {discount}% OFF
           </span>
         )}
 
         {(neckType || fitType) && (
-          <span className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-sm z-20">
+          <span className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-sm z-20 pointer-events-none">
             {[neckType, fitType].filter(Boolean).join(' • ')}
           </span>
         )}
@@ -179,7 +283,7 @@ export default function ProductSwipeGallery({
                 type="button"
                 onClick={handlePrev}
                 aria-label="Previous Image"
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/85 hover:bg-white text-slate-800 shadow-md backdrop-blur-xs flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 sm:opacity-90 z-20 cursor-pointer"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow-md flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 sm:opacity-90 z-20 cursor-pointer active:scale-95"
               >
                 <ChevronLeft size={18} strokeWidth={2.5} />
               </button>
@@ -190,7 +294,7 @@ export default function ProductSwipeGallery({
                 type="button"
                 onClick={handleNext}
                 aria-label="Next Image"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/85 hover:bg-white text-slate-800 shadow-md backdrop-blur-xs flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 sm:opacity-90 z-20 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow-md flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 sm:opacity-90 z-20 cursor-pointer active:scale-95"
               >
                 <ChevronRight size={18} strokeWidth={2.5} />
               </button>
@@ -200,7 +304,7 @@ export default function ProductSwipeGallery({
 
         {/* Flipkart-Style Counter Badge */}
         {safeImages.length > 1 && (
-          <div className="absolute bottom-3 right-3 bg-slate-950/70 backdrop-blur-xs text-white text-[11px] font-mono font-bold px-2 py-0.5 rounded-full shadow-sm z-20 flex items-center gap-1 pointer-events-none">
+          <div className="absolute bottom-3 right-3 bg-slate-950/75 backdrop-blur-xs text-white text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full shadow-sm z-20 flex items-center gap-1 pointer-events-none">
             <span>{currentIndex + 1}</span>
             <span className="text-slate-400">/</span>
             <span>{safeImages.length}</span>
@@ -211,10 +315,11 @@ export default function ProductSwipeGallery({
         <button
           type="button"
           onClick={() => setLightboxOpen(true)}
-          className="absolute bottom-3 left-3 bg-white/80 hover:bg-white text-slate-700 p-1.5 rounded-full shadow-sm backdrop-blur-xs transition-colors z-20"
+          className="absolute bottom-3 left-3 bg-white/85 hover:bg-white text-slate-700 p-1.5 rounded-full shadow-sm backdrop-blur-xs transition-all z-20 cursor-pointer active:scale-95"
           title="Inspect Full Image"
+          aria-label="Zoom in on image"
         >
-          <Maximize2 size={13} />
+          <Maximize2 size={14} />
         </button>
       </div>
 
@@ -252,7 +357,7 @@ export default function ProductSwipeGallery({
                   : 'border-slate-200 hover:border-slate-300 opacity-70 hover:opacity-100'
               }`}
             >
-              <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+              <img src={imgUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
             </button>
           ))}
         </div>
@@ -294,7 +399,7 @@ export default function ProductSwipeGallery({
             <img
               src={safeImages[currentIndex]}
               alt={title}
-              className={`max-h-[85vh] max-w-full object-contain transition-transform duration-300 ${
+              className={`max-h-[85vh] max-w-full object-contain transition-transform duration-300 select-none ${
                 lightboxZoom ? 'scale-150 cursor-zoom-out' : 'scale-100 cursor-zoom-in'
               }`}
               onClick={() => setLightboxZoom(!lightboxZoom)}

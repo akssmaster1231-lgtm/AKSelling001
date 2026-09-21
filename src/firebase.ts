@@ -9,6 +9,8 @@ import {
   onSnapshot,
   query,
   where,
+  orderBy,
+  limit,
   deleteDoc,
   updateDoc,
 } from 'firebase/firestore';
@@ -24,6 +26,8 @@ import {
 import type { Product, Banner, PriceAlert } from '@/types';
 import type { UserProfile } from '@/auth-context';
 import type { SellerProduct } from '@/types/supplier';
+import type { AppNotification } from '@/types/notification';
+import { deduplicateProducts } from './utils/productDeduplication';
 
 /**
  * ------------------------------------------------------------------
@@ -177,7 +181,6 @@ export function sanitizeForFirestore<T>(obj: T): T {
 // When free daily write units limit is reached, this prevents repeated retries
 // and backoff delays, allowing the app to seamlessly fall back to local storage.
 const QUOTA_STORAGE_KEY = 'akselling_firestore_quota_exhausted_date';
-let hasLoggedQuotaNotice = false;
 
 // Auto-reset any legacy quota flags when pointing to the genuine production project
 if (typeof window !== 'undefined') {
@@ -212,6 +215,9 @@ export function isQuotaExhausted(): boolean {
 
 export function markQuotaExhausted(reason?: unknown): void {
   if (typeof window === 'undefined') return;
+  if (reason) {
+    // Track error reason if present
+  }
   try {
     const today = new Date().toISOString().slice(0, 10);
     localStorage.setItem(QUOTA_STORAGE_KEY, today);
@@ -219,16 +225,9 @@ export function markQuotaExhausted(reason?: unknown): void {
   } catch {
     // ignore
   }
-  if (!hasLoggedQuotaNotice) {
-    hasLoggedQuotaNotice = true;
-    console.warn(
-      '[Firestore] Free daily write quota reached on free-tier database. Seamlessly switching to local offline persistence.',
-      reason
-    );
-  }
 }
 
-export function handleFirestoreError(err: unknown, operationName: string): void {
+export function handleFirestoreError(err: unknown, operationName?: string): void {
   const msg = String((err as { message?: string })?.message || err || '');
   const code = String((err as { code?: string })?.code || '');
   if (
@@ -237,9 +236,7 @@ export function handleFirestoreError(err: unknown, operationName: string): void 
     msg.includes('Quota limit exceeded') ||
     msg.includes('Free daily write units')
   ) {
-    markQuotaExhausted(err);
-  } else {
-    console.warn(`[Firestore] ${operationName} notice:`, err);
+    markQuotaExhausted(operationName || err);
   }
 }
 
@@ -342,10 +339,11 @@ export function subscribeProducts(
               dimensions: data.dimensions,
             });
           });
+          const uniqueItems = deduplicateProducts(items);
           if (!categoryFilter || categoryFilter === 'all') {
-            setCachedProducts(items);
+            setCachedProducts(uniqueItems);
           }
-          callback(items);
+          callback(uniqueItems);
         } else {
           callback([]);
         }
@@ -443,6 +441,11 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
         normalizedProd.title,
         normalizedProd.images?.[0]
       ).catch(dispatchErr => console.warn('[PriceAlert] Auto-dispatch notice:', dispatchErr));
+    } else if (!existingProd) {
+      // New Catalog / Product Uploaded: Broadcast notification to all app users in real-time
+      broadcastNewCatalogNotification(normalizedProd).catch(dispatchErr =>
+        console.warn('[NewCatalog] Auto-broadcast notice:', dispatchErr)
+      );
     }
 
     const nextCached = current.some(p => p.id === prodId)
@@ -483,8 +486,10 @@ export async function seedInitialProductsIfEmpty(): Promise<void> {
 export interface FirestoreOrder {
   id: string;
   customer_name: string;
+  customer_email?: string;
   customer_phone: string;
   customer_address: string;
+  user_id?: string;
   items: Array<{
     product_id: string;
     product_title: string;
@@ -494,6 +499,9 @@ export interface FirestoreOrder {
     sku?: string;
     size?: string;
     color?: string;
+    design?: string;
+    fabric?: string;
+    brand?: string;
   }>;
   total_amount: number;
   payment_method: string;
@@ -1049,17 +1057,22 @@ export async function deleteCategoryFromFirestore(catId: string): Promise<void> 
 // -------------------------------------------------------------
 
 export interface PaymentTransactionRecord {
-  id: string;
+  id?: string;
   order_id?: string;
-  payment_id: string;
+  orderId?: string;
+  payment_id?: string;
+  paymentId?: string;
   signature?: string;
   amount: number;
-  currency: string;
+  currency?: string;
   customer_name?: string;
+  customerName?: string;
   customer_phone?: string;
+  customerPhone?: string;
   status: 'captured' | 'authorized' | 'verified';
-  gateway: 'razorpay' | 'cashfree' | 'simulated';
-  recorded_at: string;
+  gateway?: 'razorpay' | 'cashfree' | 'simulated';
+  method?: string;
+  recorded_at?: string;
 }
 
 export async function logPaymentTransactionToFirestore(
@@ -1310,6 +1323,166 @@ export async function checkAndDispatchPriceDropAlerts(
 
   return { triggeredCount };
 }
+
+/**
+ * ------------------------------------------------------------------
+ * REAL-TIME NOTIFICATIONS & NEW CATALOG BROADCAST SYSTEM
+ * ------------------------------------------------------------------
+ */
+
+const NOTIFICATIONS_CACHE_KEY = 'akselling_app_notifications';
+
+export function getCachedNotifications(): AppNotification[] {
+  try {
+    const cached = localStorage.getItem(NOTIFICATIONS_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+export function setCachedNotifications(notifications: AppNotification[]): void {
+  try {
+    localStorage.setItem(NOTIFICATIONS_CACHE_KEY, JSON.stringify(notifications.slice(0, 50)));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Broadcast a new catalog / product upload notification to all app users via Firestore
+ */
+export async function broadcastNewCatalogNotification(
+  product: Product | SellerProduct,
+  customMessage?: string
+): Promise<AppNotification | null> {
+  const prodTitle = product.title || 'New Arrival Catalog';
+  const prodPrice = Number(product.price) || 0;
+  const prodImg = (Array.isArray(product.images) && product.images[0]) || ('image' in product ? product.image : '') || '';
+  const notifId = `notif_cat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  
+  const notification: AppNotification = {
+    id: notifId,
+    type: 'NEW_CATALOG',
+    title: '✨ New Catalog Uploaded!',
+    message: customMessage || `${prodTitle} is now live in ${product.category || 'the catalog'} at just ₹${prodPrice.toLocaleString('en-IN')}! Check it out now.`,
+    productId: product.id,
+    productTitle: prodTitle,
+    productPrice: prodPrice,
+    productImage: typeof prodImg === 'string' ? prodImg : '',
+    category: product.category || 'General',
+    createdAt: new Date().toISOString(),
+    read: false,
+    senderName: 'AKSelling Store',
+  };
+
+  // 1. Immediately store in local cache and dispatch window event so local user gets it instantly
+  const current = getCachedNotifications();
+  const updated = [notification, ...current.filter(n => n.id !== notifId)].slice(0, 50);
+  setCachedNotifications(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('akselling_new_notification', { detail: notification }));
+    window.dispatchEvent(new CustomEvent('akselling_notifications_updated'));
+  }
+
+  // 2. Persist to Firestore notifications collection so all connected users receive the live notification
+  if (!isQuotaExhausted()) {
+    try {
+      const docRef = doc(db, 'notifications', notifId);
+      const firestorePayload = sanitizeForFirestore({
+        ...notification,
+        timestamp: new Date().toISOString(),
+      });
+      await setDoc(docRef, firestorePayload);
+    } catch (err) {
+      console.warn('broadcastNewCatalogNotification to Firestore notice:', err);
+    }
+  }
+
+  return notification;
+}
+
+/**
+ * Real-time subscription to notifications across Firestore
+ */
+export function subscribeNotifications(
+  callback: (notifications: AppNotification[]) => void
+): () => void {
+  // Always emit cached notifications first
+  const initial = getCachedNotifications();
+  if (initial.length > 0) {
+    callback(initial);
+  }
+
+  if (isQuotaExhausted()) {
+    return () => {};
+  }
+
+  try {
+    const notifsRef = collection(db, 'notifications');
+    const q = query(notifsRef, orderBy('createdAt', 'desc'), limit(40));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const liveList: AppNotification[] = snapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return {
+              id: docSnap.id,
+              type: (data.type as AppNotification['type']) || 'NEW_CATALOG',
+              title: (data.title as string) || 'New Notification',
+              message: (data.message as string) || '',
+              productId: data.productId as string | undefined,
+              productTitle: data.productTitle as string | undefined,
+              productPrice: data.productPrice as number | undefined,
+              productImage: data.productImage as string | undefined,
+              category: data.category as string | undefined,
+              createdAt: (data.createdAt as string) || (data.timestamp as string) || new Date().toISOString(),
+              read: Boolean(data.read),
+              link: data.link as string | undefined,
+              senderName: (data.senderName as string) || 'AKSelling',
+            };
+          });
+
+          // Merge with local read states
+          const readIds = new Set<string>();
+          try {
+            const storedRead = localStorage.getItem('akselling_read_notification_ids');
+            if (storedRead) {
+              (JSON.parse(storedRead) as string[]).forEach((id: string) => readIds.add(id));
+            }
+          } catch {
+            // ignore
+          }
+
+          const finalized = liveList.map(n => ({
+            ...n,
+            read: n.read || readIds.has(n.id),
+          }));
+
+          setCachedNotifications(finalized);
+          callback(finalized);
+        } else if (initial.length > 0) {
+          callback(initial);
+        }
+      },
+      (err) => {
+        handleFirestoreError(err, 'subscribeNotifications');
+        callback(getCachedNotifications());
+      }
+    );
+
+    return unsubscribe;
+  } catch (err) {
+    handleFirestoreError(err, 'subscribeNotifications');
+    return () => {};
+  }
+}
+
 
 
 

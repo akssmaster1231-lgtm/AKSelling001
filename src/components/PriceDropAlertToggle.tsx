@@ -93,9 +93,13 @@ export default function PriceDropAlertToggle({ product }: PriceDropAlertTogglePr
     };
   }, [product.id, product.price, user?.id, user?.email]);
 
-  // Request browser push notification permission
+  // Request browser push notification permission (safely guarded against iframe constraints)
   const requestPushPermission = async (): Promise<boolean> => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
+      return false;
+    }
+    if (window.self !== window.top) {
+      // In cross-origin sandboxed iframe, Notification permission is restricted
       return false;
     }
     try {
@@ -110,9 +114,14 @@ export default function PriceDropAlertToggle({ product }: PriceDropAlertTogglePr
     }
   };
 
-  // Dispatch a local browser notification
+  // Dispatch a local browser notification safely
   const fireLocalBrowserNotification = (title: string, body: string) => {
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      window.self === window.top &&
+      Notification.permission === 'granted'
+    ) {
       try {
         new Notification(title, {
           body,
@@ -140,7 +149,7 @@ export default function PriceDropAlertToggle({ product }: PriceDropAlertTogglePr
         setShowConfig(false);
         showToast('Price drop alert turned off for this item.', 'info');
       } catch (err) {
-        console.error('Failed to disable price alert:', err);
+        console.warn('Failed to disable price alert notice:', err);
         showToast('Could not turn off price alert. Please try again.', 'error');
       } finally {
         setSaving(false);
@@ -219,7 +228,7 @@ export default function PriceDropAlertToggle({ product }: PriceDropAlertTogglePr
         'success'
       );
     } catch (err) {
-      console.error('Failed to save price alert:', err);
+      console.warn('Failed to save price alert notice:', err);
       showToast('Could not save price drop alert. Please try again.', 'error');
     } finally {
       setSaving(false);

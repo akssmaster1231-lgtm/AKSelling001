@@ -25,6 +25,7 @@ export interface SellerProduct {
   salesCount?: number;
   views?: number;
   rating?: number;
+  ratingCount?: number;
   tags?: string[];
   keywords?: string[];
   sizes?: string[];
@@ -70,6 +71,7 @@ export interface SellerOrder {
   id: string;
   orderNumber: string;
   customerName: string;
+  customerEmail?: string;
   customerCity: string;
   customerAddress?: string;
   customerPincode?: string;
@@ -85,6 +87,9 @@ export interface SellerOrder {
     sku?: string;
     size?: string;
     color?: string;
+    design?: string;
+    fabric?: string;
+    brand?: string;
   }[];
   totalAmount: number;
   paymentMethod: string;

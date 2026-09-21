@@ -46,7 +46,7 @@ export default function OrderTrackingModal({
 
   const checkpoints = [
     {
-      stepId: 'ordered',
+      stepId: 'placed',
       title: 'Order Confirmed & Placed',
       location: 'AKSelling Seller Fulfillment Hub, New Delhi',
       time: order.created_at
@@ -58,30 +58,42 @@ export default function OrderTrackingModal({
       details: 'Vendor verified item inventory & generated dispatch manifest.',
     },
     {
+      stepId: 'packed',
+      title: 'Packed & Quality Verified',
+      location: 'AKSelling Packing Center, Unit 4',
+      time: order.created_at
+        ? new Date(new Date(order.created_at).getTime() + 1.5 * 3600000).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })
+        : 'Packed',
+      details: 'Merchandise wrapped, boxed with tamper-proof seal, and shipping label attached.',
+    },
+    {
       stepId: 'shipped',
       title: 'Dispatched & In Transit',
       location: `${displayCourier} Hub, Sorting Facility`,
       time: order.created_at
-        ? new Date(new Date(order.created_at).getTime() + 4 * 3600000).toLocaleString('en-IN', {
+        ? new Date(new Date(order.created_at).getTime() + 5 * 3600000).toLocaleString('en-IN', {
             dateStyle: 'medium',
             timeStyle: 'short',
           })
         : 'In Transit',
-      details: `AWB ${displayAwb} assigned. Linehaul express transport in transit.`,
+      details: `AWB ${displayAwb} assigned. Linehaul express transport in transit to destination city.`,
     },
     {
       stepId: 'out_for_delivery',
       title: 'Out for Doorstep Delivery',
       location: 'Local Delivery Center, Destination PIN',
       time: 'Today, 10:30 AM',
-      details: 'Delivery executive assigned. Rider will call before arrival.',
+      details: 'Delivery executive assigned. Rider will contact you prior to delivery.',
     },
     {
       stepId: 'delivered',
       title: 'Package Delivered',
       location: order.customer_address ? order.customer_address.split(',')[0] : 'Customer Doorstep',
       time: 'Completed',
-      details: 'Item verified and handed over with zero contact delivery.',
+      details: 'Item verified and handed over with zero-contact digital confirmation.',
     },
   ];
 
@@ -158,17 +170,17 @@ export default function OrderTrackingModal({
             </div>
           </div>
 
-          {/* 4 Visual Steps Progress Bar */}
+          {/* Visual Steps Progress Bar */}
           <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Visual Delivery Journey
+              Visual Shipping Stages
             </h3>
 
             <div className="relative pt-1 pb-1">
-              <div className="absolute top-[22px] left-[12%] right-[12%] h-1 bg-slate-200 rounded-full" />
+              <div className="absolute top-[22px] left-[8%] right-[8%] h-1 bg-slate-200 rounded-full" />
               <div
-                className="absolute top-[22px] left-[12%] h-1 bg-gradient-to-r from-blue-600 to-emerald-500 rounded-full transition-all duration-700 ease-out"
-                style={{ width: `${(activeIndex / 3) * 76}%` }}
+                className="absolute top-[22px] left-[8%] h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 rounded-full transition-all duration-700 ease-out shadow-xs"
+                style={{ width: `${(activeIndex / 4) * 84}%` }}
               />
 
               <div className="relative z-10 flex items-start justify-between">
@@ -178,26 +190,26 @@ export default function OrderTrackingModal({
                   const StepIcon = s.icon;
 
                   return (
-                    <div key={s.id} className="flex flex-col items-center text-center w-1/4">
+                    <div key={s.id} className="flex flex-col items-center text-center w-1/5 px-0.5">
                       <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                        className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all ${
                           isDone
                             ? 'bg-emerald-600 text-white shadow-xs'
                             : isCurrent
-                            ? activeIndex === 3
+                            ? activeIndex === 4
                               ? 'bg-emerald-600 text-white ring-4 ring-emerald-100 shadow-md'
                               : 'bg-[#2874f0] text-white ring-4 ring-blue-100 shadow-md animate-pulse'
                             : 'bg-white text-slate-300 border-2 border-slate-200'
                         }`}
                       >
                         {isDone ? (
-                          <Check size={16} strokeWidth={3} className="text-white" />
+                          <Check size={15} strokeWidth={3} className="text-white" />
                         ) : (
-                          <StepIcon size={15} strokeWidth={isCurrent ? 2.5 : 2} />
+                          <StepIcon size={14} strokeWidth={isCurrent ? 2.5 : 2} />
                         )}
                       </div>
                       <span
-                        className={`mt-2 text-[10px] sm:text-[11px] font-bold ${
+                        className={`mt-1.5 text-[10px] sm:text-[11px] font-bold leading-tight ${
                           isDone
                             ? 'text-emerald-700'
                             : isCurrent
@@ -223,19 +235,19 @@ export default function OrderTrackingModal({
                   <span>Update Live Status in Real-Time</span>
                 </span>
                 <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md">
-                  Firestore Snapshot
+                  Firestore Real-Time Sync
                 </span>
               </div>
               <p className="text-[11px] text-blue-800/80">
                 Click any status below to immediately sync and watch the progress line advance:
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1">
                 {TRACKING_STEPS.map((s, i) => (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => onUpdateStatus(order.id, s.label)}
-                    className={`text-xs font-bold py-2 px-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                    className={`text-xs font-bold py-2 px-1.5 rounded-xl border text-center transition-all cursor-pointer ${
                       i === activeIndex
                         ? 'bg-[#2874f0] text-white border-[#2874f0] shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'

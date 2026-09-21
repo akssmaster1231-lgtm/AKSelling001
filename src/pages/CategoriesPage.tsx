@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search } from 'lucide-react';
-import { categories as defaultCategories, getAllCategories, products as fallbackProducts, fetchProductsByCategory } from '@/data';
+import { getAllCategories, products as fallbackProducts, fetchProductsByCategory, deduplicateProducts, categories as defaultCategories } from '@/data';
 import { subscribeCategories } from '@/firebase';
 import type { Product, Category } from '@/types';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
@@ -12,18 +12,25 @@ interface CategoriesPageProps {
 }
 
 export default function CategoriesPage({ onProductClick, initialCategory }: CategoriesPageProps) {
-  const [allCategories, setAllCategories] = useState<Category[]>(() => getAllCategories());
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory || allCategories[0]?.id || defaultCategories[0]?.id || 'fashion');
+  const [allCategories, setAllCategories] = useState<Category[]>(() => {
+    const list = getAllCategories();
+    return list.length > 0 ? list : defaultCategories;
+  });
+  const [selectedCategory, setSelectedCategory] = useState(
+    initialCategory || allCategories[0]?.id || 'apparel-manufacturing'
+  );
   const [search, setSearch] = useState('');
   const [dbProducts, setDbProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = subscribeCategories(() => {
-      setAllCategories(getAllCategories());
+      const list = getAllCategories();
+      setAllCategories(list.length > 0 ? list : defaultCategories);
     });
     const handleUpdate = () => {
-      setAllCategories(getAllCategories());
+      const list = getAllCategories();
+      setAllCategories(list.length > 0 ? list : defaultCategories);
     };
     window.addEventListener('akselling_categories_updated', handleUpdate);
     return () => {
@@ -56,7 +63,10 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
     };
   }, [selectedCategory]);
 
-  const allProducts = dbProducts.length > 0 ? dbProducts : fallbackProducts.filter(p => p.category === selectedCategory);
+  const allProducts = useMemo(() => {
+    const raw = dbProducts.length > 0 ? dbProducts : fallbackProducts.filter(p => p.category === selectedCategory);
+    return deduplicateProducts(raw);
+  }, [dbProducts, selectedCategory]);
 
   const filteredProducts = useMemo(() => {
     let result = allProducts;
@@ -72,17 +82,26 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
   const currentCategory = allCategories.find(c => c.id === selectedCategory) || allCategories[0];
 
   return (
-    <div className="pb-4">
+    <div className="pb-4 w-full overflow-x-hidden">
       <div className="px-3 pt-3">
-        <div className="flex items-center bg-white rounded-lg shadow-sm px-3 py-2.5">
-          <Search size={18} className="text-gray-400" />
+        <div className="flex items-center bg-white rounded-2xl shadow-md border-2 border-amber-400/60 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-300/40 px-3.5 py-2.5 h-12 transition-all">
+          <Search size={20} className="text-[#1b365d] stroke-[2.5] shrink-0" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={`Search in ${currentCategory?.name || 'categories'}`}
-            className="flex-1 px-2 text-sm outline-none text-gray-700"
+            placeholder={`Search in ${currentCategory?.name || 'categories'}...`}
+            className="flex-1 px-2.5 text-sm sm:text-[15px] font-medium outline-none text-slate-900 placeholder-slate-400 bg-transparent"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="p-1 text-slate-400 hover:text-slate-600 font-bold text-xs"
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
@@ -92,10 +111,10 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              className={`shrink-0 px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 selectedCategory === cat.id
-                  ? 'bg-flipkart-500 text-white shadow-md'
-                  : 'bg-white text-gray-600 shadow-sm'
+                  ? 'bg-gradient-to-r from-[#1b365d] to-slate-900 text-amber-300 shadow-md border border-amber-400/40'
+                  : 'bg-white text-slate-700 shadow-xs border border-slate-200/80 hover:bg-slate-50'
               }`}
             >
               {cat.name}

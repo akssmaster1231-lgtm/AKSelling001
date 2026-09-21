@@ -427,6 +427,28 @@ export function PricingToolModal({
 
 // 6. Payouts Modal
 export function PayoutsModal({ onClose }: { onClose: () => void }) {
+  const now = new Date();
+  const nextPayoutDate = new Date(now.getTime() + 3 * 86400000).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const settlement1 = new Date(now.getTime() - 4 * 86400000).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const settlement2 = new Date(now.getTime() - 11 * 86400000).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const settlement3 = new Date(now.getTime() - 18 * 86400000).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
       <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
@@ -444,15 +466,15 @@ export function PayoutsModal({ onClose }: { onClose: () => void }) {
           <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
             <div className="text-[11px] text-blue-800 font-medium">Upcoming Bank Transfer</div>
             <div className="text-2xl font-black text-[#2874f0] mt-0.5">₹34,250.00</div>
-            <div className="text-[10px] text-blue-700 mt-1">Expected in HDFC Bank (**4829) on <strong>25 Aug 2026</strong></div>
+            <div className="text-[10px] text-blue-700 mt-1">Expected in HDFC Bank (**4829) on <strong>{nextPayoutDate}</strong></div>
           </div>
 
           <div className="space-y-2">
             <h4 className="font-bold text-gray-900">Recent Bank Settlements</h4>
             {[
-              { date: '18 Aug 2026', amount: '₹28,940', orders: 48, utr: 'UTR8920194820' },
-              { date: '11 Aug 2026', amount: '₹31,420', orders: 56, utr: 'UTR8920119284' },
-              { date: '04 Aug 2026', amount: '₹24,800', orders: 42, utr: 'UTR8920048192' },
+              { date: settlement1, amount: '₹28,940', orders: 48, utr: 'UTR8920194820' },
+              { date: settlement2, amount: '₹31,420', orders: 56, utr: 'UTR8920119284' },
+              { date: settlement3, amount: '₹24,800', orders: 42, utr: 'UTR8920048192' },
             ].map((p, idx) => (
               <div key={idx} className="bg-gray-50 p-2.5 rounded-xl border border-gray-200 flex items-center justify-between">
                 <div>
@@ -556,34 +578,39 @@ export function ShipmentTrackingModal({
     : 'Noida (PIN: 201301)';
   const pickupHub = matched?.pickupLocation || 'Primary Central Logistics Hub (Gurugram - 122015)';
 
+  const tNow = new Date();
+  const tDay1 = new Date(tNow.getTime() - 2 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const tDay2 = new Date(tNow.getTime() - 1 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const tDay3 = tNow.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
   const steps = matched?.trackingSteps && matched.trackingSteps.length > 0
     ? matched.trackingSteps
     : [
         {
           label: 'Order Confirmed & Inventory Locked',
           location: 'Merchant Store Database',
-          time: '16 Aug, 10:30 AM',
+          time: `${tDay1}, 10:30 AM`,
           done: true,
           activity: 'Payment verified and packing slip generated',
         },
         {
           label: `Manifest Generated via ${activeCourier}`,
           location: pickupHub,
-          time: '16 Aug, 03:45 PM',
+          time: `${tDay1}, 03:45 PM`,
           done: true,
           activity: `AWB ${activeAwb} allotted in Shiprocket live panel`,
         },
         {
           label: 'Courier Rider Arrived & Packet Picked Up',
           location: pickupHub,
-          time: '17 Aug, 11:20 AM',
+          time: `${tDay2}, 11:20 AM`,
           done: true,
           activity: 'Physical barcode verified and sealed',
         },
         {
           label: `In Transit to ${destination}`,
           location: 'Regional Sorting Hub',
-          time: '18 Aug, 06:15 PM',
+          time: `${tDay3}, 06:15 PM`,
           done: true,
           activity: 'Express line-haul transit in progress',
         },

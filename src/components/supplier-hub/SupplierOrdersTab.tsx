@@ -485,6 +485,21 @@ Logistics Provider: ${providerName}`;
                             Size: <strong className="text-gray-700">{item.size}</strong>
                           </span>
                         )}
+                        {item.color && (
+                          <span>
+                            Color: <strong className="text-gray-700">{item.color}</strong>
+                          </span>
+                        )}
+                        {item.design && (
+                          <span>
+                            Design: <strong className="text-indigo-700">{item.design}</strong>
+                          </span>
+                        )}
+                        {item.fabric && (
+                          <span>
+                            Fabric: <strong className="text-emerald-700">{item.fabric}</strong>
+                          </span>
+                        )}
                         <span>
                           Qty: <strong className="text-gray-700">{item.quantity}</strong>
                         </span>
@@ -510,6 +525,11 @@ Logistics Provider: ${providerName}`;
                       {order.customerPhone && (
                         <span className="text-gray-500 text-[11px] ml-2 font-mono">
                           +91 {order.customerPhone.replace(/\D/g, '').slice(-10)}
+                        </span>
+                      )}
+                      {order.customerEmail && (
+                        <span className="text-blue-700 font-medium text-[11px] ml-2">
+                          ({order.customerEmail})
                         </span>
                       )}
                     </div>

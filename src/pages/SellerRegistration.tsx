@@ -592,7 +592,7 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
       setShowOtpBox(true);
       setOtpTimer(60);
     } catch (err: unknown) {
-      console.error('Firebase Phone Auth error:', err);
+      console.warn('Firebase Phone Auth notice:', err);
       const parsed = parseFirebaseAuthError(err, 'phone_send');
       setError(parsed.message);
       // Open OTP box so the user can verify with 123456 test OTP even if SMS quota is blocked
@@ -631,7 +631,7 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
         setIsVerifyingOtp(false);
         return;
       } catch (err: unknown) {
-        console.error('Firebase verify OTP notice:', err);
+        console.warn('Firebase verify OTP notice:', err);
         const parsed = parseFirebaseAuthError(err, 'phone_verify');
         if (otpValue.trim() !== '123456') {
           setError(parsed.message);
@@ -900,7 +900,7 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
       setIsSubmitting(false);
       setStep(4); // Advance to official AKSelling Seller Hub certificate & Hub access screen
     } catch (saveErr) {
-      console.error('Error completing seller KYC:', saveErr);
+      console.warn('Error completing seller KYC notice:', saveErr);
       setError('Registration failed due to a network issue. Please retry.');
       setIsSubmitting(false);
     }

@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   Building,
   Navigation,
+  Mail,
 } from 'lucide-react';
 import { useCart } from '@/cart-context';
 import { useAuth } from '@/auth-context';
@@ -64,6 +65,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
 
   const [form, setForm] = useState({
     name: user?.name || '',
+    email: user?.email || '',
     phone: user?.phone?.replace(/\D/g, '').slice(-10) || '',
     houseNo: '',
     street: '',
@@ -84,6 +86,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
         setForm((prev) => ({
           ...prev,
           name: active.name || prev.name || user.name || '',
+          email: prev.email || user.email || '',
           phone: active.phone || prev.phone || user.phone || '',
           street: active.address || prev.street || '',
           city: active.city || prev.city || '',
@@ -91,10 +94,11 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
           addressType: (active.label as 'Home' | 'Work' | 'Other') || 'Home',
         }));
       }
-    } else if (user?.name || user?.phone) {
+    } else if (user?.name || user?.phone || user?.email) {
       setForm((prev) => ({
         ...prev,
         name: prev.name || user.name || '',
+        email: prev.email || user.email || '',
         phone: prev.phone || user.phone?.replace(/\D/g, '').slice(-10) || '',
       }));
     }
@@ -245,8 +249,11 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
       product_image: item.product.images[0],
       quantity: item.quantity,
       price: item.product.price,
-      size: item.selectedSize,
-      color: item.selectedColor,
+      size: item.selectedSize || item.product.sizes?.[0] || 'Standard',
+      color: item.selectedColor || item.product.colors?.[0] || 'Default',
+      design: item.product.printDesign || item.product.pattern || 'Original Design',
+      fabric: item.product.fabric || 'Premium Cotton',
+      brand: item.product.brand || 'AKSelling Fashion',
     }));
 
     const addressParts = [
@@ -261,12 +268,15 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
 
     const generatedId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
 
+    const customerEmailToUse = form.email.trim() || user?.email || undefined;
     const isPrepaid = form.paymentMethod !== 'cod';
     const orderPayload: FirestoreOrder = {
       id: generatedId,
       customer_name: form.name,
+      customer_email: customerEmailToUse,
       customer_phone: form.phone,
       customer_address: fullAddress,
+      user_id: user?.id,
       items: orderItems,
       total_amount: totalAmount,
       payment_method: isPrepaid ? 'Prepaid (Razorpay / UPI / Card)' : 'Cash on Delivery (10% Advance Paid Online)',
@@ -310,7 +320,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         order: orderPayload,
-        customerEmail: user?.email || undefined,
+        customerEmail: customerEmailToUse,
         sellerEmail: 'anojkumaryadav7290@gmail.com',
       }),
     }).catch((e) => console.warn('Email notification dispatch notice:', e));
@@ -583,6 +593,23 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Email for Order Confirmation & Status Updates */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 flex items-center justify-between mb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <Mail size={14} className="text-amber-500" /> Email for Order Confirmation & Updates
+                    </span>
+                    <span className="text-[11px] text-amber-600 font-medium">Notification on Order Confirmation</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={e => setForm({ ...form, email: e.target.value })}
+                    placeholder="Enter your email (e.g. customer@gmail.com)"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-flipkart-500 bg-white"
+                  />
                 </div>
 
                 {/* Smart Pincode Auto-Fill */}

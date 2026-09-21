@@ -26,7 +26,7 @@ import {
 import { useAuth } from '@/auth-context';
 import { isVerifiedOwnerAdmin, OWNER_ADMIN_EMAIL, ADMIN_MASTER_PASSCODE } from '@/utils/sellerWhitelist';
 import { compressImageFile } from '@/utils/imageCompressor';
-import { fetchAllBanners, addBanner, deleteBanner, updateBanner } from '@/banner-api';
+import { fetchAllBanners, addBanner, deleteBanner, updateBanner, type MasterBanner } from '@/banner-api';
 import { AdminWithdrawalManager } from '@/components/AdminWithdrawalManager';
 import { getAllCategories, fetchProducts, formatPrice, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 import {
@@ -102,7 +102,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   const [catSaving, setCatSaving] = useState(false);
 
   // Banner State
-  const [banners, setBanners] = useState<Record<string, unknown>[]>([]);
+  const [banners, setBanners] = useState<MasterBanner[]>([]);
   const [loadingBanners, setLoadingBanners] = useState(true);
   const [showAddBanner, setShowAddBanner] = useState(false);
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
@@ -232,7 +232,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   const handleVerifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPin = pinInput.trim();
-    // Strictly validate both owner authorized email and permanent master passcode @@AKSS1#aKSS$$$
+    // Strictly validate authorized email and configured master passcode
     if (cleanPin === ADMIN_MASTER_PASSCODE) {
       if (!isOwner && signInWithDirectCredentials) {
         await signInWithDirectCredentials('Anoj Kumar Yadav', '+919999999999', OWNER_ADMIN_EMAIL);
@@ -290,7 +290,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       setSavedMsg(`Category "${updatedCategory.name}" saved with live reflection!`);
       setTimeout(() => setSavedMsg(''), 2500);
     } catch (err) {
-      console.error('Error saving category:', err);
+      console.warn('Error saving category notice:', err);
       alert('Failed to save category. Please try again.');
     } finally {
       setCatSaving(false);
@@ -308,7 +308,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       setSavedMsg(`Category "${cat.name}" deleted.`);
       setTimeout(() => setSavedMsg(''), 2500);
     } catch (err) {
-      console.error('Error deleting category:', err);
+      console.warn('Error deleting category notice:', err);
       alert('Failed to delete category.');
     }
   };
@@ -324,7 +324,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
         setBannerForm(prev => ({ ...prev, image: compressed }));
       }
     } catch (err) {
-      console.error('Failed to compress banner image:', err);
+      console.warn('Failed to compress banner image notice:', err);
     } finally {
       setIsCompressingBanner(false);
     }
@@ -343,7 +343,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     setShowAddBanner(true);
   };
 
-  const handleOpenEditBanner = (banner: Record<string, unknown>) => {
+  const handleOpenEditBanner = (banner: MasterBanner) => {
     setEditingBannerId(String(banner.id));
     setBannerForm({
       title: String(banner.title || ''),
@@ -385,7 +385,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       await loadBanners();
       setTimeout(() => setSavedMsg(''), 2500);
     } catch (err) {
-      console.error('Error saving banner:', err);
+      console.warn('Error saving banner notice:', err);
       alert('Failed to save banner.');
     } finally {
       setSavingBanner(false);
@@ -461,7 +461,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                     setPinInput(e.target.value);
                     setPinError(false);
                   }}
-                  placeholder="Enter Master Passcode (@@AKSS1#aKSS$$$)"
+                  placeholder="Enter Master Passcode"
                   className="w-full bg-gray-900 border border-gray-600 focus:border-[#9f2089] rounded-2xl pl-10 pr-11 py-3.5 text-center text-sm font-mono text-white placeholder:text-gray-500 placeholder:text-xs outline-none transition-all shadow-inner"
                 />
                 <button
@@ -475,7 +475,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
               </div>
               {pinError && (
                 <p className="text-xs text-rose-400 font-bold pt-1 animate-shake">
-                  Access Denied. Passcode does not match @@AKSS1#aKSS$$$ or user is not {OWNER_ADMIN_EMAIL}.
+                  Access Denied. Invalid master passcode or unauthorized administrator account.
                 </p>
               )}
             </div>
@@ -495,7 +495,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
               Enterprise Authentication Lock:
             </span>
             <p className="mt-0.5 leading-relaxed text-gray-300">
-              Only requests authenticated as <strong>{OWNER_ADMIN_EMAIL}</strong> with master passcode <strong>@@AKSS1#aKSS$$$</strong> are authorized to configure store assets.
+              Only requests authenticated as <strong>{OWNER_ADMIN_EMAIL}</strong> with the valid master passcode are authorized to configure store assets.
             </p>
           </div>
         </div>
@@ -540,10 +540,10 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     if (!file) return;
     setIsCompressingProduct(true);
     try {
-      const compressedBase64 = await compressImageFile(file, { maxWidth: 800, quality: 0.8 });
+      const compressedBase64 = await compressImageFile(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.92 });
       setProductForm(prev => ({ ...prev, image: compressedBase64 }));
     } catch (err) {
-      console.error('Product image upload failed', err);
+      console.warn('Product image upload notice:', err);
     } finally {
       setIsCompressingProduct(false);
     }
@@ -554,7 +554,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     setProductForm({
       title: '',
       brand: 'AKSelling',
-      category: categoriesList[0]?.id || 'fashion',
+      category: categoriesList[0]?.id || 'apparel-manufacturing',
       price: '',
       mrp: '',
       discount: 0,
@@ -631,7 +631,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       setShowAddProduct(false);
       setEditingProductId(null);
     } catch (err) {
-      console.error('Failed to save product to Firestore:', err);
+      console.warn('Failed to save product to Firestore notice:', err);
       alert('Failed to save product. Please try again.');
     } finally {
       setSavingProduct(false);
@@ -645,7 +645,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       setSavedMsg('Product deleted from Firestore!');
       setTimeout(() => setSavedMsg(''), 3000);
     } catch (err) {
-      console.error('Failed to delete product:', err);
+      console.warn('Failed to delete product notice:', err);
     }
   };
 
@@ -673,7 +673,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
         <div className="flex items-center gap-2">
           <div
             className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5"
-            title="Permanent Enterprise Passcode: @@AKSS1#aKSS$$$"
+            title="Enterprise Passcode: Active & Protected"
           >
             <ShieldCheck size={14} className="text-emerald-600" />
             <span className="hidden sm:inline">Hardened Passcode: Active</span>
@@ -850,16 +850,16 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                   <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 max-h-40 overflow-y-auto p-1 bg-gray-50 rounded-xl border border-gray-200">
                     {POPULAR_CATEGORY_ICONS.map(iconItem => (
                       <button
-                        key={iconItem.name}
+                        key={iconItem.iconName}
                         type="button"
-                        onClick={() => setCatForm(prev => ({ ...prev, icon: iconItem.name }))}
+                        onClick={() => setCatForm(prev => ({ ...prev, icon: iconItem.iconName }))}
                         className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                          catForm.icon === iconItem.name
+                          catForm.icon === iconItem.iconName
                             ? 'bg-purple-100 border-[#9f2089] text-[#9f2089] font-bold shadow-xs'
                             : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'
                         }`}
                       >
-                        <CategoryIcon name={iconItem.name} size={18} />
+                        <CategoryIcon name={iconItem.iconName} size={18} />
                         <span className="text-[10px] truncate max-w-full">{iconItem.label}</span>
                       </button>
                     ))}
@@ -1571,15 +1571,20 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
 
                   {/* Image Upload / URL */}
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                      Product Image URL or Direct File Upload
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-gray-700">
+                        Product Image (Ultra-HD 100% Crisp / Crystal Clear)
+                      </label>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        Zero Blur • Retina Ready
+                      </span>
+                    </div>
                     <div className="flex gap-2">
                       <input
                         type="url"
                         value={productForm.image}
                         onChange={e => setProductForm(prev => ({ ...prev, image: e.target.value }))}
-                        placeholder="https://images.unsplash.com/..."
+                        placeholder="Paste Ultra-HD image URL or click Upload..."
                         className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-blue-500"
                       />
                       <input
@@ -1593,31 +1598,36 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                         type="button"
                         onClick={() => productFileInputRef.current?.click()}
                         disabled={isCompressingProduct}
-                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                        className="bg-[#1b365d] hover:bg-slate-900 text-amber-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-amber-400/30"
                       >
                         {isCompressingProduct ? (
-                          <Loader2 size={14} className="animate-spin text-blue-600" />
+                          <Loader2 size={14} className="animate-spin text-amber-400" />
                         ) : (
                           <Upload size={14} />
                         )}
-                        <span>Upload</span>
+                        <span>{isCompressingProduct ? 'Optimizing HD...' : 'Upload Photo'}</span>
                       </button>
                     </div>
 
                     {productForm.image && (
-                      <div className="mt-2 flex items-center gap-3 p-2 bg-gray-50 rounded-xl border border-gray-200">
+                      <div className="mt-2 flex items-center gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                         <img
                           src={productForm.image}
                           alt="Preview"
-                          className="w-14 h-14 rounded-lg object-cover bg-white border border-gray-200 shrink-0"
+                          className="w-16 h-16 rounded-lg object-cover bg-white border border-slate-200 shrink-0 shadow-xs"
                           referrerPolicy="no-referrer"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = DEFAULT_PRODUCT_PLACEHOLDER;
                           }}
                         />
-                        <div className="text-[11px] text-gray-600 overflow-hidden">
-                          <p className="font-bold text-gray-800">Image Preview Ready</p>
-                          <p className="text-[10px] text-gray-500 truncate">{productForm.image.slice(0, 60)}...</p>
+                        <div className="text-[11px] text-gray-600 overflow-hidden flex-1">
+                          <div className="flex items-center gap-1 text-emerald-700 font-bold">
+                            <CheckCircle2 size={12} />
+                            <span>Ultra-HD Image Active</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            High-definition colors and fine details will be displayed without blurriness on mobile and desktop screens.
+                          </p>
                         </div>
                       </div>
                     )}

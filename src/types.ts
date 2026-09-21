@@ -27,6 +27,7 @@ export interface Product {
   dimensions?: { length: number; width: number; height: number };
   productType?: string;
   printDesign?: string;
+  pattern?: string;
   weightGsm?: string | number;
   shippingCharge?: number;
   isFreeShipping?: boolean;
@@ -78,7 +79,7 @@ export interface Banner {
   gradient: string;
 }
 
-export type OrderTrackingStepId = 'ordered' | 'shipped' | 'out_for_delivery' | 'delivered';
+export type OrderTrackingStepId = 'placed' | 'packed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'ordered';
 
 export interface OrderTrackingCheckpoint {
   id: string;

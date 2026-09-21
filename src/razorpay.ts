@@ -207,7 +207,7 @@ function promptInteractivePaymentGateway(
           paymentId: generatedPaymentId,
         });
       } catch (err) {
-        console.error('Payment verification dialog error:', err);
+        console.warn('Payment verification dialog notice:', err);
         overlay.remove();
         resolve({
           success: false,
@@ -399,7 +399,7 @@ export async function initiateRazorpayPayment(
                   paymentId: confirmedPaymentId,
                 });
               } catch (e: unknown) {
-                console.error('Payment processing callback error:', e);
+                console.warn('Payment processing callback notice:', e);
                 resolve({
                   success: true, // Customer already successfully paid via Razorpay
                   orderId: response.razorpay_order_id || effectiveOrderId,
@@ -432,7 +432,7 @@ export async function initiateRazorpayPayment(
     // In sandbox, test mode, or if Razorpay script is blocked by browser, launch interactive checkout
     return promptInteractivePaymentGateway(amountInRupees, effectiveOrderId, options);
   } catch (err: unknown) {
-    console.error('Razorpay general handler exception:', err);
+    console.warn('Razorpay general handler notice:', err);
     return promptInteractivePaymentGateway(
       amountInRupees,
       `order_safe_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,

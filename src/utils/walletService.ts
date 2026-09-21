@@ -362,7 +362,7 @@ export async function awardOrderCashback(
       celebrationMessage: milestoneAwarded > 0 ? MILESTONE_CELEBRATION_MESSAGE : undefined,
     };
   } catch (err) {
-    console.error('awardOrderCashback atomic transaction error:', err);
+    console.warn('awardOrderCashback notice:', err);
     return {
       cashbackEarned: 0,
       milestoneAwarded: 0,
@@ -447,7 +447,7 @@ export async function submitWithdrawalRequest(params: {
 
     return { success: true, requestId };
   } catch (err: unknown) {
-    console.error('submitWithdrawalRequest error:', err);
+    console.warn('submitWithdrawalRequest notice:', err);
     const msg = err instanceof Error ? err.message : 'Failed to submit request';
     return { success: false, requestId: '', error: msg };
   }
@@ -616,7 +616,7 @@ export async function settleWithdrawalRequest(params: {
       request: settledRequest || undefined,
     };
   } catch (err: unknown) {
-    console.error('settleWithdrawalRequest error:', err);
+    console.warn('settleWithdrawalRequest notice:', err);
     const msg = err instanceof Error ? err.message : 'Failed to settle withdrawal request';
     return {
       success: false,

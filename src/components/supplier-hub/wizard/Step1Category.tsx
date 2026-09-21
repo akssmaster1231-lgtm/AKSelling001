@@ -99,7 +99,7 @@ export default function Step1Category({
           }
         }
       } catch (err) {
-        console.error('Failed to delete category:', err);
+        console.warn('Failed to delete category notice:', err);
       }
     }
   };
@@ -135,7 +135,7 @@ export default function Step1Category({
       setEditingCategoryId(null);
       setCatName('');
     } catch (err) {
-      console.error('Error saving category:', err);
+      console.warn('Error saving category notice:', err);
       setErrorMsg('Failed to save category. Please try again.');
     } finally {
       setIsSavingCat(false);

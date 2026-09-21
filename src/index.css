@@ -5,23 +5,46 @@
 @layer base {
   * {
     -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
   }
   html {
     -webkit-text-size-adjust: 100%;
     touch-action: manipulation;
     overscroll-behavior-y: auto;
+    overflow-x: hidden !important;
+    width: 100%;
+    max-width: 100vw;
   }
   body {
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #f1f3f6;
-    color: #1e293b;
+    background-color: #0f172a;
+    color: #0f172a;
     min-height: 100%;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden !important;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     -webkit-overflow-scrolling: touch;
   }
+  ::selection {
+    background-color: #1b365d;
+    color: #fef3c7;
+  }
   #root {
     min-height: 100%;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden !important;
+  }
+
+  /* Ultra High-Definition Crisp Image Rendering */
+  img {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: auto;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform: translateZ(0);
   }
 }
 

@@ -1795,6 +1795,322 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
+  // AUTOMATED ORDER EMAIL NOTIFICATIONS (CUSTOMER & SELLER)
+  // -------------------------------------------------------------
+
+  function getMailTransporter() {
+    const user = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.VITE_EMAIL_USER || 'anojkumaryadav7290@gmail.com';
+    const pass = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASSWORD || '';
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = Number(process.env.SMTP_PORT) || 465;
+    const secure = port === 465;
+
+    if (!pass) {
+      return null;
+    }
+
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+    });
+  }
+
+  app.get('/api/notifications/email-config', (_req, res) => {
+    const hasSmtp = Boolean(
+      process.env.SMTP_PASS ||
+      process.env.EMAIL_PASS ||
+      process.env.GMAIL_APP_PASSWORD ||
+      process.env.EMAIL_PASSWORD
+    );
+    res.json({
+      configured: hasSmtp,
+      sender: process.env.SMTP_USER || process.env.EMAIL_USER || 'anojkumaryadav7290@gmail.com',
+      sellerNotificationRecipient: 'anojkumaryadav7290@gmail.com',
+      service: 'Gmail / SMTP Order Dispatch Notification Engine',
+    });
+  });
+
+  app.post('/api/notifications/send-order-email', async (req, res) => {
+    try {
+      const { order, customerEmail, sellerEmail = 'anojkumaryadav7290@gmail.com' } = req.body || {};
+
+      if (!order || !order.id) {
+        return res.status(400).json({ error: 'Order details required for dispatching notifications.' });
+      }
+
+      const orderId = order.id;
+      const customerName = order.customer_name || 'Customer';
+      const customerPhone = order.customer_phone || 'N/A';
+      const customerAddress = order.customer_address || 'N/A';
+      const paymentMethod = order.payment_method || 'Prepaid Online';
+      const paymentStatus = order.payment_status || 'Paid';
+      const totalAmount = order.total_amount || 0;
+      const items = Array.isArray(order.items) ? order.items : [];
+      const recipientCustomerEmail = customerEmail || order.customer_email || undefined;
+
+      // Format items table rows for both HTML emails
+      const itemsHtmlRows = items.map((item: {
+        product_title?: string;
+        title?: string;
+        quantity?: number;
+        price?: number;
+        size?: string;
+        color?: string;
+        design?: string;
+        fabric?: string;
+        brand?: string;
+        product_image?: string;
+        image?: string;
+      }, idx: number) => {
+        const title = item.product_title || item.title || `Product #${idx + 1}`;
+        const qty = item.quantity || 1;
+        const price = item.price || 0;
+        const size = item.size ? `<span style="display:inline-block;background:#e2e8f0;padding:2px 6px;border-radius:4px;font-size:12px;margin-right:6px;font-weight:600;">Size: ${item.size}</span>` : '';
+        const color = item.color ? `<span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:12px;margin-right:6px;font-weight:600;">Color: ${item.color}</span>` : '';
+        const design = item.design ? `<span style="display:inline-block;background:#ede9fe;color:#5b21b6;padding:2px 6px;border-radius:4px;font-size:12px;margin-right:6px;font-weight:600;">Design: ${item.design}</span>` : '';
+        const fabric = item.fabric ? `<span style="display:inline-block;background:#ecfdf5;color:#065f46;padding:2px 6px;border-radius:4px;font-size:12px;margin-right:6px;font-weight:600;">Fabric: ${item.fabric}</span>` : '';
+        const brand = item.brand ? `<span style="font-size:11px;color:#64748b;">[${item.brand}]</span> ` : '';
+        const img = item.product_image || item.image;
+
+        return `
+          <tr style="border-bottom:1px solid #e2e8f0;">
+            <td style="padding:12px 8px;vertical-align:top;width:60px;">
+              ${img ? `<img src="${img}" alt="${title}" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;" />` : ''}
+            </td>
+            <td style="padding:12px 8px;vertical-align:top;">
+              <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:4px;">${brand}${title}</div>
+              <div style="margin-top:4px;line-height:1.6;">
+                ${size}
+                ${color}
+                ${design}
+                ${fabric}
+              </div>
+            </td>
+            <td style="padding:12px 8px;vertical-align:top;text-align:center;font-weight:600;color:#334155;font-size:14px;">
+              ${qty}
+            </td>
+            <td style="padding:12px 8px;vertical-align:top;text-align:right;font-weight:700;color:#0f172a;font-size:14px;">
+              ₹${(price * qty).toLocaleString('en-IN')}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      const itemsTextList = items.map((item: {
+        product_title?: string;
+        title?: string;
+        quantity?: number;
+        price?: number;
+        size?: string;
+        color?: string;
+        design?: string;
+        fabric?: string;
+      }, i: number) => {
+        const title = item.product_title || item.title || `Item ${i + 1}`;
+        const specs = [
+          item.size ? `Size: ${item.size}` : null,
+          item.color ? `Color: ${item.color}` : null,
+          item.design ? `Design: ${item.design}` : null,
+          item.fabric ? `Fabric: ${item.fabric}` : null,
+        ].filter(Boolean).join(', ');
+        return `• ${title} (Qty: ${item.quantity || 1}, Price: ₹${item.price || 0}) ${specs ? `[${specs}]` : ''}`;
+      }).join('\n');
+
+      // 1. HTML Email for SELLER (Full details with customer name, phone, address, product, size, design)
+      const sellerHtml = `
+        <div style="font-family:Arial,sans-serif;max-width:650px;margin:0 auto;background:#f8fafc;padding:20px;color:#0f172a;">
+          <div style="background:#1b365d;color:#ffffff;padding:20px 24px;border-radius:12px 12px 0 0;text-align:left;">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#fbbf24;font-weight:800;margin-bottom:4px;">
+              AKSelling • New Order Notification
+            </div>
+            <h1 style="margin:0;font-size:22px;font-weight:800;">🎉 You Received a New Order!</h1>
+            <p style="margin:6px 0 0 0;font-size:14px;color:#cbd5e1;">
+              Order ID: <strong style="color:#ffffff;">#${orderId}</strong> • Placed on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+            </p>
+          </div>
+
+          <div style="background:#ffffff;padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+            <!-- Customer & Delivery Summary -->
+            <div style="background:#f1f5f9;border-left:4px solid #d97706;padding:16px;border-radius:6px;margin-bottom:24px;">
+              <h3 style="margin:0 0 10px 0;color:#0f172a;font-size:15px;font-weight:700;">📦 Customer & Delivery Full Details</h3>
+              <p style="margin:4px 0;font-size:14px;"><strong>Customer Name:</strong> ${customerName}</p>
+              <p style="margin:4px 0;font-size:14px;"><strong>Mobile Phone:</strong> +91 ${customerPhone}</p>
+              ${recipientCustomerEmail ? `<p style="margin:4px 0;font-size:14px;"><strong>Customer Email:</strong> ${recipientCustomerEmail}</p>` : ''}
+              <p style="margin:4px 0;font-size:14px;line-height:1.5;"><strong>Full Delivery Address:</strong> ${customerAddress}</p>
+              <p style="margin:4px 0;font-size:14px;"><strong>Payment Method:</strong> ${paymentMethod}</p>
+              <p style="margin:4px 0;font-size:14px;"><strong>Payment Status:</strong> <span style="color:#16a34a;font-weight:700;">${paymentStatus}</span></p>
+              ${order.razorpay_payment_id ? `<p style="margin:4px 0;font-size:13px;color:#64748b;"><strong>Razorpay Payment ID:</strong> ${order.razorpay_payment_id}</p>` : ''}
+            </div>
+
+            <!-- Ordered Products with Size, Design, Fabric Specs -->
+            <h3 style="margin:0 0 12px 0;color:#0f172a;font-size:16px;font-weight:700;border-bottom:2px solid #e2e8f0;padding-bottom:8px;">
+              🛍️ Ordered Products & Manufacturing Specifications
+            </h3>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+              <thead>
+                <tr style="background:#f8fafc;border-bottom:2px solid #cbd5e1;text-align:left;">
+                  <th style="padding:8px;font-size:12px;color:#475569;text-transform:uppercase;">Photo</th>
+                  <th style="padding:8px;font-size:12px;color:#475569;text-transform:uppercase;">Product, Size & Design</th>
+                  <th style="padding:8px;font-size:12px;color:#475569;text-transform:uppercase;text-align:center;">Qty</th>
+                  <th style="padding:8px;font-size:12px;color:#475569;text-transform:uppercase;text-align:right;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtmlRows}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3" style="padding:12px 8px;text-align:right;font-weight:700;font-size:15px;color:#0f172a;">Grand Total:</td>
+                  <td style="padding:12px 8px;text-align:right;font-weight:800;font-size:17px;color:#16a34a;">₹${Number(totalAmount).toLocaleString('en-IN')}</td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <div style="background:#ecfdf5;border:1px solid #a7f3d0;padding:14px;border-radius:8px;font-size:13px;color:#065f46;line-height:1.5;">
+              <strong>🚀 Next Steps for Dispatch:</strong> Open the <strong>AKSelling Supplier Hub</strong> to generate packaging slip, assign Shiprocket AWB, and schedule pickup from your warehouse within 24 hours.
+            </div>
+          </div>
+          <div style="text-align:center;padding-top:16px;font-size:12px;color:#94a3b8;">
+            AKSelling Marketplace • Automated Seller Notification Engine • anojkumaryadav7290@gmail.com
+          </div>
+        </div>
+      `;
+
+      // 2. HTML Email for CUSTOMER (Order Confirmation with tracking & full order details)
+      const customerHtml = `
+        <div style="font-family:Arial,sans-serif;max-width:650px;margin:0 auto;background:#f8fafc;padding:20px;color:#0f172a;">
+          <div style="background:#1b365d;color:#ffffff;padding:20px 24px;border-radius:12px 12px 0 0;text-align:left;">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#fbbf24;font-weight:800;margin-bottom:4px;">
+              AKSelling • Order Confirmed
+            </div>
+            <h1 style="margin:0;font-size:22px;font-weight:800;">Thank You, ${customerName}!</h1>
+            <p style="margin:6px 0 0 0;font-size:14px;color:#cbd5e1;">
+              Your order <strong style="color:#ffffff;">#${orderId}</strong> has been successfully confirmed and sent to our manufacturing & dispatch hub.
+            </p>
+          </div>
+
+          <div style="background:#ffffff;padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+            <div style="margin-bottom:20px;padding:14px;background:#eff6ff;border-radius:8px;border-left:4px solid #3b82f6;">
+              <h4 style="margin:0 0 6px 0;font-size:14px;color:#1e40af;">📍 Delivery Address:</h4>
+              <p style="margin:0;font-size:13px;color:#1e3a8a;line-height:1.5;">${customerAddress}</p>
+              <p style="margin:6px 0 0 0;font-size:12px;color:#3b82f6;">Contact Phone: +91 ${customerPhone}</p>
+            </div>
+
+            <h3 style="margin:0 0 12px 0;color:#0f172a;font-size:16px;font-weight:700;border-bottom:2px solid #e2e8f0;padding-bottom:8px;">
+              Items in Your Order
+            </h3>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+              <thead>
+                <tr style="background:#f8fafc;border-bottom:2px solid #cbd5e1;text-align:left;">
+                  <th style="padding:8px;font-size:12px;color:#475569;text-transform:uppercase;">Photo</th>
+                  <th style="padding:8px;font-size:12px;color:#475569;text-transform:uppercase;">Product, Size & Design</th>
+                  <th style="padding:8px;font-size:12px;color:#475569;text-transform:uppercase;text-align:center;">Qty</th>
+                  <th style="padding:8px;font-size:12px;color:#475569;text-transform:uppercase;text-align:right;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtmlRows}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3" style="padding:12px 8px;text-align:right;font-weight:700;font-size:15px;color:#0f172a;">Total Paid:</td>
+                  <td style="padding:12px 8px;text-align:right;font-weight:800;font-size:17px;color:#16a34a;">₹${Number(totalAmount).toLocaleString('en-IN')}</td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:14px;border-radius:8px;font-size:13px;color:#475569;line-height:1.6;">
+              <p style="margin:0 0 6px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
+              <p style="margin:0 0 6px 0;"><strong>Payment Status:</strong> <span style="color:#16a34a;font-weight:700;">${paymentStatus}</span></p>
+              <p style="margin:0;"><strong>Estimated Delivery:</strong> 2 - 4 business days. You will receive live tracking updates once the package is dispatched.</p>
+            </div>
+          </div>
+          <div style="text-align:center;padding-top:16px;font-size:12px;color:#94a3b8;">
+            AKSelling India • Verified Direct Fashion Manufacturing Marketplace • support.akselling@gmail.com
+          </div>
+        </div>
+      `;
+
+      const transporter = getMailTransporter();
+      let sellerSent = false;
+      let customerSent = false;
+      let emailError: string | null = null;
+
+      if (transporter) {
+        // Send to SELLER
+        try {
+          await transporter.sendMail({
+            from: `"AKSelling Orders" <${process.env.SMTP_USER || process.env.EMAIL_USER || 'anojkumaryadav7290@gmail.com'}>`,
+            to: sellerEmail,
+            subject: `🚨 NEW ORDER RECEIVED #${orderId} • ₹${totalAmount} from ${customerName}`,
+            text: `New Order Received #${orderId}\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAddress: ${customerAddress}\nPayment: ${paymentMethod} (${paymentStatus})\nTotal: ₹${totalAmount}\n\nItems:\n${itemsTextList}\n`,
+            html: sellerHtml,
+          });
+          sellerSent = true;
+          console.log(`[OrderNotification] ✅ Seller email sent to ${sellerEmail} for order #${orderId}`);
+        } catch (sErr: unknown) {
+          console.error('[OrderNotification] ⚠️ Failed to send seller email:', sErr);
+          emailError = sErr instanceof Error ? sErr.message : 'Seller email dispatch failed';
+        }
+
+        // Send to CUSTOMER (if email provided)
+        if (recipientCustomerEmail && recipientCustomerEmail.includes('@')) {
+          try {
+            await transporter.sendMail({
+              from: `"AKSelling" <${process.env.SMTP_USER || process.env.EMAIL_USER || 'anojkumaryadav7290@gmail.com'}>`,
+              to: recipientCustomerEmail,
+              subject: `✅ Order Confirmed! #${orderId} - AKSelling`,
+              text: `Hello ${customerName},\n\nYour order #${orderId} for ₹${totalAmount} has been confirmed.\n\nDelivery Address:\n${customerAddress}\n\nItems:\n${itemsTextList}\n\nThank you for shopping on AKSelling!`,
+              html: customerHtml,
+            });
+            customerSent = true;
+            console.log(`[OrderNotification] ✅ Customer confirmation email sent to ${recipientCustomerEmail}`);
+          } catch (cErr: unknown) {
+            console.error('[OrderNotification] ⚠️ Failed to send customer email:', cErr);
+            if (!emailError) {
+              emailError = cErr instanceof Error ? cErr.message : 'Customer email dispatch failed';
+            }
+          }
+        }
+      } else {
+        // Simulation log with full structured details
+        console.log('====================================================');
+        console.log(`[OrderNotification Engine] (Ready for Live SMTP Delivery)`);
+        console.log(`To Seller: ${sellerEmail}`);
+        console.log(`To Customer: ${recipientCustomerEmail || 'Not Provided'}`);
+        console.log(`Order ID: #${orderId} | Customer: ${customerName} | Mobile: ${customerPhone}`);
+        console.log(`Full Delivery Address: ${customerAddress}`);
+        console.log(`Items List:\n${itemsTextList}`);
+        console.log('====================================================');
+      }
+
+      res.json({
+        success: true,
+        orderId,
+        sellerSent,
+        customerSent,
+        sellerEmail,
+        customerEmail: recipientCustomerEmail || null,
+        smtpActive: Boolean(transporter),
+        emailError,
+        summary: {
+          customerName,
+          customerPhone,
+          customerAddress,
+          itemsCount: items.length,
+          totalAmount,
+        },
+      });
+    } catch (err: unknown) {
+      console.error('Order notification controller error:', err);
+      const message = err instanceof Error ? err.message : 'Error sending order notifications';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // -------------------------------------------------------------
   // VITE DEV SERVER / STATIC ASSET SERVING
   // -------------------------------------------------------------
 

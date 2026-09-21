@@ -60,7 +60,7 @@ export interface WithdrawalFormData {
   holderName: string;
 }
 
-export type WithdrawalRequestStatus = 'PROCESSING' | 'COMPLETED' | 'REJECTED';
+export type WithdrawalRequestStatus = 'PROCESSING' | 'PENDING' | 'COMPLETED' | 'REJECTED';
 
 export interface WithdrawalRequest {
   id: string;
@@ -70,6 +70,11 @@ export interface WithdrawalRequest {
   userEmail?: string;
   amount: number;
   method: 'upi' | 'bank';
+  upiId?: string;
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
+  holderName?: string;
   payoutDetails: {
     upiId?: string;
     accountNumber?: string;

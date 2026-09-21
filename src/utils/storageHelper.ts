@@ -12,14 +12,14 @@ export function safeLocalStorageSetItem(key: string, value: string): boolean {
   } catch (err) {
     console.warn(`localStorage quota exceeded while saving ${key}. Attempting mitigation...`, err);
     try {
-      // If saving seller products, sanitize by trimming huge base64 strings or keeping the most recent items
+      // If saving seller products, do NOT replace valid images with placeholders, keep them intact
       if (key === 'akselling_seller_products') {
         const parsed = JSON.parse(value);
         if (Array.isArray(parsed)) {
           const sanitized = parsed.map((item) => ({
             ...item,
             images: (item.images || []).map((img: string) => {
-              if (typeof img === 'string' && (img.includes('8532616') || (img.startsWith('data:') && img.length > 50000))) {
+              if (typeof img === 'string' && img.includes('8532616')) {
                 return DEFAULT_PRODUCT_PLACEHOLDER;
               }
               return img;

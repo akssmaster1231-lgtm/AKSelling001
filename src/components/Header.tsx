@@ -1,21 +1,35 @@
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { Search, Mic, Camera, ShoppingCart, X, Loader2 } from 'lucide-react';
+import { Search, Mic, Camera, ShoppingCart, X, Loader2, Bell } from 'lucide-react';
 import { useCart } from '@/cart-context';
 import { useAuth } from '@/auth-context';
 import { useI18n } from '@/i18n';
+import { useNotifications } from '@/notification-context';
 import HeaderLocationWidget from '@/components/HeaderLocationWidget';
+import SearchHistoryDropdown from '@/components/SearchHistoryDropdown';
+import { addSearchQuery } from '@/utils/searchHistory';
 
 interface HeaderProps {
   onSearch: (query: string) => void;
   onCartClick: () => void;
   onNavigateHome: () => void;
   onAccountClick?: () => void;
+  onNotificationClick?: () => void;
+  onOpenProduct?: (productId: string) => void;
 }
 
-export default function Header({ onSearch, onCartClick, onNavigateHome, onAccountClick }: HeaderProps) {
+export default function Header({
+  onSearch,
+  onCartClick,
+  onNavigateHome,
+  onAccountClick,
+  onNotificationClick,
+  onOpenProduct,
+}: HeaderProps) {
   const { t } = useI18n();
   const { user } = useAuth();
+  const { unreadCount } = useNotifications();
   const [query, setQuery] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -36,7 +50,19 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    onSearch(query);
+    const trimmed = query.trim();
+    if (trimmed) {
+      addSearchQuery(trimmed);
+    }
+    setShowDropdown(false);
+    onSearch(trimmed);
+  };
+
+  const handleSelectQuery = (selectedQuery: string) => {
+    setQuery(selectedQuery);
+    addSearchQuery(selectedQuery);
+    setShowDropdown(false);
+    onSearch(selectedQuery);
   };
 
   const handleVoice = () => {
@@ -48,6 +74,8 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
       setTimeout(() => {
         setVoiceActive(false);
         setQuery('wireless headphones');
+        addSearchQuery('wireless headphones');
+        setShowDropdown(false);
         onSearch('wireless headphones');
       }, 2000);
       return;
@@ -71,6 +99,10 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setQuery(transcript);
+      if (transcript.trim()) {
+        addSearchQuery(transcript.trim());
+      }
+      setShowDropdown(false);
       onSearch(transcript);
     };
     recognition.onerror = () => setVoiceActive(false);
@@ -139,6 +171,8 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
       setCameraOpen(false);
       setCapturedImage(null);
       setQuery('headphones');
+      addSearchQuery('headphones');
+      setShowDropdown(false);
       onSearch('headphones');
       onNavigateHome();
     }, 2500);
@@ -154,20 +188,42 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
 
   return (
     <>
-      <header className="sticky top-0 z-50 bg-flipkart-500 shadow-md w-full">
+      <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-900 via-[#1b365d] to-slate-900 shadow-md w-full border-b border-slate-800/80">
         <div className="w-full max-w-md mx-auto px-3 pt-2 pb-2.5">
           {/* Top Row: Logo & Location & Action Buttons */}
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-2 min-w-0">
-              <button onClick={onNavigateHome} className="flex items-baseline gap-0.5 shrink-0" id="header-logo-btn">
-                <span className="text-xl font-extrabold text-white tracking-tight">
-                  AK<span className="text-accent-400">Selling</span>
+              <button onClick={onNavigateHome} className="flex items-baseline gap-0.5 shrink-0 group" id="header-logo-btn">
+                <span className="text-xl font-black text-white tracking-tight drop-shadow-xs">
+                  AK<span className="text-amber-400 group-hover:text-yellow-300 transition-colors">Selling</span>
                 </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block ml-0.5" />
               </button>
               <HeaderLocationWidget />
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
+              {onNotificationClick && (
+                <button
+                  type="button"
+                  onClick={onNotificationClick}
+                  className="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-lg text-white hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+                  aria-label="View Notifications"
+                  title="Notifications Radar"
+                  id="header-notification-btn"
+                >
+                  <Bell size={20} className="text-slate-100" />
+                  {unreadCount > 0 && (
+                    <span
+                      id="header-notification-badge"
+                      className="absolute -top-0.5 right-0 bg-amber-400 text-slate-950 text-[10px] font-black rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-0.5 shadow-md ring-1 ring-slate-900 pointer-events-none animate-pulse"
+                    >
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+              )}
+
               {onAccountClick && (
                 <button
                   onClick={onAccountClick}
@@ -179,11 +235,11 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
                     <img
                       src={user.avatar}
                       alt={user.name || 'Account'}
-                      className="w-7 h-7 rounded-full object-cover border border-white/80 shadow-xs"
+                      className="w-7 h-7 rounded-full object-cover border border-amber-400/60 shadow-xs"
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-white/20 border border-white/40 flex items-center justify-center text-xs font-bold text-white shadow-xs">
+                    <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-amber-300 shadow-xs">
                       {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
                     </div>
                   )}
@@ -196,11 +252,11 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
                 aria-label="View Cart"
                 id="header-cart-btn"
               >
-                <ShoppingCart size={20} />
+                <ShoppingCart size={20} className="text-slate-100" />
                 {cartCount > 0 && (
                   <span
                     id="header-cart-badge"
-                    className="absolute -top-0.5 right-0 bg-accent-400 text-flipkart-900 text-[10px] font-black rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 shadow-xs ring-1 ring-flipkart-500 pointer-events-none"
+                    className="absolute -top-0.5 right-0 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-[10px] font-black rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-0.5 shadow-md ring-1 ring-slate-900 pointer-events-none"
                   >
                     {cartCount > 99 ? '99+' : cartCount}
                   </span>
@@ -210,17 +266,29 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
           </div>
 
           {/* Search Row */}
-          <form onSubmit={handleSubmit} className="w-full relative">
-            <div className="flex items-center bg-white rounded-md shadow-sm overflow-hidden h-9">
-              <div className="pl-2.5 text-gray-400 shrink-0">
-                <Search size={16} />
+          <form onSubmit={handleSubmit} className="w-full relative mt-0.5">
+            <div className="flex items-center bg-white rounded-2xl shadow-md border-2 border-amber-400/70 hover:border-amber-400 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-300/40 overflow-hidden h-12 transition-all">
+              <div className="pl-3.5 pr-1 text-[#1b365d] shrink-0 flex items-center justify-center">
+                <Search size={20} className="stroke-[2.5]" />
               </div>
               <input
+                id="header-search-input"
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => setShowDropdown(true)}
+                onClick={() => setShowDropdown(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setShowDropdown(false);
+                  }
+                }}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  if (!showDropdown) setShowDropdown(true);
+                }}
                 placeholder={t('searchPlaceholder')}
-                className="flex-1 min-w-0 px-2 text-xs sm:text-sm text-gray-800 placeholder-gray-400 bg-transparent outline-none"
+                className="flex-1 min-w-0 px-2 text-sm sm:text-[15px] text-slate-900 placeholder-slate-500 bg-transparent outline-none font-medium tracking-normal"
+                autoComplete="off"
               />
               {query && (
                 <button
@@ -228,38 +296,50 @@ export default function Header({ onSearch, onCartClick, onNavigateHome, onAccoun
                   onClick={() => {
                     setQuery('');
                     onSearch('');
+                    setShowDropdown(true);
                   }}
-                  className="px-1.5 text-gray-400 hover:text-gray-600 shrink-0"
+                  className="p-2 text-slate-400 hover:text-slate-700 shrink-0 cursor-pointer"
+                  title="Clear search"
                 >
-                  <X size={15} />
+                  <X size={18} />
                 </button>
               )}
               <button
                 type="button"
                 onClick={handleCamera}
-                className="px-2 border-l border-gray-100 text-gray-500 hover:text-flipkart-500 transition-colors shrink-0"
+                className="px-2.5 py-1.5 border-l border-slate-200 text-slate-600 hover:text-[#1b365d] transition-colors shrink-0 cursor-pointer flex items-center justify-center"
                 aria-label="Visual search"
+                title="Photo search"
               >
-                <Camera size={16} />
+                <Camera size={19} className="stroke-[2]" />
               </button>
               <button
                 type="button"
                 onClick={voiceActive ? stopVoice : handleVoice}
-                className={`px-2.5 transition-colors shrink-0 ${
-                  voiceActive ? 'text-flipkart-500' : 'text-gray-500 hover:text-flipkart-500'
+                className={`pl-2 pr-3 py-1.5 transition-colors shrink-0 cursor-pointer flex items-center justify-center ${
+                  voiceActive ? 'text-amber-500' : 'text-slate-600 hover:text-[#1b365d]'
                 }`}
                 aria-label="Voice search"
+                title="Voice search"
               >
                 {voiceActive ? (
                   <span className="relative flex items-center justify-center">
-                    <span className="absolute inline-flex h-4 w-4 rounded-full bg-flipkart-200 animate-pulse-ring" />
-                    <Mic size={16} className="relative" />
+                    <span className="absolute inline-flex h-5 w-5 rounded-full bg-amber-200 animate-pulse-ring" />
+                    <Mic size={19} className="relative text-amber-500 stroke-[2.2]" />
                   </span>
                 ) : (
-                  <Mic size={16} />
+                  <Mic size={19} className="stroke-[2]" />
                 )}
               </button>
             </div>
+
+            <SearchHistoryDropdown
+              isOpen={showDropdown}
+              query={query}
+              onSelectQuery={handleSelectQuery}
+              onSelectProduct={onOpenProduct}
+              onClose={() => setShowDropdown(false)}
+            />
           </form>
         </div>
       </header>

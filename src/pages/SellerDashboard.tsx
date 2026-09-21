@@ -290,7 +290,7 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
               paymentStatus: ro.payment_status || (isCod ? 'Partially Paid' : 'Paid'),
               razorpayOrderId: ro.razorpay_order_id,
               razorpayPaymentId: ro.razorpay_payment_id,
-              transactionId: ro.razorpay_payment_id || ro.razorpay_order_id || (ro as Record<string, unknown>).transaction_id as string,
+              transactionId: ro.razorpay_payment_id || ro.razorpay_order_id || (ro as unknown as Record<string, unknown>).transaction_id as string,
               status: (ro.status?.toLowerCase() === 'placed' ? 'pending' : ro.status?.toLowerCase() || 'pending') as SellerOrder['status'],
               orderDate: new Date(ro.created_at || Date.now()).toLocaleDateString('en-IN', {
                 day: 'numeric',
@@ -780,14 +780,19 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
         />
       )}
 
-      {trackingOrder && (
-        <ShipmentTrackingModal
-          orderNumber={trackingOrder.orderNumber}
-          courierName={trackingOrder.courierName || 'Shadowfax Express'}
-          awb={trackingOrder.awbCode || 'SFX9482910'}
-          onClose={() => setTrackingOrder(null)}
-        />
-      )}
+      {trackingOrder && (() => {
+        const itemRecord = trackingOrder as unknown as Record<string, unknown>;
+        const courier = (itemRecord.courierName || itemRecord.courierPartner || 'Shadowfax Express') as string;
+        const awb = (itemRecord.awbCode || itemRecord.trackingNumber || 'SFX9482910') as string;
+        return (
+          <ShipmentTrackingModal
+            orderNumber={trackingOrder.orderNumber}
+            courierName={courier}
+            awb={awb}
+            onClose={() => setTrackingOrder(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

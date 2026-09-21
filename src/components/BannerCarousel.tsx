@@ -92,7 +92,7 @@ export default function BannerCarousel({ banners }: BannerCarouselProps) {
               {banner.cta && (
                 <button
                   type="button"
-                  className="mt-3.5 w-fit bg-white text-flipkart-700 text-xs sm:text-sm font-extrabold px-5 py-2 rounded-full shadow-md hover:bg-flipkart-50 active:scale-95 transition-all cursor-pointer"
+                  className="mt-3.5 w-fit bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-orange-500 text-slate-950 text-xs sm:text-sm font-black px-5 py-2 rounded-full shadow-lg border border-amber-300 active:scale-95 transition-all cursor-pointer"
                 >
                   {banner.cta}
                 </button>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Flame, ArrowUpDown, Zap, CheckCircle2, ShieldCheck, ChevronLeft } from 'lucide-react';
+import { Flame, ArrowUpDown, Zap, CheckCircle2, ShieldCheck, ChevronLeft, Sparkles } from 'lucide-react';
 import { subscribeProducts, getCachedProducts } from '@/firebase';
-import { fetchProducts, products as fallbackProducts } from '@/data';
+import { fetchProducts, products as fallbackProducts, deduplicateProducts } from '@/data';
 import type { Product } from '@/types';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 
@@ -53,7 +53,10 @@ export default function BestDealsPage({ onProductClick, onNavigateHome }: BestDe
     };
   }, [dbProducts.length]);
 
-  const allProducts = dbProducts.length > 0 ? dbProducts : fallbackProducts;
+  const allProducts = useMemo(() => {
+    const raw = dbProducts.length > 0 ? dbProducts : fallbackProducts;
+    return deduplicateProducts(raw);
+  }, [dbProducts]);
 
   // Filter deals
   const filteredProducts = useMemo(() => {
@@ -112,7 +115,7 @@ export default function BestDealsPage({ onProductClick, onNavigateHome }: BestDe
   return (
     <div className="min-h-screen bg-slate-50 pb-20 animate-fade-in touch-scroll-container">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-red-600 via-orange-600 to-amber-500 text-white px-4 pt-4 pb-5 shadow-sm">
+      <div className="bg-gradient-to-r from-slate-900 via-[#1b365d] to-amber-600 text-white px-4 pt-4 pb-5 shadow-sm border-b border-slate-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {onNavigateHome && (
@@ -125,34 +128,34 @@ export default function BestDealsPage({ onProductClick, onNavigateHome }: BestDe
                 <ChevronLeft size={20} />
               </button>
             )}
-            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-yellow-200">
-              <Flame size={22} className="fill-yellow-300" />
+            <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/30 backdrop-blur-xs flex items-center justify-center text-amber-300">
+              <Flame size={22} className="fill-amber-400 text-amber-400" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <h1 className="text-base sm:text-lg font-black tracking-tight text-white">AKSelling Best Deals</h1>
-                <span className="bg-yellow-300 text-red-950 text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs">
+                <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs">
                   HOT DEALS
                 </span>
               </div>
-              <p className="text-[11px] text-white/90">Exclusive discounts from top verified suppliers</p>
+              <p className="text-[11px] text-amber-100/90 font-medium">Exclusive discounts from top verified suppliers</p>
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1.5 text-xs bg-black/20 px-2.5 py-1 rounded-full border border-white/20">
-            <ShieldCheck size={14} className="text-emerald-300" />
+          <div className="hidden sm:flex items-center gap-1.5 text-xs bg-slate-950/40 px-2.5 py-1 rounded-full border border-white/20">
+            <ShieldCheck size={14} className="text-amber-400" />
             <span className="font-semibold text-white">Verified Offers</span>
           </div>
         </div>
 
         {/* Live Deal Highlights Bar */}
-        <div className="mt-3 flex items-center justify-between text-xs bg-black/20 rounded-xl px-3 py-2 border border-white/15">
-          <div className="flex items-center gap-1.5 text-yellow-200 font-bold">
-            <Zap size={14} className="fill-yellow-300 animate-pulse" />
+        <div className="mt-3 flex items-center justify-between text-xs bg-slate-950/40 rounded-xl px-3 py-2 border border-white/15">
+          <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+            <Zap size={14} className="fill-amber-400 animate-pulse" />
             <span>Prices Dropped Today</span>
           </div>
-          <div className="text-[11px] text-white/90 flex items-center gap-1">
-            <CheckCircle2 size={12} className="text-emerald-300" />
+          <div className="text-[11px] text-white/90 flex items-center gap-1 font-medium">
+            <CheckCircle2 size={12} className="text-emerald-400" />
             <span>Free Delivery on eligible orders</span>
           </div>
         </div>

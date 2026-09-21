@@ -448,6 +448,7 @@ function SubScreenRenderer({
 }
 
 const screenLabels: Record<Exclude<SubScreen, null>, string> = {
+  wallet: 'Wallet & Cashback',
   devices: 'Manage Devices',
   editProfile: 'Edit Profile',
   cards: 'Saved Cards & Wallets',
@@ -896,11 +897,11 @@ function AddressesScreen({
 function LanguageScreen({ profile, updateProfile }: { profile: { language: string }; updateProfile: (u: { language?: string }) => Promise<void> }) {
   const { language, setLanguage } = useI18n();
   const languages: Language[] = ['English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Bengali', 'Marathi', 'Gujarati'];
-  const [selected, setSelected] = useState(language || profile.language || 'English');
+  const [selected, setSelected] = useState<Language>((language || profile.language || 'English') as Language);
 
-  const handleSelect = async (lang: string) => {
+  const handleSelect = async (lang: Language) => {
     setSelected(lang);
-    setLanguage(lang as Language);
+    setLanguage(lang);
     await updateProfile({ language: lang });
   };
 
@@ -933,6 +934,7 @@ function NotificationsScreen({
   updateProfile: (u: { notificationEnabled?: boolean }) => Promise<void>;
 }) {
   const [enabled, setEnabled] = useState(profile.notificationEnabled ?? true);
+  const [catalogUploads, setCatalogUploads] = useState(true);
   const [orderUpdates, setOrderUpdates] = useState(true);
   const [offers, setOffers] = useState(true);
   const [recommendations, setRecommendations] = useState(false);
@@ -956,6 +958,13 @@ function NotificationsScreen({
       </InfoCard>
       {enabled && (
         <div className="bg-white rounded-2xl shadow-xs border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+          <div className="px-4 py-3.5 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-800">New Catalog & Product Uploads</p>
+              <p className="text-xs text-gray-400">Instant alerts whenever a new catalog or product is added</p>
+            </div>
+            <ToggleSwitch checked={catalogUploads} onChange={() => setCatalogUploads(!catalogUploads)} />
+          </div>
           <div className="px-4 py-3.5 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-800">Order Updates</p>
@@ -1025,18 +1034,20 @@ function PrivacyScreen() {
 }
 
 function ReviewsScreen() {
+  const d1 = new Date(Date.now() - 5 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const d2 = new Date(Date.now() - 14 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   const reviews = [
     {
       product: 'Premium Wireless Headphones ANC',
       rating: 5,
       text: 'Superb sound stage, battery lasts over 30 hours! Fast delivery from AKSelling.',
-      date: '12 Aug 2026',
+      date: d1,
     },
     {
       product: 'Pro Runner Sneaker Men',
       rating: 4,
       text: 'Lightweight and very comfortable for marathon prep. True to size.',
-      date: '5 Aug 2026',
+      date: d2,
     },
   ];
   return (
@@ -1266,16 +1277,16 @@ function WishlistScreen() {
       id: item.id,
       title: item.title,
       price: item.price,
-      originalPrice: item.price * 1.4,
-      discount: '40% OFF',
+      mrp: Math.round(item.price * 1.4),
+      discount: 40,
       rating: 4.8,
-      reviewsCount: 124,
+      ratingCount: 124,
       images: [item.image],
       category: 'Electronics',
       description: item.title,
-      highlights: ['Premium Quality', 'Express Delivery'],
+      brand: 'AKSelling',
+      delivery: 'Free delivery by tomorrow',
       inStock: true,
-      stockCount: 10,
     });
     setAddedItem(item.id);
     setTimeout(() => setAddedItem(null), 2000);

@@ -110,7 +110,7 @@ export default function HeaderLocationWidget() {
 
   return (
     <>
-      {/* Flipkart-Style Header Location Pill */}
+      {/* Quick Delivery Hub Location Pill */}
       <button
         type="button"
         onClick={handleOpen}
@@ -118,11 +118,11 @@ export default function HeaderLocationWidget() {
         title="Change delivery location"
         id="header-location-selector-btn"
       >
-        <MapPin size={13} className="text-accent-300 shrink-0" />
+        <MapPin size={13} className="text-amber-400 shrink-0" />
         <span className="truncate">
-          Deliver to <strong className="font-bold text-white">{location.city} {location.pincode}</strong>
+          Ship to <strong className="font-bold text-white">{location.city} {location.pincode}</strong>
         </span>
-        <ChevronDown size={12} className="opacity-80 shrink-0 ml-0.5" />
+        <ChevronDown size={12} className="opacity-80 shrink-0 ml-0.5 text-amber-300" />
       </button>
 
       {/* Location Modal */}

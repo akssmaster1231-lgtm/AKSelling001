@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   PackageCheck,
+  Package,
   Truck,
   Bike,
   CheckCircle2,
@@ -37,7 +38,8 @@ export default function OrderStatusStepper({
   allowTestingControls = true,
 }: OrderStatusStepperProps) {
   const activeIndex = getStepIndexFromStatus(status);
-  const currentStep = TRACKING_STEPS[activeIndex];
+  const totalSteps = TRACKING_STEPS.length;
+  const currentStep = TRACKING_STEPS[activeIndex] || TRACKING_STEPS[0];
   const [isSimulating, setIsSimulating] = useState(false);
   const [showTester, setShowTester] = useState(false);
 
@@ -46,20 +48,20 @@ export default function OrderStatusStepper({
     let timer: NodeJS.Timeout;
     if (isSimulating && onUpdateStatus) {
       timer = setTimeout(() => {
-        const nextIndex = (activeIndex + 1) % 4;
+        const nextIndex = (activeIndex + 1) % totalSteps;
         const nextStep = TRACKING_STEPS[nextIndex];
         onUpdateStatus(nextStep.label);
-        if (nextIndex === 3) {
+        if (nextIndex === totalSteps - 1) {
           setIsSimulating(false);
         }
-      }, 3000);
+      }, 2500);
     }
     return () => clearTimeout(timer);
-  }, [isSimulating, activeIndex, onUpdateStatus]);
+  }, [isSimulating, activeIndex, onUpdateStatus, totalSteps]);
 
   // Width percentage for the horizontal progress connector
-  // 0 -> 0%, 1 -> 33.3%, 2 -> 66.6%, 3 -> 100%
-  const progressPercent = (activeIndex / 3) * 100;
+  // 0 -> 0%, 1 -> 25%, 2 -> 50%, 3 -> 75%, 4 -> 100%
+  const progressPercent = totalSteps > 1 ? (activeIndex / (totalSteps - 1)) * 100 : 0;
 
   return (
     <div className="w-full bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 shadow-2xs space-y-3.5">
@@ -69,26 +71,28 @@ export default function OrderStatusStepper({
           <span className="relative flex h-2.5 w-2.5">
             <span
               className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                activeIndex === 3 ? 'bg-emerald-400' : 'bg-[#2874f0]'
+                activeIndex === 4 ? 'bg-emerald-400' : 'bg-[#1b365d]'
               }`}
             />
             <span
               className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                activeIndex === 3 ? 'bg-emerald-600' : 'bg-[#2874f0]'
+                activeIndex === 4 ? 'bg-emerald-600' : 'bg-[#1b365d]'
               }`}
             />
           </span>
-          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-            <span>Real-time Tracking:</span>
+          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 flex-wrap">
+            <span>Shipping Stage:</span>
             <strong
-              className={`px-2 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide ${
-                activeIndex === 3
+              className={`px-2 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide transition-colors ${
+                activeIndex === 4
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : activeIndex === 3
+                  ? 'bg-amber-50 text-amber-800 border border-amber-300'
                   : activeIndex === 2
-                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                  ? 'bg-blue-50 text-[#1b365d] border border-blue-200'
                   : activeIndex === 1
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                  ? 'bg-slate-100 text-slate-800 border border-slate-300'
+                  : 'bg-slate-50 text-slate-700 border border-slate-200'
               }`}
             >
               {currentStep.label}
@@ -96,15 +100,15 @@ export default function OrderStatusStepper({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {allowTestingControls && onUpdateStatus && (
             <button
               type="button"
               onClick={() => setShowTester(prev => !prev)}
-              className="text-[10px] font-bold text-[#2874f0] bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1"
+              className="text-[10px] font-bold text-[#1b365d] bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 border border-slate-200"
               title="Test real-time step updates"
             >
-              <Sparkles size={11} />
+              <Sparkles size={11} className="text-amber-500" />
               <span>Simulate</span>
             </button>
           )}
@@ -113,27 +117,27 @@ export default function OrderStatusStepper({
             <button
               type="button"
               onClick={onViewDetails}
-              className="text-xs font-bold text-[#2874f0] hover:text-blue-700 transition-colors flex items-center gap-0.5 cursor-pointer"
+              className="text-xs font-bold text-[#1b365d] hover:text-amber-600 transition-colors flex items-center gap-0.5 cursor-pointer"
             >
-              <span>Live Radar</span>
+              <span>Radar</span>
               <ChevronRight size={14} />
             </button>
           )}
         </div>
       </div>
 
-      {/* The 4 Visual Progress Steps Track */}
-      <div className="relative pt-2 pb-1 px-1 sm:px-2">
+      {/* The Visual Shipping Progress Bar */}
+      <div className="relative pt-2 pb-1 px-0.5 sm:px-1">
         {/* Background track line */}
-        <div className="absolute top-[26px] left-[12%] right-[12%] h-1 bg-slate-200 rounded-full z-0" />
+        <div className="absolute top-[26px] left-[8%] right-[8%] h-1.5 bg-slate-100 rounded-full z-0 border border-slate-200/60" />
 
         {/* Dynamic active filled line with smooth transition */}
         <div
-          className="absolute top-[26px] left-[12%] h-1 bg-gradient-to-r from-blue-600 via-blue-500 to-emerald-500 rounded-full z-0 transition-all duration-700 ease-out"
-          style={{ width: `${(progressPercent * 0.76)}%` }}
+          className="absolute top-[26px] left-[8%] h-1.5 bg-gradient-to-r from-[#1b365d] via-amber-500 to-emerald-500 rounded-full z-0 transition-all duration-700 ease-out shadow-xs"
+          style={{ width: `${progressPercent * 0.84}%` }}
         />
 
-        {/* 4 Step Nodes */}
+        {/* Step Nodes */}
         <div className="relative z-10 flex items-start justify-between">
           {TRACKING_STEPS.map((step, idx) => {
             const isCompleted = idx < activeIndex;
@@ -143,30 +147,30 @@ export default function OrderStatusStepper({
             return (
               <div
                 key={step.id}
-                className="flex flex-col items-center text-center w-1/4 px-0.5"
+                className="flex flex-col items-center text-center w-1/5 px-0.5"
               >
                 {/* Node Circle */}
                 <div
-                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all duration-300 ${
                     isCompleted
                       ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-white'
                       : isCurrent
-                      ? activeIndex === 3
+                      ? activeIndex === 4
                         ? 'bg-emerald-600 text-white ring-4 ring-emerald-100 ring-offset-1 shadow-md'
-                        : 'bg-[#2874f0] text-white ring-4 ring-blue-100 ring-offset-1 shadow-md animate-pulse'
+                        : 'bg-[#1b365d] text-amber-300 ring-4 ring-amber-100 ring-offset-1 shadow-md animate-pulse'
                       : 'bg-white text-slate-300 border-2 border-slate-200'
                   }`}
                 >
                   {isCompleted ? (
-                    <Check size={16} strokeWidth={3} className="text-white" />
+                    <Check size={15} strokeWidth={3} className="text-white" />
                   ) : (
-                    <Icon size={16} strokeWidth={isCurrent ? 2.5 : 2} />
+                    <Icon size={14} strokeWidth={isCurrent ? 2.5 : 2} />
                   )}
                 </div>
 
                 {/* Step Labels */}
                 <span
-                  className={`mt-2 text-[11px] sm:text-xs font-bold leading-tight ${
+                  className={`mt-1.5 text-[10px] sm:text-[11px] font-bold leading-tight ${
                     isCompleted
                       ? 'text-emerald-800'
                       : isCurrent
@@ -178,17 +182,17 @@ export default function OrderStatusStepper({
                 </span>
 
                 <span
-                  className={`text-[9px] sm:text-[10px] mt-0.5 line-clamp-1 max-w-[76px] ${
+                  className={`text-[8px] sm:text-[9px] mt-0.5 line-clamp-1 max-w-[62px] ${
                     isCurrent
-                      ? 'text-blue-600 font-bold'
+                      ? 'text-[#1b365d] font-bold'
                       : isCompleted
                       ? 'text-emerald-600/90'
                       : 'text-slate-400'
                   }`}
                 >
                   {isCurrent
-                    ? activeIndex === 3
-                      ? 'Verified'
+                    ? activeIndex === 4
+                      ? 'Delivered'
                       : 'Active Now'
                     : isCompleted
                     ? 'Done'
@@ -203,8 +207,10 @@ export default function OrderStatusStepper({
       {/* Real-time Context Banner based on current active step */}
       <div
         className={`rounded-xl p-3 text-xs flex items-start gap-2.5 transition-all ${
-          activeIndex === 3
+          activeIndex === 4
             ? 'bg-emerald-50/90 border border-emerald-200/80 text-emerald-900'
+            : activeIndex === 3
+            ? 'bg-purple-50/90 border border-purple-200/80 text-purple-950'
             : activeIndex === 2
             ? 'bg-amber-50/90 border border-amber-200/80 text-amber-950'
             : activeIndex === 1
@@ -214,8 +220,10 @@ export default function OrderStatusStepper({
       >
         <div
           className={`p-1.5 rounded-lg shrink-0 ${
-            activeIndex === 3
+            activeIndex === 4
               ? 'bg-emerald-100 text-emerald-700'
+              : activeIndex === 3
+              ? 'bg-purple-100 text-purple-700'
               : activeIndex === 2
               ? 'bg-amber-100 text-amber-700'
               : activeIndex === 1
@@ -223,12 +231,14 @@ export default function OrderStatusStepper({
               : 'bg-slate-200 text-slate-700'
           }`}
         >
-          {activeIndex === 3 ? (
+          {activeIndex === 4 ? (
             <CheckCircle2 size={16} />
-          ) : activeIndex === 2 ? (
+          ) : activeIndex === 3 ? (
             <Bike size={16} />
-          ) : activeIndex === 1 ? (
+          ) : activeIndex === 2 ? (
             <Truck size={16} />
+          ) : activeIndex === 1 ? (
+            <Package size={16} />
           ) : (
             <PackageCheck size={16} />
           )}
@@ -243,15 +253,17 @@ export default function OrderStatusStepper({
           </div>
           <p className="text-[11px] opacity-90 leading-relaxed">
             {activeIndex === 0 &&
-              'The vendor is packaging the merchandise. Logistics express dispatch scheduled shortly.'}
+              'Order placed & verified by AKSelling Seller Hub. Item details assigned to fulfillment center.'}
             {activeIndex === 1 &&
+              'Merchandise securely inspected, wrapped, and boxed with tamper-proof security seal. Ready for carrier handoff.'}
+            {activeIndex === 2 &&
               `Carried via ${courierName}${
                 awbCode ? ` • AWB: ${awbCode}` : ''
-              }. In transit between regional fulfillment centers.`}
-            {activeIndex === 2 &&
-              'Courier delivery executive has picked up your parcel for doorstep drop-off today. Keep your phone handy.'}
+              }. Express surface transit between fulfillment centers.`}
             {activeIndex === 3 &&
-              'Item handed over to recipient. 7-day hassle-free replacement & return policy active.'}
+              'Courier delivery executive is en route with your package for doorstep delivery today. Keep your phone reachable.'}
+            {activeIndex === 4 &&
+              'Package handed over to recipient. 7-day hassle-free replacement & return policy active.'}
           </p>
         </div>
       </div>
@@ -273,15 +285,15 @@ export default function OrderStatusStepper({
                   : 'bg-[#2874f0] text-white hover:bg-blue-600'
               }`}
             >
-              {isSimulating ? 'Pause Auto-Run' : '▶ Auto-Advance Every 3s'}
+              {isSimulating ? 'Pause Auto-Run' : '▶ Auto-Advance Every 2.5s'}
             </button>
           </div>
 
           <p className="text-[11px] text-slate-500">
-            Click any status step below to broadcast a live update to Firestore & verify instant real-time stepper rendering:
+            Click any shipping stage below to broadcast a live real-time sync across Firestore & UI:
           </p>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
             {TRACKING_STEPS.map((s, i) => (
               <button
                 key={s.id}
@@ -305,3 +317,4 @@ export default function OrderStatusStepper({
     </div>
   );
 }
+

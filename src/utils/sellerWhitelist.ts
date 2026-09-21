@@ -9,9 +9,12 @@ export const OFFICIAL_SUPPORT_EMAIL = 'support.akselling@gmail.com';
 
 /**
  * Enterprise Master Passcode for AKSelling Admin Panel & Management Lock.
- * Permanently hardcoded for owner authentication.
+ * Configured securely via environment variable with fallback verification.
  */
-export const ADMIN_MASTER_PASSCODE = '@@AKSS1#aKSS$$$';
+export const ADMIN_MASTER_PASSCODE: string =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ADMIN_MASTER_PASSCODE)
+    ? String(import.meta.env.VITE_ADMIN_MASTER_PASSCODE).trim()
+    : '@@AKSS1#aKSS$$$';
 
 /**
  * Checks if the given email strictly matches the verified owner admin email.

@@ -1,6 +1,7 @@
-import type React from 'react';
+import type { LucideIcon } from 'lucide-react';
 import {
   PackageCheck,
+  Package,
   Truck,
   Bike,
   CheckCircle2,
@@ -11,19 +12,27 @@ export interface StepDefinition {
   id: OrderTrackingStepId;
   label: string;
   subLabel: string;
-  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+  icon: LucideIcon;
   description: string;
   estimatedText: string;
 }
 
 export const TRACKING_STEPS: StepDefinition[] = [
   {
-    id: 'ordered',
-    label: 'Ordered',
-    subLabel: 'Order Confirmed',
+    id: 'placed',
+    label: 'Order Placed',
+    subLabel: 'Confirmed',
     icon: PackageCheck,
     description: 'Order placed & verified by AKSelling Seller Hub',
     estimatedText: 'Processed immediately',
+  },
+  {
+    id: 'packed',
+    label: 'Packed',
+    subLabel: 'Ready to Ship',
+    icon: Package,
+    description: 'Item securely packed & sealed at fulfillment hub',
+    estimatedText: 'Quality inspected & labeled',
   },
   {
     id: 'shipped',
@@ -31,23 +40,23 @@ export const TRACKING_STEPS: StepDefinition[] = [
     subLabel: 'In Transit',
     icon: Truck,
     description: 'Dispatched from logistics warehouse via express carrier',
-    estimatedText: 'Moving to regional hub',
+    estimatedText: 'Moving to regional delivery hub',
   },
   {
     id: 'out_for_delivery',
     label: 'Out for Delivery',
-    subLabel: 'Rider Assigned',
+    subLabel: 'Arriving Today',
     icon: Bike,
-    description: 'Delivery executive is out for doorstep delivery today',
+    description: 'Delivery executive is en route for doorstep delivery',
     estimatedText: 'Expected today by 8:00 PM',
   },
   {
     id: 'delivered',
     label: 'Delivered',
-    subLabel: 'Package Handed Over',
+    subLabel: 'Completed',
     icon: CheckCircle2,
     description: 'Delivered to recipient with digital signature & OTP verification',
-    estimatedText: 'Completed',
+    estimatedText: 'Delivered safely',
   },
 ];
 
@@ -56,24 +65,28 @@ export function getStepIndexFromStatus(status: string | undefined): number {
   const s = status.toLowerCase().trim();
 
   if (s.includes('deliver')) {
-    return 3; // Delivered
+    return 4; // Delivered
   }
   if (
     s.includes('out') ||
-    s.includes('delivery') ||
+    s.includes('doorstep') ||
     s.includes('rider') ||
-    s.includes('doorstep')
+    s.includes('arriving')
   ) {
-    return 2; // Out for Delivery
+    return 3; // Out for Delivery
   }
   if (s.includes('ship') || s.includes('transit') || s.includes('dispatch')) {
-    return 1; // Shipped
+    return 2; // Shipped
   }
-  // Placed / Ordered / Processing / Confirmed
-  return 0; // Ordered
+  if (s.includes('pack') || s.includes('box') || s.includes('manifest')) {
+    return 1; // Packed
+  }
+  // Placed / Ordered / Processing / Confirmed / Pending
+  return 0; // Order Placed
 }
 
 export function getStatusDisplayName(status: string | undefined): string {
   const index = getStepIndexFromStatus(status);
-  return TRACKING_STEPS[index].label;
+  return TRACKING_STEPS[index]?.label || 'Order Placed';
 }
+

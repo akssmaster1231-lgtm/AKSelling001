@@ -70,8 +70,8 @@ export async function fetchBanners(): Promise<Banner[]> {
         return activeItems.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
       }
     }
-  } catch (err) {
-    console.warn('Firestore fetch banners notice:', err);
+  } catch {
+    // Silent fallback
   }
 
   return defaultBanners;
@@ -88,10 +88,11 @@ export async function fetchAllMasterBanners(): Promise<MasterBanner[]> {
     const snap = await getDocs(bannersCol);
     if (!snap.empty) {
       const items: MasterBanner[] = [];
-      snap.forEach((docSnap, idx) => {
+      let idx = 0;
+      snap.forEach((docSnap) => {
         const d = docSnap.data();
         items.push({
-          id: docSnap.id || `b_${idx}`,
+          id: docSnap.id || `b_${idx++}`,
           title: (d.title as string) || '',
           subtitle: (d.subtitle as string) || '',
           cta: (d.cta as string) || 'Shop Now',
@@ -105,8 +106,8 @@ export async function fetchAllMasterBanners(): Promise<MasterBanner[]> {
       saveLocalMasterBanners(items);
       return items.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     }
-  } catch (err) {
-    console.warn('Firestore fetch all banners notice:', err);
+  } catch {
+    // Silent fallback
   }
 
   const initialMaster: MasterBanner[] = defaultBanners.map((b, idx) => ({
