@@ -29,6 +29,7 @@ import { addRecentlyViewedProduct } from '@/utils/searchHistory';
 import VideoReelsFeed from '@/components/video-shopping/VideoReelsFeed';
 import DailyStreakModal from '@/components/gamification/DailyStreakModal';
 import SpinWheelModal from '@/components/gamification/SpinWheelModal';
+import { Analytics } from '@vercel/analytics/react';
 
 function AppContent() {
   const { user, authInitialized } = useAuth();
@@ -478,6 +479,7 @@ export default function App() {
         <CartProvider>
           <NotificationProvider>
             <AppContent />
+            <Analytics />
           </NotificationProvider>
         </CartProvider>
       </AuthProvider>
