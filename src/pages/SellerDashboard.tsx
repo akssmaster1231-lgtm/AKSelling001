@@ -391,7 +391,6 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
     });
     syncProductToCloud(prod);
     setEditingProduct(null);
-    alert(`🎉 Product "${prod.title}" publish ho gaya hai aur customer shopping feed / search me active dikhne laga hai!`);
   };
 
   const handleUpdateStock = (productId: string, newStock: number) => {

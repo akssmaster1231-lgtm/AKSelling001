@@ -72,11 +72,29 @@ const PRINT_DESIGNS = [
 const AVAILABLE_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
 
 const GSM_PRESETS = [
-  { label: '180 GSM (Lightweight)', value: '180 GSM' },
-  { label: '210 GSM (Classic Combed)', value: '210 GSM' },
+  { label: '160 GSM (Light Summer Combed)', value: '160 GSM' },
+  { label: '180 GSM (Standard Combed Cotton)', value: '180 GSM' },
+  { label: '210 GSM (Classic Bio-Wash)', value: '210 GSM' },
+  { label: '220 GSM (Streetwear Heavyweight)', value: '220 GSM' },
   { label: '240 GSM (Heavyweight Oversized)', value: '240 GSM' },
-  { label: '280 GSM (French Terry)', value: '280 GSM' },
-  { label: '320 GSM (Fleece / Winter)', value: '320 GSM' },
+  { label: '280 GSM (French Terry / Loopknit)', value: '280 GSM' },
+  { label: '320 GSM (Fleece / Winter Wear)', value: '320 GSM' },
+  { label: '380 GSM (Super Heavy Hoodie Fleece)', value: '380 GSM' },
+];
+
+const POPULAR_SEARCH_TAGS = [
+  'Oversized',
+  'Drop Shoulder',
+  '100% Combed Cotton',
+  '240 GSM',
+  'Heavyweight',
+  'Graphic Tee',
+  'Streetwear',
+  'Bio-Washed',
+  'Trending',
+  'Direct Manufacturer',
+  'DTF Print',
+  'Best Seller',
 ];
 
 export default function Step3Specs({
@@ -497,6 +515,71 @@ export default function Step3Specs({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Pricing Tiers (Retail & Bulk Wholesale) */}
+        <div className="pt-3 border-t border-gray-100">
+          <label className="block text-xs font-bold text-gray-800 mb-2">
+            Automated Multi-Tier Volume Pricing (Retail & Wholesale Lots)
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-center">
+              <span className="text-[10px] uppercase font-bold text-gray-500 block">Single Retail (1–4 Pcs)</span>
+              <p className="text-sm font-extrabold text-gray-900 mt-0.5">₹{formData.price || 0}</p>
+              <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">Standard Selling Price</span>
+            </div>
+            <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-2.5 text-center">
+              <span className="text-[10px] uppercase font-bold text-blue-800 block">Tier 2: Semi-Bulk (5–19 Pcs)</span>
+              <p className="text-sm font-extrabold text-blue-900 mt-0.5">₹{Math.max(1, Math.round((formData.price || 0) * 0.88))}</p>
+              <span className="text-[10px] text-blue-700 font-semibold block mt-0.5">12% B2B Volume Discount</span>
+            </div>
+            <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5 text-center">
+              <span className="text-[10px] uppercase font-bold text-amber-900 block">Tier 3: Wholesale Lot (20+ Pcs)</span>
+              <p className="text-sm font-extrabold text-amber-950 mt-0.5">₹{Math.max(1, Math.round((formData.price || 0) * 0.78))}</p>
+              <span className="text-[10px] text-amber-700 font-semibold block mt-0.5">22% Factory Bulk Margin</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Product Tags & Search Keywords */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4.5 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-bold text-gray-900 flex items-center gap-1.5 uppercase tracking-wide">
+            <Tag size={15} className="text-flipkart-600" />
+            <span>Search Tags & Discoverability ({formData.tags?.length || 0} active)</span>
+          </label>
+        </div>
+        <p className="text-[11px] text-gray-500">
+          Tap popular tags to index this product in customer search, Best Deals, and category filters.
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {POPULAR_SEARCH_TAGS.map(tag => {
+            const currentTags = formData.tags || [];
+            const isSelected = currentTags.includes(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => {
+                  setFormData(prev => {
+                    const existing = prev.tags || [];
+                    const next = existing.includes(tag)
+                      ? existing.filter(t => t !== tag)
+                      : [...existing, tag];
+                    return { ...prev, tags: next, keywords: next };
+                  });
+                }}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-flipkart-600 text-white shadow-xs'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                #{tag} {isSelected && '✓'}
+              </button>
+            );
+          })}
         </div>
       </div>
 

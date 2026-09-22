@@ -247,7 +247,7 @@ export function handleFirestoreError(err: unknown, operationName?: string): void
 
 const PRODUCTS_CACHE_KEY = 'akselling_firestore_products_cache';
 
-const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;
+export const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;
 
 export function getCachedProducts(): Product[] {
   try {
@@ -338,6 +338,14 @@ export function subscribeProducts(
               pickupLocation: data.pickupLocation,
               weight: data.weight,
               dimensions: data.dimensions,
+              productType: data.productType,
+              printDesign: data.printDesign,
+              weightGsm: data.weightGsm,
+              shippingCharge: data.shippingCharge,
+              isFreeShipping: data.isFreeShipping,
+              pickupAddress: data.pickupAddress,
+              variants: data.variants,
+              storefrontPlacement: data.storefrontPlacement,
             });
           });
           const uniqueItems = deduplicateProducts(items);
@@ -427,6 +435,8 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
       discount: rawData.discount as number,
       category: rawData.category as string,
       images: rawData.images as string[],
+      imageUrl: (rawData.images as string[])?.[0],
+      image: (rawData.images as string[])?.[0],
       rating: rawData.rating as number,
       ratingCount: rawData.ratingCount as number,
       brand: rawData.brand as string,
@@ -434,6 +444,20 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
       delivery: rawData.delivery as string,
       tags: (rawData.tags as string[]) || [],
       keywords: (rawData.keywords as string[]) || [],
+      sizes: rawData.sizes as string[] | undefined,
+      colors: rawData.colors as string[] | undefined,
+      neckType: rawData.neckType as string | undefined,
+      sleeveType: rawData.sleeveType as string | undefined,
+      fitType: rawData.fitType as string | undefined,
+      fabric: rawData.fabric as string | undefined,
+      productType: rawData.productType as string | undefined,
+      printDesign: rawData.printDesign as string | undefined,
+      weightGsm: rawData.weightGsm as string | undefined,
+      shippingCharge: rawData.shippingCharge as number | undefined,
+      isFreeShipping: rawData.isFreeShipping as boolean | undefined,
+      pickupAddress: rawData.pickupAddress as Record<string, unknown> | undefined,
+      variants: rawData.variants as unknown[] | undefined,
+      storefrontPlacement: rawData.storefrontPlacement as Record<string, unknown> | undefined,
     };
     const existingProd = current.find(p => p.id === prodId);
     if (existingProd && typeof existingProd.price === 'number' && normalizedProd.price < existingProd.price) {

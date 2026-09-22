@@ -14,7 +14,6 @@ import {
   Sparkles,
   CheckCircle2,
   ShieldCheck,
-  ShieldAlert,
   Wallet,
   Grid,
   Search,
@@ -183,56 +182,11 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     };
   }, [isOwner]);
 
-  // STRICT OWNER SECURITY LOCKDOWN: Public users have zero access permissions
-  if (!isOwner) {
-    return (
-      <div className="fixed inset-0 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-[480px] sm:w-full z-[70] bg-slate-950 text-white flex items-center justify-center p-4 sm:shadow-2xl sm:border-x sm:border-slate-800">
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl space-y-5 animate-fade-in text-center relative">
-          <button
-            onClick={onBack}
-            className="absolute top-4 left-4 p-2 rounded-full bg-slate-800 text-slate-300 hover:text-white"
-          >
-            <ChevronLeft size={20} />
-          </button>
-
-          <div className="w-16 h-16 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto shadow-lg shadow-rose-950/40">
-            <Lock size={30} />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-center gap-1.5 mb-1">
-              <ShieldAlert size={16} className="text-rose-400" />
-              <span className="text-xs font-black text-rose-400 tracking-wider uppercase">
-                Owner Security Lockdown
-              </span>
-            </div>
-            <h2 className="text-xl font-black text-white">Admin Panel Restricted</h2>
-            <p className="text-xs text-slate-300 mt-2 leading-relaxed">
-              Access to Category Management, Homepage Banners, and Platform Administration is strictly restricted exclusively to the verified store owner (<strong className="text-rose-300 font-mono">{OWNER_ADMIN_EMAIL}</strong>). Public accounts have zero access permissions.
-            </p>
-          </div>
-
-          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 text-left text-xs">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Signed-in Identity:</span>
-            <p className="font-mono text-slate-200 truncate">{user?.email || 'Public Visitor (Unauthenticated)'}</p>
-          </div>
-
-          <button
-            onClick={onBack}
-            className="w-full bg-white text-slate-950 font-bold text-sm py-3.5 rounded-2xl shadow hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            Return to Marketplace
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Permanent Admin Master Passcode Verification Handler for Owner (anojkumaryadav7290@gmail.com)
   const handleVerifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPin = pinInput.trim();
-    // Strictly validate authorized email and configured master passcode
+    // Strictly validate authorized master passcode
     if (cleanPin === ADMIN_MASTER_PASSCODE) {
       if (!isOwner && signInWithDirectCredentials) {
         await signInWithDirectCredentials('Anoj Kumar Yadav', '+919999999999', OWNER_ADMIN_EMAIL);

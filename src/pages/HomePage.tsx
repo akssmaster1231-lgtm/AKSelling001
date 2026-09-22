@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, Gift } from 'lucide-react';
+import { ChevronRight, Gift, Calendar, Trophy, Clapperboard } from 'lucide-react';
 import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, DisplayDeduplicator } from '@/data';
 import { fetchBanners } from '@/banner-api';
 import { subscribeProducts, subscribeBanners, getCachedProducts, subscribeCategories } from '@/firebase';
@@ -8,6 +8,7 @@ import type { Product, Banner, Category } from '@/types';
 import BannerCarousel from '@/components/BannerCarousel';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 import CategoryIcon from '@/components/CategoryIcon';
+import FlashDropSection from '@/components/flash-drop/FlashDropSection';
 
 interface HomePageProps {
   searchQuery: string;
@@ -15,9 +16,21 @@ interface HomePageProps {
   onCategoryClick: (categoryId: string) => void;
   onNavigateDeals?: () => void;
   onBecomeSeller?: () => void;
+  onOpenStreak?: () => void;
+  onOpenSpinWheel?: () => void;
+  onNavigateReels?: () => void;
 }
 
-export default function HomePage({ searchQuery, onProductClick, onCategoryClick, onNavigateDeals, onBecomeSeller }: HomePageProps) {
+export default function HomePage({
+  searchQuery,
+  onProductClick,
+  onCategoryClick,
+  onNavigateDeals,
+  onBecomeSeller,
+  onOpenStreak,
+  onOpenSpinWheel,
+  onNavigateReels,
+}: HomePageProps) {
   const { t } = useI18n();
   const [dbProducts, setDbProducts] = useState<Product[]>(() => getCachedProducts());
   const [dbBanners, setDbBanners] = useState<Banner[]>(() => {
@@ -216,6 +229,53 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
         <BannerCarousel banners={displayBanners} />
       </div>
 
+      {/* Gen-Z Interactive Quick Rewards & Reels Hub */}
+      <div className="mt-2.5 px-3">
+        <div className="grid grid-cols-3 gap-2">
+          {/* Roz Check-In */}
+          <button
+            type="button"
+            onClick={onOpenStreak}
+            className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/20 border border-amber-400/40 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-2xs hover:bg-amber-500/20 active:scale-95 transition-all cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center mb-1 shadow-xs">
+              <Calendar size={15} />
+            </div>
+            <span className="text-[11px] font-black text-slate-900 leading-tight">Roz Check-In</span>
+            <span className="text-[9px] font-bold text-amber-700 mt-0.5">₹5+ Daily Coins</span>
+          </button>
+
+          {/* Spin & Win */}
+          <button
+            type="button"
+            onClick={onOpenSpinWheel}
+            className="bg-gradient-to-r from-purple-500/15 via-pink-500/10 to-indigo-500/20 border border-purple-400/40 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-2xs hover:bg-purple-500/20 active:scale-95 transition-all cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center mb-1 shadow-xs">
+              <Trophy size={15} />
+            </div>
+            <span className="text-[11px] font-black text-slate-900 leading-tight">Spin & Win</span>
+            <span className="text-[9px] font-bold text-purple-700 mt-0.5">Win Up to ₹200</span>
+          </button>
+
+          {/* Video Reels Shopping */}
+          <button
+            type="button"
+            onClick={onNavigateReels}
+            className="bg-gradient-to-r from-red-500/15 via-rose-500/10 to-amber-500/20 border border-red-400/40 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-2xs hover:bg-red-500/20 active:scale-95 transition-all cursor-pointer relative"
+          >
+            <span className="absolute -top-1.5 -right-1 bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse shadow-xs">
+              LIVE
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-red-600 text-white flex items-center justify-center mb-1 shadow-xs">
+              <Clapperboard size={15} />
+            </div>
+            <span className="text-[11px] font-black text-slate-900 leading-tight">Watch Reels</span>
+            <span className="text-[9px] font-bold text-red-700 mt-0.5">Shop by Video</span>
+          </button>
+        </div>
+      </div>
+
       <div className="mt-3 px-3">
         <div className="bg-white rounded-xl shadow-card p-3">
           <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row">
@@ -244,6 +304,15 @@ export default function HomePage({ searchQuery, onProductClick, onCategoryClick,
           </div>
         </div>
       </div>
+
+      {/* Limited Midnight 1-Hour Flash Drop Shelf */}
+      {!searchQuery.trim() && allProducts.length > 0 && (
+        <FlashDropSection
+          products={allProducts}
+          onProductClick={onProductClick}
+          onNavigateDeals={onNavigateDeals || (() => onCategoryClick('all'))}
+        />
+      )}
 
       {searchQuery.trim() ? (
         <section className="mt-4 px-3">

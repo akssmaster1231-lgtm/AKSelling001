@@ -29,7 +29,6 @@ import { awardOrderCashback } from '@/utils/walletService';
 import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
 import { ScratchCardModal } from '@/components/ScratchCardModal';
 import type { Product, CartItem } from '@/types';
-import { resolveProductImages, getProductFallbackImage } from '@/utils/productImageMapper';
 
 interface CartPageProps {
   onProductClick: (product: Product) => void;

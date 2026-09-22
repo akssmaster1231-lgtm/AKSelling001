@@ -17,6 +17,7 @@ export {
   resolveProductImages,
   getProductFallbackImage,
   DEFAULT_PRODUCT_IMAGE,
+  isPlaceholderOrBroken,
 };
 
 export const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;

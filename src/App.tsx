@@ -26,6 +26,9 @@ import { NotificationProvider } from '@/notification-context';
 import NotificationToastBanner from '@/components/NotificationToastBanner';
 import NotificationCenterModal from '@/components/NotificationCenterModal';
 import { addRecentlyViewedProduct } from '@/utils/searchHistory';
+import VideoReelsFeed from '@/components/video-shopping/VideoReelsFeed';
+import DailyStreakModal from '@/components/gamification/DailyStreakModal';
+import SpinWheelModal from '@/components/gamification/SpinWheelModal';
 
 function AppContent() {
   const { user, authInitialized } = useAuth();
@@ -55,6 +58,8 @@ function AppContent() {
   const [buyNowProduct, setBuyNowProduct] = useState<Product | null>(null);
   const [buyNowSize, setBuyNowSize] = useState<string | undefined>(undefined);
   const [buyNowColor, setBuyNowColor] = useState<string | undefined>(undefined);
+  const [showStreakModal, setShowStreakModal] = useState(false);
+  const [showSpinWheelModal, setShowSpinWheelModal] = useState(false);
   const { cartCount } = useCart();
 
   const handleOpenProductById = async (productId: string) => {
@@ -307,6 +312,21 @@ function AppContent() {
               onCategoryClick={handleCategoryClick}
               onNavigateDeals={() => setActiveTab('deals')}
               onBecomeSeller={handleOpenSellerMode}
+              onOpenStreak={() => setShowStreakModal(true)}
+              onOpenSpinWheel={() => setShowSpinWheelModal(true)}
+              onNavigateReels={() => setActiveTab('reels')}
+            />
+          </ErrorBoundary>
+        )}
+        {activeTab === 'reels' && (
+          <ErrorBoundary fallbackTitle="Unable to load Video Reels">
+            <VideoReelsFeed
+              onBuyNow={(prod, size, color) => {
+                setBuyNowProduct(prod);
+                setBuyNowSize(size);
+                setBuyNowColor(color);
+              }}
+              onProductClick={handleProductClick}
             />
           </ErrorBoundary>
         )}
@@ -429,6 +449,22 @@ function AppContent() {
         isOpen={showNotifications}
         onClose={() => setShowNotifications(false)}
         onOpenProduct={handleOpenProductById}
+      />
+
+      {/* Gamification Streak & Spin Modals */}
+      <DailyStreakModal
+        isOpen={showStreakModal}
+        onClose={() => setShowStreakModal(false)}
+        userId={user?.id || 'guest'}
+      />
+
+      <SpinWheelModal
+        isOpen={showSpinWheelModal}
+        onClose={() => setShowSpinWheelModal(false)}
+        onShopCoupon={() => {
+          setShowSpinWheelModal(false);
+          setActiveTab('deals');
+        }}
       />
       </div>
     </div>

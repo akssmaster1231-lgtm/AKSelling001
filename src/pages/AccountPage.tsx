@@ -41,6 +41,8 @@ import { useCart } from '@/cart-context';
 import { useI18n, type Language } from '@/i18n';
 import { getCleanSellerStoreName } from '@/utils/storageHelper';
 import { WalletPage } from '@/pages/WalletPage';
+import { getLocalWalletCache } from '@/utils/walletService';
+import { SIGNUP_BONUS_FLAT } from '@/utils/cashbackEngine';
 
 interface AccountPageProps {
   onLogout: () => void;
@@ -264,7 +266,9 @@ export default function AccountPage({
                   </span>
                 </div>
                 <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className="text-2xl font-black text-white">₹{user?.walletBalance ?? 0}</span>
+                  <span className="text-2xl font-black text-white">
+                    ₹{user?.walletBalance ?? getLocalWalletCache(user?.id || 'guest').walletBalance ?? SIGNUP_BONUS_FLAT}
+                  </span>
                   <span className="text-xs text-blue-200">verified cash balance</span>
                 </div>
                 <p className="text-[11px] text-blue-200/90 mt-0.5 truncate">

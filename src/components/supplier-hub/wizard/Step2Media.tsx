@@ -99,8 +99,7 @@ export default function Step2Media({
     setIsCompressing(true);
 
     try {
-      const remainingSlots = 5 - images.length;
-      const filesToProcess = Array.from(files).slice(0, remainingSlots);
+      const filesToProcess = Array.from(files);
 
       const processedUrls: string[] = [];
       for (const file of filesToProcess) {
@@ -116,7 +115,7 @@ export default function Step2Media({
       if (processedUrls.length > 0) {
         setFormData(prev => ({
           ...prev,
-          images: [...(prev.images || []), ...processedUrls].slice(0, 5),
+          images: [...(prev.images || []), ...processedUrls],
         }));
       }
     } catch (err) {
@@ -133,14 +132,10 @@ export default function Step2Media({
     e.preventDefault();
     const cleanUrl = urlInput.trim();
     if (!cleanUrl) return;
-    if (images.length >= 5) {
-      setValidationError('Maximum 5 images allowed per product catalog.');
-      return;
-    }
 
     setFormData(prev => ({
       ...prev,
-      images: [...(prev.images || []), cleanUrl].slice(0, 5),
+      images: [...(prev.images || []), cleanUrl],
     }));
     setUrlInput('');
     setValidationError('');
@@ -172,7 +167,7 @@ export default function Step2Media({
     const urls = SAMPLE_APPAREL_IMAGES.map(s => s.url);
     setFormData(prev => ({
       ...prev,
-      images: Array.from(new Set([...(prev.images || []), ...urls])).slice(0, 5),
+      images: Array.from(new Set([...(prev.images || []), ...urls])),
     }));
     setValidationError('');
   };
@@ -231,24 +226,25 @@ export default function Step2Media({
           <div>
             <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
               <ImageIcon size={16} className="text-flipkart-600" />
-              <span>Multi-Angle Product Photos ({images.length}/5)</span>
+              <span>Multi-Angle Product Gallery ({images.length} photos)</span>
               <span className="text-red-500">*</span>
+              <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold px-2 py-0.5 rounded-full border border-emerald-200">
+                Unlimited HD Photos
+              </span>
             </h3>
             <p className="text-[11px] text-gray-500">
-              First image serves as the Main Cover thumbnail on the home feed.
+              First image serves as the Main Cover thumbnail on the home feed. Drag or click to add as many high-res angles as needed.
             </p>
           </div>
 
-          {images.length < 5 && (
-            <button
-              type="button"
-              onClick={handleAddPresetImages}
-              className="inline-flex items-center gap-1 text-xs font-bold text-flipkart-700 hover:text-flipkart-800 bg-blue-50 hover:bg-blue-100/80 px-3 py-1.5 rounded-xl transition-colors cursor-pointer self-start sm:self-auto"
-            >
-              <Sparkles size={14} />
-              <span>⚡ Load Sample HD Apparel Images</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleAddPresetImages}
+            className="inline-flex items-center gap-1 text-xs font-bold text-flipkart-700 hover:text-flipkart-800 bg-blue-50 hover:bg-blue-100/80 px-3 py-1.5 rounded-xl transition-colors cursor-pointer self-start sm:self-auto"
+          >
+            <Sparkles size={14} />
+            <span>⚡ Load Sample HD Apparel Images</span>
+          </button>
         </div>
 
         {/* Upload Dropzone & URL input */}
@@ -256,18 +252,14 @@ export default function Step2Media({
           {/* Drag and Drop Box */}
           <div
             onClick={() => fileInputRef.current?.click()}
-            className={`md:col-span-2 border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
-              images.length >= 5
-                ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
-                : 'bg-blue-50/30 hover:bg-blue-50/60 border-blue-300 hover:border-flipkart-500'
-            }`}
+            className="md:col-span-2 border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer flex flex-col items-center justify-center bg-blue-50/30 hover:bg-blue-50/60 border-blue-300 hover:border-flipkart-500"
           >
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
               multiple
-              disabled={images.length >= 5 || isCompressing}
+              disabled={isCompressing}
               onChange={handleFilesSelected}
               className="hidden"
             />
@@ -277,9 +269,7 @@ export default function Step2Media({
             <p className="text-xs font-bold text-gray-800">
               {isCompressing
                 ? 'Processing & optimizing Ultra-HD images (Retina clarity)...'
-                : images.length >= 5
-                ? 'Maximum 5 images reached'
-                : 'Click or Drag & Drop Product Images (Ultra-HD / 100% Fresh)'}
+                : 'Click or Drag & Drop Product Images (Unlimited Uploads)'}
             </p>
             <p className="text-[11px] text-gray-500 mt-0.5">
               Supports High-Res JPEG, PNG, WEBP • Zero-blur multi-step downscaling preserves pristine crispness & vivid colors

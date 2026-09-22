@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import type { SellerProduct } from '@/types/supplier';
 import { saveProductToFirestore } from '@/firebase';
-import { DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
+import { resolveProductImages, getProductFallbackImage } from '@/utils/productImageMapper';
+import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '@/utils/storageHelper';
 import type { WizardStepProps, WizardVariantItem } from './types';
 
 interface Step5Props extends WizardStepProps {
@@ -129,7 +130,7 @@ export default function Step5InventoryPreview({
         mrp: Number(formData.mrp) || Number(formData.price) || 0,
         discount: discountPercent,
         category: formData.category || 'fashion',
-        images: formData.images.length > 0 ? formData.images : [DEFAULT_PRODUCT_PLACEHOLDER],
+        images: resolveProductImages(formData),
         stock: totalStock,
         brand: formData.brand.trim() || 'AK Yadav Print',
         status: totalStock > 0 ? 'live' : 'out_of_stock',
@@ -160,9 +161,22 @@ export default function Step5InventoryPreview({
       // 1. Permanent Firestore Persistence
       await saveProductToFirestore(sellerProductData);
 
+      // 2. Local Seller Products Cache
+      try {
+        const raw = safeLocalStorageGetItem('akselling_seller_products') || localStorage.getItem('akselling_seller_products');
+        const list = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(list)) {
+          const next = list.some((p: SellerProduct) => p.id === sellerProductData.id)
+            ? list.map((p: SellerProduct) => p.id === sellerProductData.id ? sellerProductData : p)
+            : [sellerProductData, ...list];
+          safeLocalStorageSetItem('akselling_seller_products', JSON.stringify(next));
+        }
+      } catch {
+        // ignore
+      }
+
       setPublishedProduct(sellerProductData);
       setPublishSuccess(true);
-      onPublishSuccess(sellerProductData);
     } catch (err) {
       console.warn('Publish product to Firestore notice:', err);
       alert('Error saving to cloud. Please check network connection and try again.');
@@ -171,7 +185,45 @@ export default function Step5InventoryPreview({
     }
   };
 
+  const handleUploadAnother = () => {
+    setFormData({
+      id: `prod_${Date.now()}`,
+      catalogId: `CAT-${Math.floor(10000 + Math.random() * 90000)}`,
+      category: 'apparel-manufacturing',
+      categoryName: 'Apparel & Garments',
+      images: [],
+      title: '',
+      description: '',
+      weightGsm: '240 GSM',
+      colors: ['Black'],
+      fabric: '100% Combed Cotton',
+      productType: 'Oversized T-Shirt',
+      printDesign: 'Graphic Print',
+      sizes: ['M', 'L', 'XL'],
+      price: 499,
+      mrp: 999,
+      isFreeShipping: true,
+      shippingCharge: 0,
+      deliveryEstimate: 'Free delivery in 2-3 days',
+      pickupAddress: formData.pickupAddress,
+      sleeveType: 'Half Sleeve',
+      neckType: 'Round Neck / Crew Neck',
+      fitType: 'Oversized Fit / Drop Shoulder',
+      brand: formData.brand || 'AK Yadav Print',
+      variants: [],
+      storefrontPlacement: {
+        homepage: true,
+        categoryPages: true,
+        bestDeals: true,
+      },
+    });
+    setPublishedProduct(null);
+    setPublishSuccess(false);
+    onBack(); // returns back to previous step
+  };
+
   if (publishSuccess && publishedProduct) {
+    const primaryImg = resolveProductImages(publishedProduct)[0];
     return (
       <div className="text-center py-8 px-4 space-y-5 animate-scale-up">
         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
@@ -186,7 +238,7 @@ export default function Step5InventoryPreview({
             Product & Catalog Successfully Published!
           </h2>
           <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100/80 px-3 py-1 rounded-full mt-2 border border-amber-300">
-            <span>✨ Live Notification Broadcasted to all App Users!</span>
+            <span>✨ Live Synced with Firestore & Customer Shopping Feed!</span>
           </div>
           <p className="text-xs text-gray-600 max-w-md mx-auto mt-2">
             "{publishedProduct.title}" is now active with {totalStock} total units across {formData.variants.length} variant combinations.
@@ -196,10 +248,13 @@ export default function Step5InventoryPreview({
         {/* Product Snapshot Card */}
         <div className="max-w-md mx-auto bg-gray-50 border border-gray-200 rounded-2xl p-4 text-left flex gap-3.5 items-center">
           <img
-            src={publishedProduct.images[0]}
+            src={primaryImg}
             alt={publishedProduct.title}
-            className="w-16 h-16 rounded-xl object-cover border border-gray-200"
+            className="w-16 h-16 rounded-xl object-cover border border-gray-200 shrink-0"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = getProductFallbackImage(publishedProduct);
+            }}
           />
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-bold text-flipkart-600">{publishedProduct.brand}</p>
@@ -212,13 +267,20 @@ export default function Step5InventoryPreview({
           </div>
         </div>
 
-        <div className="pt-2">
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto">
           <button
             type="button"
-            onClick={() => window.location.reload()}
-            className="px-6 py-2.5 text-xs font-extrabold text-white bg-flipkart-600 hover:bg-flipkart-700 rounded-xl shadow-md cursor-pointer"
+            onClick={() => onPublishSuccess(publishedProduct)}
+            className="w-full sm:w-auto flex-1 px-5 py-3 text-xs font-extrabold text-white bg-flipkart-600 hover:bg-flipkart-700 rounded-xl shadow-md transition-all cursor-pointer"
           >
-            Done / Return to Dashboard
+            Done & View in Dashboard
+          </button>
+          <button
+            type="button"
+            onClick={handleUploadAnother}
+            className="w-full sm:w-auto flex-1 px-5 py-3 text-xs font-extrabold text-flipkart-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all cursor-pointer"
+          >
+            + Upload Another Product
           </button>
         </div>
       </div>

@@ -27,6 +27,7 @@ import { useAuth } from '@/auth-context';
 import { recordPlacedOrder } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
 import { awardOrderCashback } from '@/utils/walletService';
+import { grantBonusSpin } from '@/utils/gamificationService';
 import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
 import { ScratchCardModal } from '@/components/ScratchCardModal';
 import type { Product } from '@/types';
@@ -131,9 +132,31 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     }
   };
 
-  const totalAmount = product.price * quantity;
+  const [activeGroupBuy] = useState<{
+    productId?: string;
+    discountPercent?: number;
+    discountAmount?: number;
+    code?: string;
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem('akselling_active_group_buy');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && (parsed.productId === product.id || !parsed.productId)) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  const groupDiscount = activeGroupBuy ? Math.round((product.price * quantity * 15) / 100) : 0;
+  const baseTotalAmount = product.price * quantity;
+  const totalAmount = Math.max(1, baseTotalAmount - groupDiscount);
   const mrpTotal = product.mrp * quantity;
-  const discount = mrpTotal - totalAmount;
+  const discount = (mrpTotal - baseTotalAmount) + groupDiscount;
   const deliveryFee = totalAmount > 500 ? 0 : 49;
   const finalAmount = totalAmount + deliveryFee;
   // COD requires exactly 10% online advance via Razorpay to confirm order
@@ -357,6 +380,14 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         console.warn('Cashback award notice:', rErr);
       }
 
+      // Grant post-checkout Lucky Spin bonus & clear one-time group buy code
+      grantBonusSpin();
+      try {
+        localStorage.removeItem('akselling_active_group_buy');
+      } catch (err) {
+        console.debug('Active group buy cleanup notice:', err);
+      }
+
       setOrderId(generatedId);
       setState('success');
     } catch (err) {
@@ -423,6 +454,22 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
             </p>
           </div>
         )}
+
+        {/* Lucky Spin Unlocked Card */}
+        <div className="mt-3 w-full max-w-sm rounded-xl bg-gradient-to-r from-purple-50 via-pink-50 to-amber-50 border border-purple-200 p-3 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-sm">
+              🎰
+            </div>
+            <div>
+              <p className="text-xs font-bold text-purple-900">1x Free Lucky Spin Unlocked!</p>
+              <p className="text-[10px] text-purple-700">Spin on the home screen to win up to ₹200 extra cash</p>
+            </div>
+          </div>
+          <span className="text-[10px] font-black bg-purple-600 text-white px-2 py-0.5 rounded-full">
+            READY
+          </span>
+        </div>
 
         <div className="mt-4 bg-flipkart-50 rounded-xl px-4 py-3 text-center w-full max-w-sm">
           <p className="text-xs text-gray-500">{t('estimatedDelivery')}</p>
@@ -932,6 +979,12 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               <div className="p-4 space-y-2.5">
                 <Row label={`${t('price')} (${quantity} item)`} value={formatPrice(mrpTotal)} />
                 <Row label={t('discount')} value={`- ${formatPrice(discount)}`} color="text-success-500" />
+                {groupDiscount > 0 && (
+                  <div className="flex justify-between items-center text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                    <span className="flex items-center gap-1">👥 Saath Mein Khareedo Discount (15%)</span>
+                    <span>- {formatPrice(groupDiscount)}</span>
+                  </div>
+                )}
                 <Row label={t('deliveryCharges')} value={deliveryFee === 0 ? t('free') : formatPrice(deliveryFee)} color={deliveryFee === 0 ? 'text-success-500' : 'text-gray-700'} />
                 <div className="border-t border-dashed border-gray-200 pt-2.5">
                   <Row label={t('totalAmount')} value={formatPrice(finalAmount)} bold />

@@ -634,21 +634,21 @@ export function subscribeWalletTransactions(
   userId: string,
   callback: (transactions: WalletTransaction[]) => void
 ): () => void {
+  const defaultSignupTx: WalletTransaction = {
+    id: `tx_signup_${userId || 'user'}`,
+    userId: userId || 'user',
+    type: 'CREDIT',
+    amount: SIGNUP_BONUS_FLAT,
+    title: 'Welcome Sign-Up Bonus',
+    description: 'Instant ₹30 Welcome Bonus credited upon first sign-up',
+    category: 'signup_bonus',
+    status: 'SUCCESS',
+    createdAt: new Date().toISOString(),
+  };
+
   if (!userId || userId === 'guest' || !isFirebaseConfigured) {
-    // Return sample local history if offline
-    callback([
-      {
-        id: `tx_signup_${userId}`,
-        userId,
-        type: 'CREDIT',
-        amount: 20,
-        title: 'Welcome Signup Bonus',
-        description: 'First login bonus credited to your AKSelling Rewards Wallet',
-        category: 'signup_bonus',
-        status: 'SUCCESS',
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-      },
-    ]);
+    // Return instant local bonus history
+    callback([defaultSignupTx]);
     return () => {};
   }
 
@@ -664,6 +664,11 @@ export function subscribeWalletTransactions(
           txs.push(docSnap.data() as WalletTransaction);
         });
 
+        // If no transactions in Firestore yet, show default welcome signup bonus
+        if (txs.length === 0) {
+          txs.push(defaultSignupTx);
+        }
+
         // Sort descending by date
         txs.sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -673,10 +678,12 @@ export function subscribeWalletTransactions(
       },
       (error) => {
         console.warn('subscribeWalletTransactions notice:', error);
+        callback([defaultSignupTx]);
       }
     );
   } catch (err) {
     console.warn('subscribeWalletTransactions error:', err);
+    callback([defaultSignupTx]);
     return () => {};
   }
 }

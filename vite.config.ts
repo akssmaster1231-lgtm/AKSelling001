@@ -16,9 +16,10 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
+    dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
-    include: ['firebase/app', 'firebase/firestore', 'firebase/auth'],
+    include: ['react', 'react-dom', 'react-dom/client', 'firebase/app', 'firebase/firestore', 'firebase/auth'],
     exclude: ['lucide-react'],
   },
 });

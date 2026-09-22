@@ -21,6 +21,10 @@ import ProductSwipeGallery from '@/components/ProductSwipeGallery';
 import PriceDropAlertToggle from '@/components/PriceDropAlertToggle';
 import ShareModal from '@/components/ShareModal';
 import { resolveProductImages } from '@/utils/productImageMapper';
+import SocialProofBadge from '@/components/flash-drop/SocialProofBadge';
+import GroupBuyTriggerButton from '@/components/group-buy/GroupBuyTriggerButton';
+import GroupBuyModal from '@/components/group-buy/GroupBuyModal';
+import CompleteTheLook from '@/components/combo-bundle/CompleteTheLook';
 
 interface ProductDetailProps {
   product: Product;
@@ -34,6 +38,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
   const [wishlisted, setWishlisted] = useState(false);
   const [added, setAdded] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showGroupBuyModal, setShowGroupBuyModal] = useState(false);
   const [selectedSize, setSelectedSize] = useState<string>(
     product.sizes && product.sizes.length > 0 ? product.sizes[0] : ''
   );
@@ -214,8 +219,19 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         </div>
         <p className="text-sm text-gray-500 mt-1">{product.delivery}</p>
 
+        {/* Live Social Proof Badge & Urgency Stock Bar */}
+        <SocialProofBadge productId={product.id} className="mt-3" />
+
         {/* Notify me of price drops toggle & preferences */}
         <PriceDropAlertToggle product={product} />
+
+        {/* Gen-Z WhatsApp Group Buying ("Saath Mein Khareedo") */}
+        <div className="mt-3">
+          <GroupBuyTriggerButton
+            price={product.price}
+            onClick={() => setShowGroupBuyModal(true)}
+          />
+        </div>
 
         {/* Quick Share with Friends Bar */}
         <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
@@ -416,6 +432,18 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
       </div>
 
+      {/* AI Complete The Look & Combo Bundles */}
+      <div className="mt-2 bg-white px-4 py-4">
+        <CompleteTheLook
+          currentProduct={product}
+          onBuyCombo={(comboList) => {
+            if (comboList.length > 0) {
+              onBuyNow(comboList[0], selectedSize, selectedColor);
+            }
+          }}
+        />
+      </div>
+
       {/* Specifications */}
       <div className="mt-2 bg-white px-4 py-4">
         <h2 className="text-base font-bold text-gray-800 mb-3">Specifications</h2>
@@ -541,6 +569,16 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
           <span>{shareToast}</span>
         </div>
       )}
+
+      {/* Saath Mein Khareedo Group Buy Modal */}
+      <GroupBuyModal
+        isOpen={showGroupBuyModal}
+        onClose={() => setShowGroupBuyModal(false)}
+        product={product}
+        onApplyGroupDiscount={() => {
+          onBuyNow(product, selectedSize, selectedColor);
+        }}
+      />
 
       {/* Social & Direct Link Share Modal */}
       <ShareModal

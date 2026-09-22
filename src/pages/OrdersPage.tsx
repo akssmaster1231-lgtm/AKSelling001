@@ -58,7 +58,8 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
     }
 
     // Subscribe to Firestore orders in real-time
-    const unsubscribe = subscribeOrders(user?.phone, (firestoreOrders) => {
+    const userIdentifier = user?.phone || user?.email || user?.id;
+    const unsubscribe = subscribeOrders(userIdentifier, (firestoreOrders) => {
       if (firestoreOrders.length > 0) {
         const ids = new Set(firestoreOrders.map(o => o.id));
         const remainingLocal = localOrders.filter(o => !ids.has(o.id));
@@ -97,7 +98,7 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
       window.removeEventListener('akselling_orders_updated', handleOrdersUpdated);
       window.removeEventListener('storage', handleOrdersUpdated);
     };
-  }, [user?.phone]);
+  }, [user?.phone, user?.email, user?.id]);
 
   // Real-time status update handler (persists to Firestore + local storage)
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
