@@ -9,7 +9,7 @@ import {
   Flame,
   ArrowRight,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { fireConfetti } from '@/utils/confetti';
 import {
   STREAK_REWARDS,
   getStreakData,
@@ -59,10 +59,8 @@ export default function DailyStreakModal({
 
       // Confetti burst
       try {
-        confetti({
+        fireConfetti({
           particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 },
         });
       } catch {
         // ignore

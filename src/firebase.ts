@@ -354,151 +354,190 @@ export function subscribeProducts(
           }
           callback(uniqueItems);
         } else {
-          callback([]);
+          // If empty, try cached products
+          const cached = getCachedProducts();
+          if (cached.length > 0) callback(cached);
         }
       },
-      (error) => {
-        handleFirestoreError(error, 'subscribeProducts');
-        callback([]);
+      () => {
+        // Suppress scary permission errors for public users and fall back to local/server cache
+        const cached = getCachedProducts();
+        if (cached.length > 0) {
+          callback(cached);
+        } else {
+          fetch('/api/products')
+            .then(res => res.json())
+            .then(data => {
+              if (Array.isArray(data.products) && data.products.length > 0) {
+                callback(data.products);
+              }
+            })
+            .catch(() => {});
+        }
       }
     );
-  } catch (err) {
-    handleFirestoreError(err, 'subscribeProducts');
+  } catch {
+    const cached = getCachedProducts();
+    if (cached.length > 0) callback(cached);
     return () => {};
   }
 }
 
 export async function saveProductToFirestore(product: Product | SellerProduct): Promise<void> {
-  if (isQuotaExhausted()) return;
+  const prodId = product.id;
+  if (!prodId) return;
+
+  const resolvedImgs = resolveProductImages(product);
+
+  // Normalizing attributes
+  const rawData: Record<string, unknown> = {
+    id: prodId,
+    title: product.title || '',
+    description: product.description || '',
+    price: Number(product.price) || 0,
+    mrp: Number(product.mrp) || Number(product.price) || 0,
+    discount: Number(product.discount) || 0,
+    category: product.category || 'fashion',
+    images: resolvedImgs,
+    image: resolvedImgs[0],
+    imageUrl: resolvedImgs[0],
+    image_url: resolvedImgs[0],
+    rating: typeof product.rating === 'number' ? product.rating : 4.2,
+    ratingCount: ('salesCount' in product ? product.salesCount : product.ratingCount) || 0,
+    brand: product.brand || 'AKSelling',
+    inStock: 'stock' in product ? (product.stock > 0 || product.status === 'live') : (product.inStock ?? true),
+    delivery: ('delivery' in product ? product.delivery : null) || 'Free delivery by tomorrow',
+    updatedAt: new Date().toISOString(),
+  };
+
+  if ('sizes' in product && product.sizes !== undefined) rawData.sizes = product.sizes;
+  if ('colors' in product && product.colors !== undefined) rawData.colors = product.colors;
+  if ('neckType' in product && product.neckType !== undefined) rawData.neckType = product.neckType;
+  if ('sleeveType' in product && product.sleeveType !== undefined) rawData.sleeveType = product.sleeveType;
+  if ('fitType' in product && product.fitType !== undefined) rawData.fitType = product.fitType;
+  if ('fabric' in product && product.fabric !== undefined) rawData.fabric = product.fabric;
+  if ('productType' in product && product.productType !== undefined) rawData.productType = product.productType;
+  if ('printDesign' in product && product.printDesign !== undefined) rawData.printDesign = product.printDesign;
+  if ('weightGsm' in product && product.weightGsm !== undefined) rawData.weightGsm = product.weightGsm;
+  if ('shippingCharge' in product && product.shippingCharge !== undefined) rawData.shippingCharge = product.shippingCharge;
+  if ('isFreeShipping' in product && product.isFreeShipping !== undefined) rawData.isFreeShipping = product.isFreeShipping;
+  if ('pickupAddress' in product && product.pickupAddress !== undefined) rawData.pickupAddress = product.pickupAddress;
+  if ('variants' in product && product.variants !== undefined) rawData.variants = product.variants;
+  if ('storefrontPlacement' in product && product.storefrontPlacement !== undefined) rawData.storefrontPlacement = product.storefrontPlacement;
+  if ('stock' in product && product.stock !== undefined) rawData.stock = product.stock;
+  if ('status' in product && product.status !== undefined) rawData.status = product.status;
+  if ('sku' in product && product.sku !== undefined) rawData.sku = product.sku;
+  if ('pickupLocation' in product && product.pickupLocation !== undefined) rawData.pickupLocation = product.pickupLocation;
+  if ('weight' in product && product.weight !== undefined) rawData.weight = product.weight;
+  if ('dimensions' in product && product.dimensions !== undefined) rawData.dimensions = product.dimensions;
+  if ('tags' in product && Array.isArray(product.tags)) rawData.tags = product.tags;
+  if ('keywords' in product && Array.isArray(product.keywords)) rawData.keywords = product.keywords;
+
+  const normalizedProd: Product = {
+    id: prodId,
+    title: rawData.title as string,
+    description: rawData.description as string,
+    price: rawData.price as number,
+    mrp: rawData.mrp as number,
+    discount: rawData.discount as number,
+    category: rawData.category as string,
+    images: rawData.images as string[],
+    imageUrl: (rawData.images as string[])?.[0],
+    image: (rawData.images as string[])?.[0],
+    rating: rawData.rating as number,
+    ratingCount: rawData.ratingCount as number,
+    brand: rawData.brand as string,
+    inStock: rawData.inStock as boolean,
+    delivery: rawData.delivery as string,
+    tags: (rawData.tags as string[]) || [],
+    keywords: (rawData.keywords as string[]) || [],
+    sizes: rawData.sizes as string[] | undefined,
+    colors: rawData.colors as string[] | undefined,
+    neckType: rawData.neckType as string | undefined,
+    sleeveType: rawData.sleeveType as string | undefined,
+    fitType: rawData.fitType as string | undefined,
+    fabric: rawData.fabric as string | undefined,
+    productType: rawData.productType as string | undefined,
+    printDesign: rawData.printDesign as string | undefined,
+    weightGsm: rawData.weightGsm as string | undefined,
+    shippingCharge: rawData.shippingCharge as number | undefined,
+    isFreeShipping: rawData.isFreeShipping as boolean | undefined,
+    pickupAddress: rawData.pickupAddress as Record<string, unknown> | undefined,
+    variants: rawData.variants as unknown[] | undefined,
+    storefrontPlacement: rawData.storefrontPlacement as Record<string, unknown> | undefined,
+  };
+
+  // 1. Update local cache immediately so UI reflects in 0ms
+  const current = getCachedProducts();
+  const nextCached = current.some(p => p.id === prodId)
+    ? current.map(p => (p.id === prodId ? normalizedProd : p))
+    : [normalizedProd, ...current];
+  setCachedProducts(nextCached);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('akselling_products_updated', { detail: { products: nextCached } }));
+  }
+
+  // 2. Persist to server backend API
   try {
-    const prodId = product.id;
-    if (!prodId) return;
+    fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(normalizedProd),
+    }).catch(e => console.warn('Server product sync notice:', e));
+  } catch {
+    // ignore
+  }
+
+  // 3. Persist to Firebase Firestore
+  try {
     const docRef = doc(db, 'products', prodId);
-    
-    const resolvedImgs = resolveProductImages(product);
-
-    // Normalizing attributes
-    const rawData: Record<string, unknown> = {
-      id: prodId,
-      title: product.title || '',
-      description: product.description || '',
-      price: Number(product.price) || 0,
-      mrp: Number(product.mrp) || Number(product.price) || 0,
-      discount: Number(product.discount) || 0,
-      category: product.category || 'fashion',
-      images: resolvedImgs,
-      image: resolvedImgs[0],
-      imageUrl: resolvedImgs[0],
-      image_url: resolvedImgs[0],
-      rating: typeof product.rating === 'number' ? product.rating : 4.2,
-      ratingCount: ('salesCount' in product ? product.salesCount : product.ratingCount) || 0,
-      brand: product.brand || 'AKSelling',
-      inStock: 'stock' in product ? (product.stock > 0 || product.status === 'live') : (product.inStock ?? true),
-      delivery: ('delivery' in product ? product.delivery : null) || 'Free delivery by tomorrow',
-      updatedAt: new Date().toISOString(),
-    };
-
-    if ('sizes' in product && product.sizes !== undefined) rawData.sizes = product.sizes;
-    if ('colors' in product && product.colors !== undefined) rawData.colors = product.colors;
-    if ('neckType' in product && product.neckType !== undefined) rawData.neckType = product.neckType;
-    if ('sleeveType' in product && product.sleeveType !== undefined) rawData.sleeveType = product.sleeveType;
-    if ('fitType' in product && product.fitType !== undefined) rawData.fitType = product.fitType;
-    if ('fabric' in product && product.fabric !== undefined) rawData.fabric = product.fabric;
-    if ('productType' in product && product.productType !== undefined) rawData.productType = product.productType;
-    if ('printDesign' in product && product.printDesign !== undefined) rawData.printDesign = product.printDesign;
-    if ('weightGsm' in product && product.weightGsm !== undefined) rawData.weightGsm = product.weightGsm;
-    if ('shippingCharge' in product && product.shippingCharge !== undefined) rawData.shippingCharge = product.shippingCharge;
-    if ('isFreeShipping' in product && product.isFreeShipping !== undefined) rawData.isFreeShipping = product.isFreeShipping;
-    if ('pickupAddress' in product && product.pickupAddress !== undefined) rawData.pickupAddress = product.pickupAddress;
-    if ('variants' in product && product.variants !== undefined) rawData.variants = product.variants;
-    if ('storefrontPlacement' in product && product.storefrontPlacement !== undefined) rawData.storefrontPlacement = product.storefrontPlacement;
-    if ('stock' in product && product.stock !== undefined) rawData.stock = product.stock;
-    if ('status' in product && product.status !== undefined) rawData.status = product.status;
-    if ('sku' in product && product.sku !== undefined) rawData.sku = product.sku;
-    if ('pickupLocation' in product && product.pickupLocation !== undefined) rawData.pickupLocation = product.pickupLocation;
-    if ('weight' in product && product.weight !== undefined) rawData.weight = product.weight;
-    if ('dimensions' in product && product.dimensions !== undefined) rawData.dimensions = product.dimensions;
-    if ('tags' in product && Array.isArray(product.tags)) rawData.tags = product.tags;
-    if ('keywords' in product && Array.isArray(product.keywords)) rawData.keywords = product.keywords;
-
     const dataToSave = sanitizeForFirestore(rawData);
     await setDoc(docRef, dataToSave, { merge: true });
-
-    // Update local cache so it reflects immediately
-    const current = getCachedProducts();
-    const normalizedProd: Product = {
-      id: prodId,
-      title: rawData.title as string,
-      description: rawData.description as string,
-      price: rawData.price as number,
-      mrp: rawData.mrp as number,
-      discount: rawData.discount as number,
-      category: rawData.category as string,
-      images: rawData.images as string[],
-      imageUrl: (rawData.images as string[])?.[0],
-      image: (rawData.images as string[])?.[0],
-      rating: rawData.rating as number,
-      ratingCount: rawData.ratingCount as number,
-      brand: rawData.brand as string,
-      inStock: rawData.inStock as boolean,
-      delivery: rawData.delivery as string,
-      tags: (rawData.tags as string[]) || [],
-      keywords: (rawData.keywords as string[]) || [],
-      sizes: rawData.sizes as string[] | undefined,
-      colors: rawData.colors as string[] | undefined,
-      neckType: rawData.neckType as string | undefined,
-      sleeveType: rawData.sleeveType as string | undefined,
-      fitType: rawData.fitType as string | undefined,
-      fabric: rawData.fabric as string | undefined,
-      productType: rawData.productType as string | undefined,
-      printDesign: rawData.printDesign as string | undefined,
-      weightGsm: rawData.weightGsm as string | undefined,
-      shippingCharge: rawData.shippingCharge as number | undefined,
-      isFreeShipping: rawData.isFreeShipping as boolean | undefined,
-      pickupAddress: rawData.pickupAddress as Record<string, unknown> | undefined,
-      variants: rawData.variants as unknown[] | undefined,
-      storefrontPlacement: rawData.storefrontPlacement as Record<string, unknown> | undefined,
-    };
-    const existingProd = current.find(p => p.id === prodId);
-    if (existingProd && typeof existingProd.price === 'number' && normalizedProd.price < existingProd.price) {
-      // Product price has been reduced! Automatically dispatch PriceAlerts
-      checkAndDispatchPriceDropAlerts(
-        prodId,
-        normalizedProd.price,
-        existingProd.price,
-        normalizedProd.title,
-        normalizedProd.images?.[0]
-      ).catch(dispatchErr => console.warn('[PriceAlert] Auto-dispatch notice:', dispatchErr));
-    } else if (!existingProd) {
-      // New Catalog / Product Uploaded: Broadcast notification to all app users in real-time
-      broadcastNewCatalogNotification(normalizedProd).catch(dispatchErr =>
-        console.warn('[NewCatalog] Auto-broadcast notice:', dispatchErr)
-      );
-    }
-
-    const nextCached = current.some(p => p.id === prodId)
-      ? current.map(p => p.id === prodId ? normalizedProd : p)
-      : [normalizedProd, ...current];
-    setCachedProducts(nextCached);
-    window.dispatchEvent(new CustomEvent('akselling_products_updated'));
   } catch (err) {
-    handleFirestoreError(err, 'saveProductToFirestore');
+    console.warn('Firestore product write notice (saved in server/local database):', err);
+  }
+
+  // Check price drops & notifications
+  const existingProd = current.find(p => p.id === prodId);
+  if (existingProd && typeof existingProd.price === 'number' && normalizedProd.price < existingProd.price) {
+    checkAndDispatchPriceDropAlerts(
+      prodId,
+      normalizedProd.price,
+      existingProd.price,
+      normalizedProd.title,
+      normalizedProd.images?.[0]
+    ).catch(dispatchErr => console.warn('[PriceAlert] Auto-dispatch notice:', dispatchErr));
+  } else if (!existingProd) {
+    broadcastNewCatalogNotification(normalizedProd).catch(dispatchErr =>
+      console.warn('[NewCatalog] Auto-broadcast notice:', dispatchErr)
+    );
   }
 }
 
 export async function deleteProductFromFirestore(productId: string): Promise<void> {
-  if (isQuotaExhausted()) return;
+  if (!productId) return;
+
+  // 1. Update local cache
+  const current = getCachedProducts();
+  const updated = current.filter(p => p.id !== productId);
+  setCachedProducts(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('akselling_products_updated', { detail: { products: updated } }));
+  }
+
+  // 2. Delete from server backend
   try {
-    if (!productId) return;
+    fetch(`/api/products/${productId}`, { method: 'DELETE' }).catch(() => {});
+  } catch {
+    // ignore
+  }
+
+  // 3. Delete from Firebase Firestore
+  try {
     await deleteDoc(doc(db, 'products', productId));
-    const current = getCachedProducts();
-    const updated = current.filter(p => p.id !== productId);
-    setCachedProducts(updated);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('akselling_products_updated', { detail: { products: updated } }));
-    }
   } catch (err) {
-    handleFirestoreError(err, 'deleteProductFromFirestore');
+    console.warn('Firestore product delete notice:', err);
   }
 }
 
@@ -700,39 +739,59 @@ export function subscribeBanners(callback: (banners: Banner[]) => void): () => v
           list.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
           callback(list);
         } else {
-          callback([]);
+          // If empty, fetch from server API
+          fetch('/api/banners')
+            .then(r => r.json())
+            .then(d => {
+              if (Array.isArray(d.banners) && d.banners.length > 0) {
+                callback(d.banners.filter((b: Banner & { active?: boolean }) => b.active !== false));
+              }
+            })
+            .catch(() => {});
         }
       },
-      (err) => {
-        handleFirestoreError(err, 'subscribeBanners');
-        callback([]);
+      () => {
+        // Fall back gracefully to backend API banners without scaring public users
+        fetch('/api/banners')
+          .then(r => r.json())
+          .then(d => {
+            if (Array.isArray(d.banners) && d.banners.length > 0) {
+              callback(d.banners.filter((b: Banner & { active?: boolean }) => b.active !== false));
+            }
+          })
+          .catch(() => {});
       }
     );
-  } catch (err) {
-    handleFirestoreError(err, 'subscribeBanners');
+  } catch {
+    fetch('/api/banners')
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d.banners) && d.banners.length > 0) {
+          callback(d.banners.filter((b: Banner & { active?: boolean }) => b.active !== false));
+        }
+      })
+      .catch(() => {});
     return () => {};
   }
 }
 
 export async function saveBannerToFirestore(banner: Banner): Promise<void> {
-  if (isQuotaExhausted()) return;
   try {
     if (!banner.id) return;
     const bannerDoc = doc(db, 'banners', banner.id);
     const cleaned = sanitizeForFirestore(banner);
     await setDoc(bannerDoc, cleaned, { merge: true });
   } catch (err) {
-    handleFirestoreError(err, 'saveBannerToFirestore');
+    console.warn('Firestore save banner notice:', err);
   }
 }
 
 export async function deleteBannerFromFirestore(id: string): Promise<void> {
-  if (isQuotaExhausted()) return;
   try {
     if (!id) return;
     await deleteDoc(doc(db, 'banners', id));
   } catch (err) {
-    handleFirestoreError(err, 'deleteBannerFromFirestore');
+    console.warn('Firestore delete banner notice:', err);
   }
 }
 

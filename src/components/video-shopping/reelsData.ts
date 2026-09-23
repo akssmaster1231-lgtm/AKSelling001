@@ -29,7 +29,7 @@ export const FASHION_REELS: VideoReelItem[] = [
   {
     id: 'reel_1',
     productId: '1',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-man-in-a-white-shirt-walking-in-front-of-42868-large.mp4',
+    videoUrl: '/videos/reel_1.mp4',
     posterUrl: 'https://images.pexels.com/photos/297933/pexels-photo-297933.jpeg?auto=compress&cs=tinysrgb&w=800',
     creatorName: 'Aman Sharma @stylewithaman',
     creatorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
@@ -55,7 +55,7 @@ export const FASHION_REELS: VideoReelItem[] = [
   {
     id: 'reel_2',
     productId: '2',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-showing-off-her-clothes-41589-large.mp4',
+    videoUrl: '/videos/reel_2.mp4',
     posterUrl: 'https://images.pexels.com/photos/1036623/pexels-photo-1036623.jpeg?auto=compress&cs=tinysrgb&w=800',
     creatorName: 'Rhea Kapoor @rhea_fits',
     creatorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
@@ -81,7 +81,7 @@ export const FASHION_REELS: VideoReelItem[] = [
   {
     id: 'reel_3',
     productId: '3',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-man-wearing-a-jacket-looking-at-the-camera-42867-large.mp4',
+    videoUrl: '/videos/reel_3.mp4',
     posterUrl: 'https://images.pexels.com/photos/8743972/pexels-photo-8743972.jpeg?auto=compress&cs=tinysrgb&w=800',
     creatorName: 'Kabir Verma @kabir_drips',
     creatorAvatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80',
@@ -107,7 +107,7 @@ export const FASHION_REELS: VideoReelItem[] = [
   {
     id: 'reel_4',
     productId: '4',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-man-walking-with-a-skateboard-in-his-hand-42866-large.mp4',
+    videoUrl: '/videos/reel_4.mp4',
     posterUrl: 'https://images.pexels.com/photos/1598505/pexels-photo-1598505.jpeg?auto=compress&cs=tinysrgb&w=800',
     creatorName: 'Vikram Patel @sneaker_guy',
     creatorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',

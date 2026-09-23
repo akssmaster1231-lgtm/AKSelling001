@@ -24,56 +24,87 @@ export const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;
 
 export async function fetchProducts(): Promise<Product[]> {
   const localSellerProducts = getLocalSellerProducts();
-  const localIds = new Set(localSellerProducts.map(p => p.id));
   const cached = getCachedProducts();
+  const dbItems: Product[] = [];
+  const serverItems: Product[] = [];
 
+  // 1. Fetch from server backend API
+  try {
+    const sRes = await fetch('/api/products');
+    if (sRes.ok) {
+      const sData = await sRes.json();
+      if (Array.isArray(sData.products)) {
+        sData.products.forEach((p: Product) => {
+          if (p && p.id) {
+            const resolvedImgs = resolveProductImages(p);
+            serverItems.push({
+              ...p,
+              images: resolvedImgs,
+              imageUrl: resolvedImgs[0],
+              image: resolvedImgs[0],
+            });
+          }
+        });
+      }
+    }
+  } catch {
+    // silent
+  }
+
+  // 2. Fetch from Firebase Firestore
   try {
     const productsRef = collection(db, 'products');
     const snap = await getDocs(productsRef);
     if (!snap.empty) {
-      const dbItems: Product[] = [];
       snap.forEach(docSnap => {
         const d = docSnap.data();
-        if (!localIds.has(docSnap.id)) {
-          const resolvedImgs = resolveProductImages({ id: docSnap.id, ...d });
-          dbItems.push({
-            id: docSnap.id,
-            title: d.title || '',
-            description: d.description || '',
-            price: Number(d.price) || 0,
-            mrp: Number(d.mrp) || Number(d.price) || 0,
-            discount: Number(d.discount) || 0,
-            category: d.category || 'fashion',
-            images: resolvedImgs,
-            imageUrl: resolvedImgs[0],
-            image: resolvedImgs[0],
-            rating: typeof d.rating === 'number' ? d.rating : 4.2,
-            ratingCount: Number(d.ratingCount || d.rating_count || 120),
-            brand: d.brand || 'AKSelling',
-            inStock: d.inStock !== false && d.in_stock !== false,
-            delivery: d.delivery || 'Free delivery by tomorrow',
-            sizes: d.sizes,
-            colors: d.colors,
-            neckType: d.neckType,
-            sleeveType: d.sleeveType,
-            fitType: d.fitType,
-            fabric: d.fabric,
-            tags: Array.isArray(d.tags) ? d.tags : [],
-            keywords: Array.isArray(d.keywords) ? d.keywords : [],
-            pickupLocation: d.pickupLocation,
-            weight: d.weight,
-            dimensions: d.dimensions,
-          });
-        }
+        const resolvedImgs = resolveProductImages({ id: docSnap.id, ...d });
+        dbItems.push({
+          id: docSnap.id,
+          title: d.title || '',
+          description: d.description || '',
+          price: Number(d.price) || 0,
+          mrp: Number(d.mrp) || Number(d.price) || 0,
+          discount: Number(d.discount) || 0,
+          category: d.category || 'fashion',
+          images: resolvedImgs,
+          imageUrl: resolvedImgs[0],
+          image: resolvedImgs[0],
+          rating: typeof d.rating === 'number' ? d.rating : 4.2,
+          ratingCount: Number(d.ratingCount || d.rating_count || 120),
+          brand: d.brand || 'AKSelling',
+          inStock: d.inStock !== false && d.in_stock !== false,
+          delivery: d.delivery || 'Free delivery by tomorrow',
+          sizes: d.sizes,
+          colors: d.colors,
+          neckType: d.neckType,
+          sleeveType: d.sleeveType,
+          fitType: d.fitType,
+          fabric: d.fabric,
+          tags: Array.isArray(d.tags) ? d.tags : [],
+          keywords: Array.isArray(d.keywords) ? d.keywords : [],
+          pickupLocation: d.pickupLocation,
+          weight: d.weight,
+          dimensions: d.dimensions,
+        });
       });
-      const combined = deduplicateProducts([...localSellerProducts, ...dbItems]);
-      setCachedProducts(combined);
-      return combined;
     }
-    return deduplicateProducts(localSellerProducts.length > 0 ? localSellerProducts : cached);
   } catch {
-    return deduplicateProducts(localSellerProducts.length > 0 ? localSellerProducts : cached);
+    // silent
   }
+
+  const combined = deduplicateProducts([
+    ...dbItems,
+    ...serverItems,
+    ...localSellerProducts,
+    ...cached,
+  ]);
+
+  if (combined.length > 0) {
+    setCachedProducts(combined);
+    return combined;
+  }
+  return fallbackProducts;
 }
 
 export async function fetchProductById(productId: string): Promise<Product | null> {

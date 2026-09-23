@@ -2,15 +2,173 @@ import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
 import path from 'node:path';
+import fs from 'node:fs';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
+import { GoogleGenAI } from '@google/genai';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  // -------------------------------------------------------------
+  // PERSISTENT CLOUD DATA STORAGE (BANNERS & PRODUCTS)
+  // -------------------------------------------------------------
+  const DATA_DIR = path.join(process.cwd(), 'data');
+  const BANNERS_FILE = path.join(DATA_DIR, 'banners.json');
+  const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
+
+  function readDataFile<T>(filePath: string, fallback: T): T {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        return JSON.parse(raw);
+      }
+    } catch (err) {
+      console.warn(`[Storage] Error reading ${filePath}:`, err);
+    }
+    return fallback;
+  }
+
+  function writeDataFile<T>(filePath: string, data: T): boolean {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+      return true;
+    } catch (err) {
+      console.error(`[Storage] Error writing ${filePath}:`, err);
+      return false;
+    }
+  }
+
+  interface StoredBanner {
+    id: string;
+    title?: string;
+    subtitle?: string;
+    cta?: string;
+    image?: string;
+    gradient?: string;
+    active?: boolean;
+    display_order?: number;
+    category?: string;
+    [key: string]: unknown;
+  }
+
+  interface StoredProduct {
+    id: string;
+    title?: string;
+    price?: number;
+    mrp?: number;
+    [key: string]: unknown;
+  }
+
+  // GET /api/banners
+  app.get('/api/banners', (_req, res) => {
+    const banners = readDataFile<StoredBanner[]>(BANNERS_FILE, []);
+    res.json({ success: true, banners });
+  });
+
+  // POST /api/banners
+  app.post('/api/banners', (req, res) => {
+    try {
+      const banner = req.body as StoredBanner;
+      if (!banner || !banner.id) {
+        return res.status(400).json({ error: 'Missing banner payload or id' });
+      }
+      const banners = readDataFile<StoredBanner[]>(BANNERS_FILE, []);
+      const existingIdx = banners.findIndex(b => b.id === banner.id);
+      if (existingIdx >= 0) {
+        banners[existingIdx] = { ...banners[existingIdx], ...banner };
+      } else {
+        banners.unshift(banner);
+      }
+      writeDataFile(BANNERS_FILE, banners);
+      res.json({ success: true, banner });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save banner';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // PUT /api/banners/:id
+  app.put('/api/banners/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body as Partial<StoredBanner>;
+      const banners = readDataFile<StoredBanner[]>(BANNERS_FILE, []);
+      const existingIdx = banners.findIndex(b => b.id === id);
+      if (existingIdx >= 0) {
+        banners[existingIdx] = { ...banners[existingIdx], ...updates };
+        writeDataFile(BANNERS_FILE, banners);
+        res.json({ success: true, banner: banners[existingIdx] });
+      } else {
+        res.status(404).json({ error: 'Banner not found' });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update banner';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // DELETE /api/banners/:id
+  app.delete('/api/banners/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const banners = readDataFile<StoredBanner[]>(BANNERS_FILE, []);
+      const filtered = banners.filter(b => b.id !== id);
+      writeDataFile(BANNERS_FILE, filtered);
+      res.json({ success: true, message: 'Banner deleted' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete banner';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // GET /api/products
+  app.get('/api/products', (_req, res) => {
+    const products = readDataFile<StoredProduct[]>(PRODUCTS_FILE, []);
+    res.json({ success: true, products });
+  });
+
+  // POST /api/products
+  app.post('/api/products', (req, res) => {
+    try {
+      const product = req.body as StoredProduct;
+      if (!product || !product.id) {
+        return res.status(400).json({ error: 'Missing product payload or id' });
+      }
+      const products = readDataFile<StoredProduct[]>(PRODUCTS_FILE, []);
+      const existingIdx = products.findIndex(p => p.id === product.id);
+      if (existingIdx >= 0) {
+        products[existingIdx] = { ...products[existingIdx], ...product };
+      } else {
+        products.unshift(product);
+      }
+      writeDataFile(PRODUCTS_FILE, products);
+      res.json({ success: true, product });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save product';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // DELETE /api/products/:id
+  app.delete('/api/products/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const products = readDataFile<StoredProduct[]>(PRODUCTS_FILE, []);
+      const filtered = products.filter(p => p.id !== id);
+      writeDataFile(PRODUCTS_FILE, filtered);
+      res.json({ success: true, message: 'Product deleted' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete product';
+      res.status(500).json({ error: msg });
+    }
+  });
 
   // Health check
   app.get('/api/health', (_req, res) => {
@@ -2106,6 +2264,173 @@ async function startServer() {
     } catch (err: unknown) {
       console.error('Order notification controller error:', err);
       const message = err instanceof Error ? err.message : 'Error sending order notifications';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // 24/7 AI SMART SUPPORT ASSISTANT (HINGLISH / ORDER TRACKING)
+  // -------------------------------------------------------------
+  app.post('/api/support/chat', async (req, res) => {
+    try {
+      const {
+        message = '',
+        history = [],
+        orderId,
+        recentOrders = [],
+      } = req.body || {};
+
+      const cleanMessage = String(message || '').trim();
+      if (!cleanMessage) {
+        return res.status(400).json({ error: 'Message is required' });
+      }
+
+      const WHATSAPP_SUPPORT_URL = 'https://wa.me/917290894907';
+      const WHATSAPP_PHONE = '+91 7290894907';
+      const SUPPORT_EMAIL = 'support.akselling@gmail.com';
+      const ADMIN_EMAIL = 'anojkumaryadav7290@gmail.com';
+
+      // Construct live context about orders if provided
+      let orderContext = 'No specific order selected yet.';
+      if (orderId) {
+        const found = Array.isArray(recentOrders)
+          ? recentOrders.find(
+              (o: Record<string, unknown>) =>
+                String(o.id || o.orderId || '').toLowerCase() === String(orderId).toLowerCase()
+            )
+          : null;
+
+        if (found) {
+          orderContext = `Active Order Context:
+- Order ID: #${found.id || found.orderId}
+- Status: ${found.status || 'Confirmed & Processing'}
+- Total Amount: ₹${found.totalAmount || found.price || 'N/A'}
+- Payment Mode: ${found.paymentMethod || 'Online / 10% Advance COD'}
+- Shipping Tracking: ${found.trackingNumber || 'Assigned via Shiprocket Express'}
+- Expected Delivery: 3-5 business days across India`;
+        } else {
+          orderContext = `Customer asked about Order ID: #${orderId}. Order is registered in AKSelling Firebase Firestore backend and queued for express shipment.`;
+        }
+      } else if (Array.isArray(recentOrders) && recentOrders.length > 0) {
+        orderContext =
+          `User's Recent Orders:\n` +
+          recentOrders
+            .slice(0, 3)
+            .map(
+              (o: Record<string, unknown>, idx: number) =>
+                `${idx + 1}. Order #${o.id || o.orderId}: Status=${o.status || 'Confirmed'}, Total=₹${
+                  o.totalAmount || o.price || 'N/A'
+                }`
+            )
+            .join('\n');
+      }
+
+      const systemPrompt = `You are the official 24/7 AI Smart Support Assistant for AKSelling — India's premier fashion, lifestyle, and direct manufacturing e-commerce platform.
+Your goals:
+1. Provide instant, helpful, and friendly customer support in natural Hinglish (mix of Hindi & English) or English as preferred by the user. Keep replies polite, well-structured, with clear bullet points and emojis.
+2. 240 GSM Heavy-Cotton Fabric Specs:
+   - AKSelling premium apparel (t-shirts, streetwear) is crafted from 100% combed ringspun cotton with dense 240 GSM (Grams per Square Meter) heavy-weight knit.
+   - Features: Silicon bio-washed for peach-soft skin comfort, pre-shrunk against wash shrinkage, fade-proof reactive dyes, double-needle stitched neckband and hemline.
+3. ₹30 Wallet Signup Bonus & Shopping Coins:
+   - Every user receives an instant ₹30 welcome bonus in their AKSelling Wallet.
+   - Daily check-in coins (Roz Check-In) award ₹5 to ₹50 daily.
+   - Spin & Win Lucky Wheel awards up to ₹200 cashback.
+   - Wallet balance and coins automatically deduct at checkout for instant savings!
+4. 10% Advance COD Payment Policy:
+   - Cash on Delivery orders require a 10% online advance deposit (via UPI/Razorpay) to verify genuine delivery intent and prevent RTO losses.
+   - Remaining 90% is collected at doorstep upon delivery. 100% secure with instant refund on cancellation.
+5. Shipping & Express Delivery:
+   - FREE delivery on orders above ₹500 (₹49 for smaller orders).
+   - Standard delivery: 3 to 5 business days pan-India via Shiprocket, Bluedart, Delhivery.
+6. Order Tracking:
+   - Current Order Context:\n${orderContext}
+   - Reference order status accurately if user asks.
+7. WhatsApp Escalation Bridge:
+   - Always let users know they can connect directly with the human support desk on WhatsApp: ${WHATSAPP_SUPPORT_URL} (${WHATSAPP_PHONE}) or email ${SUPPORT_EMAIL}.
+   - Permanent Owner Admin: ${ADMIN_EMAIL}.`;
+
+      // Check if GEMINI_API_KEY is available
+      const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+      if (apiKey) {
+        const candidateModels = [
+          process.env.GEMINI_MODEL,
+          'gemini-3.8-flash',
+          'gemini-3.6-flash',
+        ].filter(Boolean) as string[];
+
+        const ai = new GoogleGenAI({ apiKey });
+        for (const candidateModel of candidateModels) {
+          try {
+            const response = await ai.models.generateContent({
+              model: candidateModel,
+              contents: [
+                ...history.slice(-6).map((h: Record<string, unknown>) => ({
+                  role: h.role === 'user' ? 'user' : 'model',
+                  parts: [{ text: String(h.text || h.message || '') }],
+                })),
+                {
+                  role: 'user',
+                  parts: [{ text: cleanMessage }],
+                },
+              ],
+              config: {
+                systemInstruction: systemPrompt,
+                temperature: 0.7,
+                maxOutputTokens: 600,
+              },
+            });
+
+            const replyText = response.text || '';
+            if (replyText.trim()) {
+              return res.json({
+                reply: replyText.trim(),
+                provider: candidateModel,
+                whatsappUrl: WHATSAPP_SUPPORT_URL,
+                whatsappPhone: WHATSAPP_PHONE,
+                supportEmail: SUPPORT_EMAIL,
+              });
+            }
+          } catch (apiErr: unknown) {
+            const errMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+            console.warn(`[Gemini AI Support fallback triggered for ${candidateModel}]:`, errMsg);
+          }
+        }
+      }
+
+      // High-precision algorithmic Hinglish fallback engine
+      const lower = cleanMessage.toLowerCase();
+      let fallbackReply = '';
+
+      if (lower.includes('order') || lower.includes('track') || lower.includes('status') || lower.includes('kaha') || lower.includes('kab')) {
+        if (orderId) {
+          fallbackReply = `📦 **Order Status Update (Order #${orderId})**:\n\nAapka order hamare automated warehouse system me register ho chuka hai aur dispatch processing me hai! 🚚\n\n• **Estimated Delivery**: 3-5 business days me aapke address par deliver ho jayega.\n• **Courier Partner**: Shiprocket / Bluedart Express.\n• **Tracking**: Order dispatch hote hi live AWB link aapko SMS aur Email par send kar diya jata hai.\n\nKoi urgent inquiry hai toh direct WhatsApp par connect karein: [Chat on WhatsApp](${WHATSAPP_SUPPORT_URL})`;
+        } else {
+          fallbackReply = `📦 **Track Your Order**:\n\nApna **Order ID** (jaise \`AKS-123456\`) yahan enter kijiye ya app ke **Orders** tab me jakar live status stepper dekh sakte hain!\n\n• **Standard Delivery**: 3 se 5 business days pan-India.\n• **Courier**: Shiprocket / Bluedart / Delhivery Express.\n• **Help**: [WhatsApp Support](${WHATSAPP_SUPPORT_URL}) 🚚`;
+        }
+      } else if (lower.includes('240') || lower.includes('gsm') || lower.includes('fabric') || lower.includes('kapda') || lower.includes('cotton') || lower.includes('quality') || lower.includes('tshirt') || lower.includes('t-shirt')) {
+        fallbackReply = `👕 **AKSelling 240 GSM Fabric Specifications**:\n\n• **100% Combed Ringspun Cotton**: Heavyweight **240 GSM** super-dense knit jo standard 180 GSM t-shirts se kaafi zyada premium aur thick hoti hai.\n• **Bio-Washed**: Silicon enzyme bio-wash se fabric ultra-soft peach feel deta hai aur skin par gentle rehta hai.\n• **Pre-Shrunk & Non-Fading**: Multiple wash ke baad bhi na shrink hota hai aur na color fade hota hai.\n• **Streetwear Boxy Fit**: Double-needle stitched neck ribbing aur side seams jo perfect drop-shoulder look dete hain! ✨`;
+      } else if (lower.includes('bonus') || lower.includes('30') || lower.includes('wallet') || lower.includes('coin') || lower.includes('paisa') || lower.includes('cashback') || lower.includes('reward')) {
+        fallbackReply = `💰 **AKSelling ₹30 Wallet Bonus & Rewards**:\n\n• **Instant ₹30 Welcome Bonus**: Har naye customer ko signup karte hi wallet me direct ₹30 credit milta hai!\n• **Roz Check-In**: App par daily aane se ₹5 se ₹50 tak ke shopping coins milte hain.\n• **Spin & Win**: Order complete karne par free lucky spin milta hai jisme ₹200 tak additional cash jeet sakte hain.\n• **Automatic Checkout Discount**: Checkout karte waqt wallet balance direct aapke order total se deduct ho jata hai! 🎉`;
+      } else if (lower.includes('advance') || lower.includes('10%') || lower.includes('cod') || lower.includes('cash on delivery') || lower.includes('payment')) {
+        fallbackReply = `🛡️ **10% Advance Token Payment for Cash on Delivery**:\n\n• **Kyu zaroori hai?**: Fake addresses aur return-to-origin (RTO) parcels ko filter karne ke liye COD orders par 10% online token payment (UPI/GPay/PhonePe/Card) secure gateway se liya jata hai.\n• **Doorstep Payment**: Baki bacha 90% payment aapko parcel receive karte waqt courier partner ko cash ya UPI se dena hota hai.\n• **Safe & Guaranteed**: Order cancel hone par 10% advance turant aapke bank account me refund ho jata hai! 🔒`;
+      } else if (lower.includes('shipping') || lower.includes('delivery') || lower.includes('charges') || lower.includes('charge') || lower.includes('free delivery') || lower.includes('speed')) {
+        fallbackReply = `🚚 **Shipping & Express Delivery Details**:\n\n• **FREE Shipping**: ₹500 se zyada ke order par delivery bilkul FREE hai! (₹500 se kam par ₹49 flat fee).\n• **Delivery Speed**: 3 se 5 business days me pan-India delivery guaranteed.\n• **Insured Delivery**: Sabhi shipments tamper-evident packaging ke sath insured hote hain. 📦`;
+      } else if (lower.includes('whatsapp') || lower.includes('admin') || lower.includes('contact') || lower.includes('call') || lower.includes('owner') || lower.includes('phone') || lower.includes('help')) {
+        fallbackReply = `💬 **Direct Admin & WhatsApp Support Escalation**:\n\nAap direct hamari official executive desk se jud sakte hain:\n\n• **WhatsApp Support**: [Click to Chat on WhatsApp](${WHATSAPP_SUPPORT_URL}) (\`${WHATSAPP_PHONE}\`)\n• **Support Email**: \`${SUPPORT_EMAIL}\`\n• **Owner Admin**: \`${ADMIN_EMAIL}\`\n\nHamari dedicated customer support team 24/7 aapki sahayata ke liye hazir hai! 🙏`;
+      } else {
+        fallbackReply = `Namaste! 🙏 AKSelling 24/7 AI Smart Assistant me aapka swagat hai!\n\nMain aapki kya madad kar sakta hoon? Aap mujhse pooch sakte hain:\n\n1. 📦 **Order Status & Live Tracking** (Apna Order ID batayein)\n2. 👕 **240 GSM Heavy-Cotton Fabric Specs**\n3. 💰 **₹30 Wallet Welcome Bonus & Daily Coins**\n4. 🛡️ **10% Advance COD Payment System**\n5. 🚚 **Free Shipping & Delivery Timeline**\n\nAgar aapko direct human support se baat karni hai, toh aap [Direct WhatsApp Support](${WHATSAPP_SUPPORT_URL}) par click kar sakte hain! ✨`;
+      }
+
+      return res.json({
+        reply: fallbackReply,
+        provider: 'akselling-intelligent-engine',
+        whatsappUrl: WHATSAPP_SUPPORT_URL,
+        whatsappPhone: WHATSAPP_PHONE,
+        supportEmail: SUPPORT_EMAIL,
+      });
+    } catch (err: unknown) {
+      console.error('AI Support route error:', err);
+      const message = err instanceof Error ? err.message : 'Error processing support chat';
       res.status(500).json({ error: message });
     }
   });

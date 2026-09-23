@@ -34,6 +34,7 @@ export default function Header({
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState('');
+  const [hasStream, setHasStream] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const { cartCount } = useCart();
@@ -125,15 +126,25 @@ export default function Header({
     setCameraOpen(true);
     setCameraError('');
     setCapturedImage(null);
+    setHasStream(false);
 
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraError('Camera access is not supported on this browser.');
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
       });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch {
+          // Ignore autoplay restriction errors
+        }
+        setHasStream(true);
       }
     } catch {
       setCameraError('Camera access denied or not available on this device.');
@@ -144,9 +155,13 @@ export default function Header({
     setCameraOpen(false);
     setCapturedImage(null);
     setCameraError('');
+    setHasStream(false);
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
   };
 
@@ -402,14 +417,23 @@ export default function Header({
             </div>
           ) : (
             <>
-              <div className="flex-1 relative">
+              <div className="flex-1 relative bg-black flex items-center justify-center">
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.preventDefault();
+                  }}
+                  className={`w-full h-full object-cover ${hasStream ? 'block' : 'hidden'}`}
                 />
+                {!hasStream && (
+                  <div className="flex flex-col items-center justify-center text-white/70 gap-2">
+                    <Loader2 size={32} className="animate-spin text-flipkart-500" />
+                    <p className="text-xs">Initializing camera...</p>
+                  </div>
+                )}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="w-64 h-64 border-2 border-white/60 rounded-2xl" />
                 </div>

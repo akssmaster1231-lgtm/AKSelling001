@@ -34,6 +34,7 @@ export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsF
   });
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [videoErrors, setVideoErrors] = useState<Record<string, boolean>>({});
 
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -201,6 +202,7 @@ export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsF
       <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
         {FASHION_REELS.map((reel, idx) => {
           const isCurrent = idx === currentIndex;
+          const hasError = videoErrors[reel.id];
           return (
             <div
               key={reel.id}
@@ -208,19 +210,40 @@ export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsF
                 isCurrent ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
               }`}
             >
-              <video
-                ref={(el) => {
-                  videoRefs.current[idx] = el;
-                }}
-                src={reel.videoUrl}
-                poster={reel.posterUrl}
-                muted={isMuted}
-                loop
-                playsInline
-                preload="metadata"
-                onClick={handleVideoTap}
-                className="w-full h-full object-cover cursor-pointer"
-              />
+              {!hasError ? (
+                <video
+                  ref={(el) => {
+                    videoRefs.current[idx] = el;
+                  }}
+                  poster={reel.posterUrl}
+                  muted={isMuted}
+                  loop
+                  playsInline
+                  preload="auto"
+                  onClick={handleVideoTap}
+                  onError={(e) => {
+                    e.preventDefault();
+                    setVideoErrors((prev) => ({ ...prev, [reel.id]: true }));
+                  }}
+                  className="w-full h-full object-cover cursor-pointer"
+                >
+                  <source src={reel.videoUrl} type="video/mp4" />
+                </video>
+              ) : (
+                <div
+                  onClick={handleVideoTap}
+                  className="w-full h-full relative cursor-pointer overflow-hidden flex items-center justify-center bg-black"
+                >
+                  <img
+                    src={reel.posterUrl}
+                    alt={reel.caption}
+                    className={`w-full h-full object-cover transition-transform duration-1000 ${
+                      isPlaying && isCurrent ? 'scale-105 filter brightness-95' : 'scale-100'
+                    }`}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/80" />
+                </div>
+              )}
 
               {/* Pause Overlay indicator */}
               {!isPlaying && isCurrent && (

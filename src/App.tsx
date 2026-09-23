@@ -29,6 +29,7 @@ import { addRecentlyViewedProduct } from '@/utils/searchHistory';
 import VideoReelsFeed from '@/components/video-shopping/VideoReelsFeed';
 import DailyStreakModal from '@/components/gamification/DailyStreakModal';
 import SpinWheelModal from '@/components/gamification/SpinWheelModal';
+import AiSupportWidget from '@/components/support/AiSupportWidget';
 
 function AppContent() {
   const { user, authInitialized } = useAuth();
@@ -466,6 +467,9 @@ function AppContent() {
           setActiveTab('deals');
         }}
       />
+
+      {/* 24/7 AI Smart Support Assistant & WhatsApp Escalation Bridge */}
+      <AiSupportWidget />
       </div>
     </div>
   );

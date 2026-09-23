@@ -114,6 +114,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     display_order: 0,
   });
   const [savingBanner, setSavingBanner] = useState(false);
+  const [bannerFormError, setBannerFormError] = useState('');
   const [isCompressingBanner, setIsCompressingBanner] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -124,6 +125,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   const [selectedCatFilter, setSelectedCatFilter] = useState<string>('all');
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [productFormError, setProductFormError] = useState('');
   const [productForm, setProductForm] = useState({
     title: '',
     brand: 'AKSelling',
@@ -286,6 +288,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
 
   const handleOpenAddBanner = () => {
     setEditingBannerId(null);
+    setBannerFormError('');
     setBannerForm({
       title: '',
       subtitle: '',
@@ -299,6 +302,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
 
   const handleOpenEditBanner = (banner: MasterBanner) => {
     setEditingBannerId(String(banner.id));
+    setBannerFormError('');
     setBannerForm({
       title: String(banner.title || ''),
       subtitle: String(banner.subtitle || ''),
@@ -312,24 +316,29 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
 
   const handleSaveBanner = async () => {
     if (!bannerForm.title.trim() || !bannerForm.image.trim()) {
-      alert('Please provide a banner title and image.');
+      setBannerFormError('Please provide a banner title and image.');
       return;
     }
     setSavingBanner(true);
+    setBannerFormError('');
     try {
       if (editingBannerId) {
         await updateBanner(editingBannerId, {
-          title: bannerForm.title,
-          subtitle: bannerForm.subtitle,
-          cta: bannerForm.cta,
-          image: bannerForm.image,
+          title: bannerForm.title.trim(),
+          subtitle: bannerForm.subtitle.trim(),
+          cta: bannerForm.cta.trim() || 'Shop Now',
+          image: bannerForm.image.trim(),
           gradient: bannerForm.gradient,
           display_order: bannerForm.display_order,
         });
         setSavedMsg('Banner updated successfully!');
       } else {
         await addBanner({
-          ...bannerForm,
+          title: bannerForm.title.trim(),
+          subtitle: bannerForm.subtitle.trim(),
+          cta: bannerForm.cta.trim() || 'Shop Now',
+          image: bannerForm.image.trim(),
+          gradient: bannerForm.gradient,
           display_order: bannerForm.display_order || banners.length + 1,
         });
         setSavedMsg('New Banner published live on Homepage!');
@@ -337,22 +346,20 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       setShowAddBanner(false);
       setEditingBannerId(null);
       await loadBanners();
-      setTimeout(() => setSavedMsg(''), 2500);
+      setTimeout(() => setSavedMsg(''), 3000);
     } catch (err) {
       console.warn('Error saving banner notice:', err);
-      alert('Failed to save banner.');
+      setBannerFormError('Failed to save banner. Please check details and try again.');
     } finally {
       setSavingBanner(false);
     }
   };
 
   const handleDeleteBanner = async (id: string) => {
-    if (window.confirm('Are you sure you want to remove this banner from Homepage?')) {
-      await deleteBanner(id);
-      await loadBanners();
-      setSavedMsg('Banner removed from Homepage.');
-      setTimeout(() => setSavedMsg(''), 2000);
-    }
+    await deleteBanner(id);
+    await loadBanners();
+    setSavedMsg('Banner removed from Homepage.');
+    setTimeout(() => setSavedMsg(''), 2500);
   };
 
   const handleToggleBannerActive = async (id: string, current: boolean) => {
@@ -505,6 +512,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
 
   const handleOpenAddProduct = () => {
     setEditingProductId(null);
+    setProductFormError('');
     setProductForm({
       title: '',
       brand: 'AKSelling',
@@ -523,6 +531,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
 
   const handleEditProduct = (prod: Product) => {
     setEditingProductId(prod.id);
+    setProductFormError('');
     setProductForm({
       title: prod.title,
       brand: prod.brand || 'AKSelling',
@@ -542,17 +551,18 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productForm.title.trim()) {
-      alert('Product title is required');
+      setProductFormError('Product title is required');
       return;
     }
     const price = Number(productForm.price) || 0;
     const mrp = Number(productForm.mrp) || price;
     if (price <= 0) {
-      alert('Please enter a valid price (greater than 0)');
+      setProductFormError('Please enter a valid price (greater than 0)');
       return;
     }
 
     setSavingProduct(true);
+    setProductFormError('');
     try {
       const prodId = editingProductId || `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const tagsArray = productForm.tags
@@ -579,24 +589,23 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       };
 
       await saveProductToFirestore(prodToSave);
-      setSavedMsg(editingProductId ? 'Product updated in Firestore!' : 'New product synced to Firestore!');
+      setSavedMsg(editingProductId ? 'Product updated successfully!' : 'New product published live in store!');
       setTimeout(() => setSavedMsg(''), 3000);
 
       setShowAddProduct(false);
       setEditingProductId(null);
     } catch (err) {
-      console.warn('Failed to save product to Firestore notice:', err);
-      alert('Failed to save product. Please try again.');
+      console.warn('Failed to save product notice:', err);
+      setProductFormError('Failed to save product. Please check details and try again.');
     } finally {
       setSavingProduct(false);
     }
   };
 
   const handleDeleteProduct = async (productId: string) => {
-    if (!window.confirm('Are you sure you want to delete this product? It will be removed from Firestore and all homepage feeds.')) return;
     try {
       await deleteProductFromFirestore(productId);
-      setSavedMsg('Product deleted from Firestore!');
+      setSavedMsg('Product removed from catalog!');
       setTimeout(() => setSavedMsg(''), 3000);
     } catch (err) {
       console.warn('Failed to delete product notice:', err);
@@ -1006,6 +1015,13 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                     Cancel
                   </button>
                 </div>
+
+                {bannerFormError && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-1.5 animate-fade-in">
+                    <span>⚠️</span>
+                    <span>{bannerFormError}</span>
+                  </div>
+                )}
 
                 {/* Banner Presets */}
                 <div className="space-y-1.5">
@@ -1435,6 +1451,13 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                     Cancel
                   </button>
                 </div>
+
+                {productFormError && (
+                  <div className="p-2.5 mb-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-1.5 animate-fade-in">
+                    <span>⚠️</span>
+                    <span>{productFormError}</span>
+                  </div>
+                )}
 
                 <form onSubmit={handleSaveProduct} className="space-y-3">
                   <div>
