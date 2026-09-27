@@ -29,14 +29,14 @@ export interface BankAccountDetails {
 const STORAGE_KEY = 'akselling_seller_bank_details';
 
 const DEFAULT_BANK_DETAILS: BankAccountDetails = {
-  beneficiaryName: 'AK YADAV PRINTS ENTERPRISES',
-  accountNumber: '50200049281948',
-  confirmAccountNumber: '50200049281948',
-  ifscCode: 'HDFC0000120',
-  bankName: 'HDFC Bank Ltd.',
-  branchName: 'Connaught Place Main Branch, New Delhi',
-  accountType: 'current',
-  upiId: 'akyadav.prints@hdfcbank',
+  beneficiaryName: 'ANOJKUMAR',
+  accountNumber: '7290894907',
+  confirmAccountNumber: '7290894907',
+  ifscCode: 'AIRP0000001',
+  bankName: 'Airtel payment Bank',
+  branchName: 'Airtel Payments Bank Main Branch',
+  accountType: 'savings',
+  upiId: '7290894907@ybl',
   isVerified: true,
   payoutFrequency: 'daily',
   updatedAt: new Date().toISOString(),

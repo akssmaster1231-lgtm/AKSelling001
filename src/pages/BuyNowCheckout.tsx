@@ -17,16 +17,19 @@ import {
   Navigation,
   Globe,
   Mail,
+  Sparkles,
+  QrCode,
 } from 'lucide-react';
 import { formatPrice } from '@/data';
-import { initiateRazorpayPayment } from '@/razorpay';
+import DirectUpiPaymentModal, { DirectUpiPaymentResult } from '@/components/payment/DirectUpiPaymentModal';
+import { getOwnerPaymentSettings } from '@/config/ownerPaymentConfig';
 import { saveOrderToFirestore, deductProductInventory, type FirestoreOrder } from '@/firebase';
 import { INDIAN_STATES_AND_UTS } from '@/shiprocket-api';
 import { useI18n } from '@/i18n';
 import { useAuth } from '@/auth-context';
 import { recordPlacedOrder } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
-import { awardOrderCashback } from '@/utils/walletService';
+import { awardOrderCashback, deductWalletBalanceForOrder, getLocalWalletCache } from '@/utils/walletService';
 import { grantBonusSpin } from '@/utils/gamificationService';
 import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
 import { ScratchCardModal } from '@/components/ScratchCardModal';
@@ -132,6 +135,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     }
   };
 
+  const ownerPayment = getOwnerPaymentSettings();
   const [activeGroupBuy] = useState<{
     productId?: string;
     discountPercent?: number;
@@ -158,10 +162,20 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
   const mrpTotal = product.mrp * quantity;
   const discount = (mrpTotal - baseTotalAmount) + groupDiscount;
   const deliveryFee = totalAmount > 500 ? 0 : 49;
-  const finalAmount = totalAmount + deliveryFee;
-  // COD requires exactly 10% online advance via Razorpay to confirm order
+
+  // Wallet Rewards Balance & Redemption (Retaining ₹30+ Welcome Rewards & Earned Cashback)
+  const userWalletBalance = user?.id ? (getLocalWalletCache(user.id).walletBalance ?? user.walletBalance ?? 30) : 30;
+  const [applyWalletBalance, setApplyWalletBalance] = useState(true);
+  const maxApplicableWalletDiscount = Math.min(userWalletBalance, Math.max(0, totalAmount - 1));
+  const walletDiscount = applyWalletBalance ? maxApplicableWalletDiscount : 0;
+  const finalAmount = Math.max(1, totalAmount - walletDiscount + deliveryFee);
+
+  // COD requires 10% direct UPI advance token
   const codAdvanceAmount = Math.max(1, Math.round(finalAmount * 0.10));
   const codRemainingAmount = finalAmount - codAdvanceAmount;
+
+  const [isDirectUpiModalOpen, setIsDirectUpiModalOpen] = useState(false);
+  const [pendingOrderId, setPendingOrderId] = useState('');
 
   const handleAddressNext = () => {
     setError('');
@@ -184,89 +198,64 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     setStep('review');
   };
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     setError('');
+    const genId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
+    setPendingOrderId(genId);
+    setIsDirectUpiModalOpen(true);
+  };
+
+  const handleDirectUpiPaymentConfirm = async (result: DirectUpiPaymentResult) => {
     setIsPaymentAuthorizing(true);
-
+    setError('');
     try {
-      let paymentResult;
+      // 1. Verify and record direct UPI transaction on server
+      const verifyResp = await fetch('/api/orders/direct-upi-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: pendingOrderId,
+          utrNumber: result.utrNumber,
+          amount: result.amountPaid,
+          customerName: form.name,
+          customerPhone: form.phone,
+          paymentMode: result.paymentMode,
+          screenshotUrl: result.screenshotUrl,
+        }),
+      });
+
+      if (!verifyResp.ok) {
+        const errJson = await verifyResp.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Server could not record UPI transaction reference.');
+      }
+
+      // 2. Deduct wallet balance if redeemed
+      if (walletDiscount > 0 && user?.id) {
+        await deductWalletBalanceForOrder(user.id, pendingOrderId, walletDiscount);
+      }
+
+      // 3. Place order
       const isCod = form.paymentMethod === 'cod';
-
-      if (isCod) {
-        // If Cash on Delivery, mandatory 10% online advance via Razorpay
-        paymentResult = await initiateRazorpayPayment(codAdvanceAmount, {
-          name: 'AKSelling - 10% COD Advance',
-          description: `10% Token Advance for COD Order: ${product.title.slice(0, 30)}...`,
-          prefill: { name: form.name, contact: form.phone },
-        });
-      } else {
-        // Full Prepaid (UPI / Card / NetBanking)
-        paymentResult = await initiateRazorpayPayment(finalAmount, {
-          name: 'AKSelling',
-          description: product.title,
-          prefill: { name: form.name, contact: form.phone },
-        });
-      }
-
-      if (!paymentResult.success || !paymentResult.paymentId) {
-        setIsPaymentAuthorizing(false);
-        setError(
-          paymentResult.error ||
-          'Payment was not completed. Mandatory pre-payment verification is required before order placement.'
-        );
-        return;
-      }
-
-      // Backend Transaction Validation Middleware: Check server ledger before placing order
-      try {
-        const validateResp = await fetch('/api/orders/validate-and-verify-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            payment_id: paymentResult.paymentId,
-            order_id: paymentResult.orderId,
-            total_amount: finalAmount,
-            payment_method: form.paymentMethod,
-            required_advance: isCod ? codAdvanceAmount : finalAmount,
-          }),
-        });
-
-        if (!validateResp.ok) {
-          const errPayload = await validateResp.json().catch(() => ({}));
-          // Only abort if server explicitly returned a 400 validation error stating fraud/mismatch
-          if (validateResp.status === 400 && errPayload.valid === false) {
-            setIsPaymentAuthorizing(false);
-            setError(
-              errPayload.error ||
-              'Server payment validation failed. Your transaction has not been confirmed on the backend ledger.'
-            );
-            return;
-          }
-          console.warn('[BuyNowCheckout] Secondary validation endpoint returned status:', validateResp.status, '(proceeding with verified payment ID)');
-        }
-      } catch (valErr) {
-        console.warn('[BuyNowCheckout] Secondary validation notice (proceeding with verified payment ID):', valErr);
-      }
-
-      // ONLY after verified payment callback do we transition to order placement
-      setIsPaymentAuthorizing(false);
-      setState('processing');
-
-      if (isCod) {
-        await placeOrder(paymentResult.orderId, paymentResult.paymentId, codAdvanceAmount, codRemainingAmount);
-      } else {
-        await placeOrder(paymentResult.orderId, paymentResult.paymentId);
-      }
+      await placeOrder(
+        pendingOrderId,
+        result.utrNumber,
+        result.screenshotUrl,
+        isCod ? codAdvanceAmount : finalAmount,
+        isCod ? codRemainingAmount : 0
+      );
+      setIsDirectUpiModalOpen(false);
     } catch (err: unknown) {
       setIsPaymentAuthorizing(false);
-      const errMsg = err instanceof Error ? err.message : 'Unexpected payment error';
-      setError(`Payment processing failed: ${errMsg}`);
+      const errMsg = err instanceof Error ? err.message : 'Payment confirmation failed';
+      setError(errMsg);
+      throw err;
     }
   };
 
   const placeOrder = async (
-    rzpOrderId?: string,
-    rzpPayId?: string,
+    orderIdToUse: string,
+    utrNumber: string,
+    screenshotUrl?: string,
     advancePaid?: number,
     remainingDue?: number
   ) => {
@@ -295,8 +284,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
       ].filter(Boolean);
       const fullAddress = parts.join(', ');
 
-      const generatedId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
-
+      const generatedId = orderIdToUse;
       const customerEmailToUse = form.email.trim() || user?.email || undefined;
       const isPrepaid = form.paymentMethod !== 'cod';
       const orderPayload: FirestoreOrder = {
@@ -308,10 +296,15 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         user_id: user?.id,
         items: orderItems,
         total_amount: finalAmount,
-        payment_method: isPrepaid ? 'Prepaid (Razorpay / UPI / Card)' : 'Cash on Delivery (10% Advance Paid Online)',
-        payment_status: isPrepaid ? 'Paid' : `Partially Paid (10% ₹${advancePaid} Advance Paid, ₹${remainingDue} Due on Delivery)`,
-        razorpay_order_id: rzpOrderId,
-        razorpay_payment_id: rzpPayId,
+        payment_method: isPrepaid ? 'Direct Personal UPI & QR (Owner Bank)' : 'Cash on Delivery (10% Direct UPI Advance Paid)',
+        payment_status: isPrepaid ? `Paid via Direct UPI (UTR: ${utrNumber})` : `Partially Paid (10% ₹${advancePaid} Advance Paid via Direct UPI UTR: ${utrNumber}, ₹${remainingDue} Due on Delivery)`,
+        upi_utr: utrNumber,
+        upi_id: getOwnerPaymentSettings().upiId || '7290894907@ybl',
+        transaction_id: `upi_${utrNumber}`,
+        payment_screenshot: screenshotUrl,
+        wallet_discount_applied: walletDiscount,
+        advance_paid: advancePaid,
+        balance_due: remainingDue,
         status: 'Placed',
         created_at: new Date().toISOString(),
       };
@@ -365,7 +358,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               quantity,
             },
           ],
-          rzpPayId
+          `upi_${utrNumber}`
         );
         setEarnedReward({
           cashback: rewardResult.cashbackEarned,
@@ -881,14 +874,26 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
             </div>
             {[
               {
+                label: 'Direct Personal UPI & QR Code',
+                value: 'upi',
+                icon: '📱',
+                badge: '0% Fees • Pay Direct to Owner Bank',
+                sub: 'Scan QR or Pay via Google Pay, PhonePe, Paytm, BHIM with 0% gateway commission',
+              },
+              {
                 label: t('cashOnDelivery'),
                 value: 'cod',
                 icon: '💵',
-                badge: `Requires 10% (₹${codAdvanceAmount}) online advance token`,
-                sub: `Pay ₹${codAdvanceAmount} now via UPI/Card, pay remaining ₹${codRemainingAmount} in cash at doorstep`,
+                badge: `Requires 10% (₹${codAdvanceAmount}) Direct UPI token`,
+                sub: `Pay ₹${codAdvanceAmount} advance via Direct UPI QR, remaining ₹${codRemainingAmount} in cash at doorstep`,
               },
-              { label: t('upi'), value: 'upi', icon: '📱', badge: '100% Secure & Instant', sub: 'Google Pay, PhonePe, Paytm, BHIM UPI' },
-              { label: t('card'), value: 'card', icon: '💳', badge: 'All Banks Supported', sub: 'Debit & Credit Cards with OTP' },
+              {
+                label: 'Direct Bank Transfer (IMPS / NEFT)',
+                value: 'card',
+                icon: '🏦',
+                badge: `Direct to ${ownerPayment.bankName || 'Airtel payment Bank'}`,
+                sub: `Direct Account Transfer to ${ownerPayment.beneficiaryName || 'ANOJKUMAR'} (A/C: ${ownerPayment.accountNumber || '7290894907'}, IFSC: ${ownerPayment.ifscCode || 'AIRP0000001'})`,
+              },
             ].map(opt => (
               <button
                 key={opt.value}
@@ -899,15 +904,15 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               >
                 <span className="text-xl mt-0.5">{opt.icon}</span>
                 <div className="flex-1 text-left">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-bold text-gray-800">{opt.label}</span>
-                    <span className="text-[10px] font-semibold text-flipkart-700 bg-blue-100/70 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
                       {opt.badge}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">{opt.sub}</p>
                 </div>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-1 ${
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-1 shrink-0 ${
                   form.paymentMethod === opt.value ? 'border-flipkart-500' : 'border-gray-300'
                 }`}>
                   {form.paymentMethod === opt.value && <div className="w-2.5 h-2.5 rounded-full bg-flipkart-500" />}
@@ -966,10 +971,44 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
                 </div>
                 <button onClick={() => setStep('payment')} className="text-xs text-flipkart-500 font-medium">Edit</button>
               </div>
-              <p className="text-sm text-gray-600">
-                {form.paymentMethod === 'cod' ? `${t('cashOnDelivery')} (10% ₹${codAdvanceAmount} advance via Razorpay + ₹${codRemainingAmount} at doorstep)` : form.paymentMethod === 'upi' ? t('upi') : t('card')}
+              <p className="text-sm text-gray-600 font-medium">
+                {form.paymentMethod === 'cod'
+                  ? `Cash on Delivery (10% ₹${codAdvanceAmount} advance via Direct UPI + ₹${codRemainingAmount} at doorstep)`
+                  : form.paymentMethod === 'upi'
+                  ? 'Direct Personal UPI & QR (100% Prepaid directly to Owner Bank)'
+                  : `Direct Bank Transfer (IMPS / NEFT to Owner ${ownerPayment.bankName || 'Airtel payment Bank'})`}
               </p>
             </div>
+
+            {/* Wallet Reward Deduction Box */}
+            {userWalletBalance > 0 && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 mb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <label className="flex items-start gap-2.5 cursor-pointer flex-1">
+                    <input
+                      type="checkbox"
+                      checked={applyWalletBalance}
+                      onChange={(e) => setApplyWalletBalance(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 border-emerald-300"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-900">
+                        <Sparkles size={14} className="text-amber-500 fill-amber-400 shrink-0" />
+                        <span>Use Wallet Balance (₹{userWalletBalance} available)</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-700 mt-0.5">
+                        {applyWalletBalance
+                          ? `₹${walletDiscount} redeemed from your ₹30+ Welcome/Cashback reward!`
+                          : 'Select to apply your reward balance discount'}
+                      </p>
+                    </div>
+                  </label>
+                  <span className="text-xs font-black text-emerald-800 bg-white px-2 py-1 rounded-lg border border-emerald-200 shrink-0">
+                    -₹{applyWalletBalance ? walletDiscount : 0}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Price Summary */}
             <div className="bg-white rounded-xl shadow-card overflow-hidden mb-3">
@@ -979,6 +1018,12 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               <div className="p-4 space-y-2.5">
                 <Row label={`${t('price')} (${quantity} item)`} value={formatPrice(mrpTotal)} />
                 <Row label={t('discount')} value={`- ${formatPrice(discount)}`} color="text-success-500" />
+                {walletDiscount > 0 && (
+                  <div className="flex justify-between items-center text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                    <span className="flex items-center gap-1">🎁 Wallet Reward Discount</span>
+                    <span>- {formatPrice(walletDiscount)}</span>
+                  </div>
+                )}
                 {groupDiscount > 0 && (
                   <div className="flex justify-between items-center text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
                     <span className="flex items-center gap-1">👥 Saath Mein Khareedo Discount (15%)</span>
@@ -992,8 +1037,8 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
                 {form.paymentMethod === 'cod' && (
                   <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-3 space-y-1 mt-2">
                     <div className="flex justify-between text-xs font-bold text-amber-900">
-                      <span>Online Token Advance (10%):</span>
-                      <span>₹{codAdvanceAmount} (Pay Now via Razorpay)</span>
+                      <span>Direct UPI Token Advance (10%):</span>
+                      <span>₹{codAdvanceAmount} (Pay to Owner Bank)</span>
                     </div>
                     <div className="flex justify-between text-xs text-amber-800">
                       <span>Due on Cash Delivery:</span>
@@ -1004,7 +1049,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
                 {discount > 0 && (
                   <div className="bg-success-50 rounded-lg px-3 py-2 flex items-center gap-2">
                     <Tag size={14} className="text-success-500" />
-                    <p className="text-xs text-success-600 font-medium">{t('youSave')} {formatPrice(discount)}!</p>
+                    <p className="text-xs text-success-600 font-medium">{t('youSave')} {formatPrice(discount + walletDiscount)}!</p>
                   </div>
                 )}
               </div>
@@ -1014,7 +1059,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
             <div className="flex items-center justify-around bg-white rounded-xl shadow-card p-3 mb-3">
               <div className="flex flex-col items-center gap-1">
                 <Shield size={18} className="text-success-500" />
-                <span className="text-[10px] text-gray-500">{t('securePayment')}</span>
+                <span className="text-[10px] text-gray-500">0% Commission Direct Pay</span>
               </div>
               <div className="flex flex-col items-center gap-1">
                 <Truck size={18} className="text-flipkart-500" />
@@ -1043,22 +1088,37 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               onClick={handleConfirm}
               disabled={isPaymentAuthorizing}
               className={`flex-1 ml-4 ${
-                isPaymentAuthorizing ? 'bg-accent-400/80 cursor-wait' : 'bg-accent-400 hover:bg-accent-600'
-              } text-white font-bold text-base py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2`}
+                isPaymentAuthorizing ? 'bg-accent-400/80 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700'
+              } text-white font-bold text-base py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer`}
             >
               {isPaymentAuthorizing ? (
                 <>
-                  <Loader2 size={18} className="animate-spin" /> Verifying Payment...
+                  <Loader2 size={18} className="animate-spin" /> Confirming Payment...
                 </>
               ) : (
                 <>
-                  <Zap size={18} /> {form.paymentMethod === 'cod' ? `Pay 10% Advance (₹${codAdvanceAmount})` : t('confirmAndBuy')}
+                  <QrCode size={18} /> {form.paymentMethod === 'cod' ? `Pay 10% Advance (₹${codAdvanceAmount}) via UPI` : `Pay ₹${finalAmount} via Direct UPI / QR`}
                 </>
               )}
             </button>
           </div>
         </div>
       )}
+
+      {/* Direct Personal UPI & QR Payment Modal */}
+      <DirectUpiPaymentModal
+        isOpen={isDirectUpiModalOpen}
+        onClose={() => setIsDirectUpiModalOpen(false)}
+        onConfirmPayment={handleDirectUpiPaymentConfirm}
+        orderId={pendingOrderId}
+        amount={form.paymentMethod === 'cod' ? codAdvanceAmount : finalAmount}
+        payableAmount={form.paymentMethod === 'cod' ? codAdvanceAmount : finalAmount}
+        isCodAdvance={form.paymentMethod === 'cod'}
+        totalOrderAmount={finalAmount}
+        paymentMode={form.paymentMethod === 'cod' ? 'cod_advance' : 'direct_upi_full'}
+        customerName={form.name}
+        customerPhone={form.phone}
+      />
     </div>
   );
 }

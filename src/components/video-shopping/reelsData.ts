@@ -11,7 +11,8 @@ export interface VideoReelItem {
   commentsCount: number;
   sharesCount: number;
   tag: string;
-  product: {
+  audioEnabled?: boolean;
+  product?: {
     id: string;
     title: string;
     brand: string;

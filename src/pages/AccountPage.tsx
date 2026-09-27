@@ -40,6 +40,7 @@ import { useAuth, type AddressEntry, type CardEntry } from '@/auth-context';
 import { useCart } from '@/cart-context';
 import { useI18n, type Language } from '@/i18n';
 import { getCleanSellerStoreName } from '@/utils/storageHelper';
+import { isVerifiedOwnerAdmin } from '@/utils/sellerWhitelist';
 import { WalletPage } from '@/pages/WalletPage';
 import { getLocalWalletCache } from '@/utils/walletService';
 import { SIGNUP_BONUS_FLAT } from '@/utils/cashbackEngine';
@@ -51,6 +52,7 @@ interface AccountPageProps {
   onSellerDashboard: () => void;
   onOrders: () => void;
   onAdminPanel: () => void;
+  onOpenAdminWithTab?: (tab: 'categories' | 'banners' | 'products' | 'price_list' | 'payouts' | 'direct_upi') => void;
   onSwitchToSeller?: () => void;
 }
 
@@ -81,6 +83,7 @@ export default function AccountPage({
   onSellerDashboard,
   onOrders,
   onAdminPanel,
+  onOpenAdminWithTab,
   onSwitchToSeller,
 }: AccountPageProps) {
   const { t } = useI18n();
@@ -355,9 +358,16 @@ export default function AccountPage({
             </div>
           </button>
 
+          {/* Master Admin Panel (Owner & Authorized Admin Access Only) */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-2xs overflow-hidden">
             <button
-              onClick={onAdminPanel}
+              onClick={() => {
+                if (onOpenAdminWithTab) {
+                  onOpenAdminWithTab('products');
+                } else {
+                  onAdminPanel();
+                }
+              }}
               className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors text-left group"
             >
               <div className="flex items-center gap-3">
@@ -370,8 +380,15 @@ export default function AccountPage({
                     <span className="bg-purple-100 text-purple-800 text-[10px] font-black px-1.5 py-0.5 rounded flex items-center gap-0.5">
                       <Lock size={10} /> Authorized Admin
                     </span>
+                    {isVerifiedOwnerAdmin(user?.email) && (
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-1.5 py-0.5 rounded">
+                        Owner
+                      </span>
+                    )}
                   </div>
-                  <p className="text-[11px] text-gray-500">Sellers & KYC logs • Order management • Platform oversight</p>
+                  <p className="text-[11px] text-gray-500">
+                    Catalogue & Categories • Orders & Delivery • Secure Settings
+                  </p>
                 </div>
               </div>
               <ChevronRight size={16} className="text-gray-400 group-hover:translate-x-0.5 transition-transform" />

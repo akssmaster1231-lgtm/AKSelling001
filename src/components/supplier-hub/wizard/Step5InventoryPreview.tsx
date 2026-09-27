@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import type { SellerProduct } from '@/types/supplier';
 import { saveProductToFirestore } from '@/firebase';
-import { resolveProductImages, getProductFallbackImage } from '@/utils/productImageMapper';
+import { resolveProductImages, getProductFallbackImage, DEFAULT_PRODUCT_PLACEHOLDER } from '@/utils/productImageMapper';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '@/utils/storageHelper';
 import type { WizardStepProps, WizardVariantItem } from './types';
 

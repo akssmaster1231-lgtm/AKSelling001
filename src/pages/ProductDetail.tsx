@@ -166,7 +166,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
 
       {/* Flipkart-Style Touch-Friendly Image Swipe Gallery */}
       <ProductSwipeGallery
-        images={resolveProductImages(product)}
+        images={Array.isArray(product.images) && product.images.length > 0 ? resolveProductImages(product.images) : resolveProductImages(product)}
         title={product.title}
         discount={product.discount}
         neckType={product.neckType}

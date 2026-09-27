@@ -55,6 +55,9 @@ function AppContent() {
   const [showSellerLockedModal, setShowSellerLockedModal] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [adminInitialTab, setAdminInitialTab] = useState<
+    'categories' | 'banners' | 'products' | 'price_list' | 'payouts' | 'direct_upi' | undefined
+  >(undefined);
   const [showNotifications, setShowNotifications] = useState(false);
   const [buyNowProduct, setBuyNowProduct] = useState<Product | null>(null);
   const [buyNowSize, setBuyNowSize] = useState<string | undefined>(undefined);
@@ -260,15 +263,30 @@ function AppContent() {
   // 1. Initializing authentication state check
   if (!authInitialized) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#1b365d] via-slate-800 to-amber-500 shadow-xl shadow-black/40 flex items-center justify-center mb-4 animate-pulse border border-amber-500/30">
-          <span className="text-3xl font-black text-white tracking-wider">AK</span>
+      <div className="min-h-screen bg-[#0a192f] flex flex-col items-center justify-center p-6 text-center">
+        <div className="relative mb-5">
+          <div className="w-24 h-24 rounded-3xl p-1 bg-gradient-to-tr from-amber-400/30 via-slate-800 to-amber-500/40 shadow-2xl shadow-black/80 flex items-center justify-center animate-pulse border border-amber-400/40 overflow-hidden">
+            <img
+              src="/ak_brand_logo.jpg"
+              alt="AK Yadav Print / AKSelling"
+              className="w-full h-full object-contain rounded-2xl"
+            />
+          </div>
+          <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[10px] font-black shadow-md">
+            ✓
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-amber-400 font-bold text-base mb-1">
-          <Loader2 size={20} className="animate-spin text-amber-400" />
+        <h1 className="text-xl font-black text-white tracking-wide mb-0.5">
+          AK<span className="text-amber-400">Selling</span>
+        </h1>
+        <p className="text-xs text-amber-200/80 font-bold uppercase tracking-widest mb-3">
+          AK Yadav Print
+        </p>
+        <div className="flex items-center gap-2 text-amber-400 font-bold text-sm mb-1 bg-white/5 border border-amber-400/20 px-3.5 py-1.5 rounded-full">
+          <Loader2 size={16} className="animate-spin text-amber-400" />
           <span>Verifying Secure Session...</span>
         </div>
-        <p className="text-xs text-slate-400 font-medium max-w-xs">Connecting to AKSelling Identity Cloud</p>
+        <p className="text-[11px] text-slate-400 font-medium max-w-xs mt-2">Connecting to AKSelling Identity Cloud</p>
       </div>
     );
   }
@@ -365,7 +383,14 @@ function AppContent() {
               onSellOnAKSelling={handleOpenSellerMode}
               onSellerDashboard={handleOpenSellerMode}
               onOrders={() => setShowOrders(true)}
-              onAdminPanel={() => setShowAdmin(true)}
+              onAdminPanel={() => {
+                setAdminInitialTab(undefined);
+                setShowAdmin(true);
+              }}
+              onOpenAdminWithTab={(tab) => {
+                setAdminInitialTab(tab);
+                setShowAdmin(true);
+              }}
             />
           </ErrorBoundary>
         )}
@@ -374,40 +399,54 @@ function AppContent() {
       <BottomNav activeTab={activeTab} onTabChange={handleTabChange} cartCount={cartCount} />
 
       {selectedProduct && (
-        <ProductDetail
-          product={selectedProduct}
-          onBack={() => setSelectedProduct(null)}
-          onBuyNow={(prod, size, color) => {
-            setBuyNowProduct(prod);
-            setBuyNowSize(size);
-            setBuyNowColor(color);
-            setSelectedProduct(null);
-          }}
-          onGoToCart={() => {
-            setSelectedProduct(null);
-            setActiveTab('cart');
-          }}
-        />
+        <ErrorBoundary
+          fallbackTitle="Unable to display Product Details"
+          onReset={() => setSelectedProduct(null)}
+        >
+          <ProductDetail
+            product={selectedProduct}
+            onBack={() => setSelectedProduct(null)}
+            onBuyNow={(prod, size, color) => {
+              setBuyNowProduct(prod);
+              setBuyNowSize(size);
+              setBuyNowColor(color);
+              setSelectedProduct(null);
+            }}
+            onGoToCart={() => {
+              setSelectedProduct(null);
+              setActiveTab('cart');
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {buyNowProduct && (
-        <BuyNowCheckout
-          product={buyNowProduct}
-          quantity={1}
-          selectedSize={buyNowSize}
-          selectedColor={buyNowColor}
-          onBack={() => {
+        <ErrorBoundary
+          fallbackTitle="Unable to load Checkout"
+          onReset={() => {
             setBuyNowProduct(null);
             setBuyNowSize(undefined);
             setBuyNowColor(undefined);
           }}
-          onSuccess={() => {
-            setBuyNowProduct(null);
-            setBuyNowSize(undefined);
-            setBuyNowColor(undefined);
-            setActiveTab('home');
-          }}
-        />
+        >
+          <BuyNowCheckout
+            product={buyNowProduct}
+            quantity={1}
+            selectedSize={buyNowSize}
+            selectedColor={buyNowColor}
+            onBack={() => {
+              setBuyNowProduct(null);
+              setBuyNowSize(undefined);
+              setBuyNowColor(undefined);
+            }}
+            onSuccess={() => {
+              setBuyNowProduct(null);
+              setBuyNowSize(undefined);
+              setBuyNowColor(undefined);
+              setActiveTab('home');
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {showAuth && (
@@ -439,11 +478,30 @@ function AppContent() {
       />
 
       {showOrders && (
-        <OrdersPage onBack={() => setShowOrders(false)} />
+        <ErrorBoundary
+          fallbackTitle="Unable to load Orders"
+          onReset={() => setShowOrders(false)}
+        >
+          <OrdersPage onBack={() => setShowOrders(false)} />
+        </ErrorBoundary>
       )}
 
       {showAdmin && (
-        <AdminPanel onBack={() => setShowAdmin(false)} />
+        <ErrorBoundary
+          fallbackTitle="Unable to load Admin Panel"
+          onReset={() => {
+            setShowAdmin(false);
+            setAdminInitialTab(undefined);
+          }}
+        >
+          <AdminPanel
+            onBack={() => {
+              setShowAdmin(false);
+              setAdminInitialTab(undefined);
+            }}
+            initialTab={adminInitialTab}
+          />
+        </ErrorBoundary>
       )}
 
       <NotificationCenterModal
@@ -456,7 +514,10 @@ function AppContent() {
       <DailyStreakModal
         isOpen={showStreakModal}
         onClose={() => setShowStreakModal(false)}
-        userId={user?.id || 'guest'}
+        onOpenSpinWheel={() => {
+          setShowStreakModal(false);
+          setShowSpinWheelModal(true);
+        }}
       />
 
       <SpinWheelModal

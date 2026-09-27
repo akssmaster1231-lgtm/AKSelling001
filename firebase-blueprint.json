@@ -150,6 +150,26 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "type", "title", "createdAt"]
+    },
+    "video_reels": {
+      "title": "Video Reels & Shorts",
+      "description": "Video shopping reels with sound and linked product purchases",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "posterUrl": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "caption": { "type": "string" },
+        "songTitle": { "type": "string" },
+        "likesCount": { "type": "number" },
+        "tag": { "type": "string" },
+        "audioEnabled": { "type": "boolean" },
+        "product": { "type": "object" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "videoUrl", "caption"]
     }
   },
   "firestore": {
@@ -160,6 +180,10 @@
     "/banners/{bannerId}": {
       "schema": "banners",
       "description": "Promotional banners and carousel posters"
+    },
+    "/video_reels/{reelId}": {
+      "schema": "video_reels",
+      "description": "Video reels and shorts for interactive shopping with sound"
     },
     "/orders/{orderId}": {
       "schema": "orders",

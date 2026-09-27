@@ -95,6 +95,12 @@ export interface SellerOrder {
   paymentMethod: string;
   paymentStatus?: string;
   transactionId?: string;
+  upiUtr?: string;
+  upiId?: string;
+  paymentScreenshot?: string;
+  walletDiscountApplied?: number;
+  advancePaid?: number;
+  balanceDue?: number;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   status: 'pending' | 'ready_to_ship' | 'shipped' | 'delivered' | 'cancelled';

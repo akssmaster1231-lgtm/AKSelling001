@@ -19,7 +19,9 @@ export default function ProductSwipeGallery({
 }: ProductSwipeGalleryProps) {
   // Contextually resolve valid product images or clean fallback
   const fallback = getProductFallbackImage({ title, neckType, fitType });
-  const safeImages = resolveProductImages({ images, title, neckType, fitType });
+  const safeImages = Array.isArray(images) && images.length > 0
+    ? resolveProductImages(images)
+    : resolveProductImages({ images, title, neckType, fitType });
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loadedImages, setLoadedImages] = useState<Record<number, boolean>>({});

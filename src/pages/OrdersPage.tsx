@@ -253,9 +253,14 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
           >
             <ChevronLeft size={22} />
           </button>
+          <img
+            src="/ak_brand_logo.jpg"
+            alt="AK Yadav Print"
+            className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-amber-400/50 shadow-xs shrink-0"
+          />
           <div>
             <h1 className="text-base font-bold text-slate-900 tracking-tight">{t('myOrders')}</h1>
-            <p className="text-[10px] text-slate-500 font-medium">Real-time delivery radar & history</p>
+            <p className="text-[10px] text-slate-500 font-medium">AK Yadav Print • Real-time delivery tracking</p>
           </div>
         </div>
 
@@ -298,9 +303,10 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
             {orders.map(order => {
               const activeIndex = getStepIndexFromStatus(order.status);
               const isExpanded = expandedOrder === order.id;
-              const displayAwb = order.awb_code || `SFX${order.id.replace(/\D/g, '').slice(-8) || '98421045'}`;
+              const displayAwb = order.awb_code || `SFX${(order.id || '').replace(/\D/g, '').slice(-8) || '98421045'}`;
               const displayCourier = order.courier_name || 'Shadowfax Express Surface';
-              const firstItem = order.items[0];
+              const orderItems = Array.isArray(order.items) ? order.items : [];
+              const firstItem = orderItems[0];
 
               return (
                 <div
@@ -335,7 +341,7 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
 
                       <h2 className="text-sm font-bold text-slate-800 line-clamp-1 mt-0.5">
                         {firstItem?.product_title || 'Order Item'}
-                        {order.items.length > 1 && ` +${order.items.length - 1} more`}
+                        {orderItems.length > 1 && ` +${orderItems.length - 1} more`}
                       </h2>
 
                       <p className="text-[11px] text-slate-500 mt-0.5">
@@ -422,10 +428,10 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                         {/* Items in order */}
                         <div className="space-y-2">
                           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                            Package Contents ({order.items.length} {order.items.length > 1 ? 'items' : 'item'})
+                            Package Contents ({orderItems.length} {orderItems.length > 1 ? 'items' : 'item'})
                           </p>
                           <div className="space-y-2">
-                            {order.items.map((item, idx) => (
+                            {orderItems.map((item, idx) => (
                               <div
                                 key={idx}
                                 className="flex gap-2.5 items-center p-2 rounded-xl bg-slate-50 border border-slate-200/70"

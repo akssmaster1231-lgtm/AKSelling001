@@ -104,7 +104,7 @@ export async function fetchProducts(): Promise<Product[]> {
     setCachedProducts(combined);
     return combined;
   }
-  return fallbackProducts;
+  return cached.length > 0 ? cached : [];
 }
 
 export async function fetchProductById(productId: string): Promise<Product | null> {

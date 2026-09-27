@@ -24,6 +24,7 @@ import {
   type UserCredential,
 } from 'firebase/auth';
 import type { Product, Banner, PriceAlert } from '@/types';
+export type FirestoreProduct = Product;
 import type { UserProfile } from '@/auth-context';
 import type { SellerProduct } from '@/types/supplier';
 import type { AppNotification } from '@/types/notification';
@@ -280,7 +281,16 @@ export function setCachedProducts(products: Product[]): void {
       localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(products));
     }
   } catch {
-    // ignore
+    // If quota exceeded due to base64 images, save lean version with primary image
+    try {
+      const lean = products.map(p => ({
+        ...p,
+        images: (p.images || []).slice(0, 2),
+      }));
+      localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(lean));
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -463,7 +473,7 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
     shippingCharge: rawData.shippingCharge as number | undefined,
     isFreeShipping: rawData.isFreeShipping as boolean | undefined,
     pickupAddress: rawData.pickupAddress as Record<string, unknown> | undefined,
-    variants: rawData.variants as unknown[] | undefined,
+    variants: rawData.variants as Product['variants'],
     storefrontPlacement: rawData.storefrontPlacement as Record<string, unknown> | undefined,
   };
 
@@ -575,6 +585,15 @@ export interface FirestoreOrder {
   payment_status?: string;
   razorpay_order_id?: string;
   razorpay_payment_id?: string;
+  transaction_id?: string;
+  upi_id?: string;
+  upi_utr?: string;
+  payment_screenshot?: string;
+  wallet_discount_applied?: number;
+  advance_paid?: number;
+  balance_due?: number;
+  payment_verified_by_admin?: boolean;
+  payment_verified_at?: string;
   status: string;
   created_at: string;
   updated_at?: string;
@@ -627,6 +646,17 @@ export function subscribeOrders(
 }
 
 export async function saveOrderToFirestore(order: FirestoreOrder): Promise<void> {
+  // Always sync to server API for resilient order backup
+  try {
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(order),
+    }).catch(() => {});
+  } catch {
+    // silent
+  }
+
   if (isQuotaExhausted()) return;
   try {
     if (!order.id) return;
@@ -646,6 +676,17 @@ export async function updateOrderStatusInFirestore(
   newStatus: string,
   extra?: Record<string, unknown>
 ): Promise<void> {
+  // Sync to server API
+  try {
+    fetch(`/api/orders/${orderId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus, ...extra }),
+    }).catch(() => {});
+  } catch {
+    // silent
+  }
+
   if (isQuotaExhausted()) return;
   try {
     if (!orderId) return;

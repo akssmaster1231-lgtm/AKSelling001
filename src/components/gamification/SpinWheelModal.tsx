@@ -18,6 +18,7 @@ interface SpinWheelModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUseCoupon?: (couponCode: string, discount: number) => void;
+  onShopCoupon?: () => void;
 }
 
 interface WheelSegment {

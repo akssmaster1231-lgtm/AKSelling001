@@ -21,12 +21,18 @@ import {
   Eye,
   EyeOff,
   Package,
+  QrCode,
+  IndianRupee,
+  Video,
 } from 'lucide-react';
 import { useAuth } from '@/auth-context';
 import { isVerifiedOwnerAdmin, OWNER_ADMIN_EMAIL, ADMIN_MASTER_PASSCODE } from '@/utils/sellerWhitelist';
 import { compressImageFile } from '@/utils/imageCompressor';
 import { fetchAllBanners, addBanner, deleteBanner, updateBanner, type MasterBanner } from '@/banner-api';
 import { AdminWithdrawalManager } from '@/components/AdminWithdrawalManager';
+import { AdminDirectUpiSettings } from '@/components/admin/AdminDirectUpiSettings';
+import { AdminPriceListManager } from '@/components/admin/AdminPriceListManager';
+import { AdminVideoReelsManager } from '@/components/admin/AdminVideoReelsManager';
 import { getAllCategories, fetchProducts, formatPrice, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 import {
   saveCategoryToFirestore,
@@ -45,6 +51,7 @@ import CategoryIcon, {
 
 interface AdminPanelProps {
   onBack: () => void;
+  initialTab?: 'categories' | 'banners' | 'products' | 'price_list' | 'payouts' | 'direct_upi' | 'videos';
 }
 
 const SAMPLE_BANNER_PRESETS = [
@@ -74,7 +81,7 @@ const SAMPLE_BANNER_PRESETS = [
   },
 ];
 
-export default function AdminPanel({ onBack }: AdminPanelProps) {
+export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
   const { user, signInWithDirectCredentials } = useAuth();
   const isOwner = isVerifiedOwnerAdmin(user?.email);
 
@@ -85,7 +92,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'products' | 'payouts'>('categories');
+  const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'products' | 'price_list' | 'payouts' | 'direct_upi' | 'videos'>(initialTab || 'categories');
 
   // Categories State & Management
   const [categoriesList, setCategoriesList] = useState<Category[]>(() => getAllCategories());
@@ -134,11 +141,13 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     mrp: '',
     discount: 0,
     image: '',
+    images: [] as string[],
     inStock: true,
     delivery: 'Free delivery by tomorrow',
     description: '',
     tags: '',
   });
+  const [imageInputUrl, setImageInputUrl] = useState('');
   const [savingProduct, setSavingProduct] = useState(false);
   const [isCompressingProduct, setIsCompressingProduct] = useState(false);
   const productFileInputRef = useRef<HTMLInputElement>(null);
@@ -392,8 +401,12 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
             <ChevronLeft size={20} />
           </button>
 
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#9f2089] to-pink-600 flex items-center justify-center mx-auto shadow-lg shadow-pink-900/30">
-            <Lock size={28} className="text-white" />
+          <div className="w-20 h-20 rounded-2xl p-1 bg-[#0a192f] border border-amber-400/40 shadow-xl shadow-black/40 flex items-center justify-center mx-auto">
+            <img
+              src="/ak_brand_logo.jpg"
+              alt="AK Yadav Print / AKSelling"
+              className="w-full h-full object-contain rounded-xl"
+            />
           </div>
 
           <div>
@@ -403,7 +416,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                 Owner Protected Area
               </span>
             </div>
-            <h2 className="text-xl font-black text-white">AKSelling Admin Master Panel</h2>
+            <h2 className="text-xl font-black text-white">AK Yadav Print • AKSelling Admin</h2>
             <p className="text-xs text-gray-300 mt-1 max-w-xs mx-auto">
               Authorized Owner: <span className="text-white font-bold">{OWNER_ADMIN_EMAIL}</span>. Enter the permanent Admin Master Passcode to unlock Category, Banner, and Admin controls.
             </p>
@@ -497,22 +510,77 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   };
 
   const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     setIsCompressingProduct(true);
     try {
-      const compressedBase64 = await compressImageFile(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.92 });
-      setProductForm(prev => ({ ...prev, image: compressedBase64 }));
+      const newImgs: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const compressedBase64 = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.82 });
+        if (compressedBase64) {
+          newImgs.push(compressedBase64);
+        }
+      }
+      setProductForm(prev => {
+        const combined = [...prev.images, ...newImgs];
+        return {
+          ...prev,
+          images: combined,
+          image: combined[0] || prev.image,
+        };
+      });
     } catch (err) {
       console.warn('Product image upload notice:', err);
     } finally {
       setIsCompressingProduct(false);
+      if (productFileInputRef.current) productFileInputRef.current.value = '';
     }
+  };
+
+  const handleAddImageUrl = (urlToAdd?: string) => {
+    const targetUrl = (urlToAdd || imageInputUrl).trim();
+    if (!targetUrl) return;
+    setProductForm(prev => {
+      const combined = [...prev.images, targetUrl];
+      return {
+        ...prev,
+        images: combined,
+        image: combined[0] || prev.image,
+      };
+    });
+    setImageInputUrl('');
+  };
+
+  const handleRemoveProductImage = (idxToRemove: number) => {
+    setProductForm(prev => {
+      const filtered = prev.images.filter((_, idx) => idx !== idxToRemove);
+      return {
+        ...prev,
+        images: filtered,
+        image: filtered[0] || '',
+      };
+    });
+  };
+
+  const handleSetCoverProductImage = (idxToCover: number) => {
+    setProductForm(prev => {
+      const selected = prev.images[idxToCover];
+      if (!selected) return prev;
+      const rest = prev.images.filter((_, idx) => idx !== idxToCover);
+      const reordered = [selected, ...rest];
+      return {
+        ...prev,
+        images: reordered,
+        image: reordered[0],
+      };
+    });
   };
 
   const handleOpenAddProduct = () => {
     setEditingProductId(null);
     setProductFormError('');
+    setImageInputUrl('');
     setProductForm({
       title: '',
       brand: 'AKSelling',
@@ -521,6 +589,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       mrp: '',
       discount: 0,
       image: '',
+      images: [],
       inStock: true,
       delivery: 'Free delivery by tomorrow',
       description: '',
@@ -532,6 +601,10 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
   const handleEditProduct = (prod: Product) => {
     setEditingProductId(prod.id);
     setProductFormError('');
+    setImageInputUrl('');
+    const allImages = Array.isArray(prod.images) && prod.images.length > 0
+      ? prod.images
+      : (prod.image ? [prod.image] : []);
     setProductForm({
       title: prod.title,
       brand: prod.brand || 'AKSelling',
@@ -539,7 +612,8 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       price: String(prod.price),
       mrp: String(prod.mrp || prod.price),
       discount: prod.discount || 0,
-      image: prod.images?.[0] || '',
+      image: allImages[0] || '',
+      images: allImages,
       inStock: prod.inStock !== false,
       delivery: prod.delivery || 'Free delivery by tomorrow',
       description: prod.description || '',
@@ -570,6 +644,10 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
         .map(t => t.trim().toLowerCase())
         .filter(Boolean);
 
+      const finalImages = productForm.images.length > 0
+        ? productForm.images
+        : (productForm.image.trim() ? [productForm.image.trim()] : [DEFAULT_PRODUCT_PLACEHOLDER]);
+
       const prodToSave: Product = {
         id: prodId,
         title: productForm.title.trim(),
@@ -578,7 +656,9 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
         price,
         mrp,
         discount: productForm.discount || (mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0),
-        images: [productForm.image.trim() || DEFAULT_PRODUCT_PLACEHOLDER],
+        images: finalImages,
+        image: finalImages[0],
+        imageUrl: finalImages[0],
         rating: 4.5,
         ratingCount: 145,
         inStock: productForm.inStock,
@@ -589,7 +669,7 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
       };
 
       await saveProductToFirestore(prodToSave);
-      setSavedMsg(editingProductId ? 'Product updated successfully!' : 'New product published live in store!');
+      setSavedMsg(editingProductId ? 'Product and all images updated in Firestore!' : 'New product published live in store!');
       setTimeout(() => setSavedMsg(''), 3000);
 
       setShowAddProduct(false);
@@ -616,19 +696,24 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
     <div className="fixed inset-0 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-[480px] sm:w-full z-[70] bg-gray-50 overflow-y-auto sm:shadow-2xl sm:border-x sm:border-gray-200">
       {/* Top Navbar */}
       <div className="sticky top-0 bg-white shadow-xs px-4 py-3 flex items-center justify-between z-20 border-b border-gray-200">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button onClick={onBack} className="p-1.5 text-gray-700 hover:bg-gray-100 rounded-xl cursor-pointer">
             <ChevronLeft size={22} />
           </button>
+          <img
+            src="/ak_brand_logo.jpg"
+            alt="AK Yadav Print"
+            className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-amber-400/50 shadow-xs shrink-0"
+          />
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="text-sm sm:text-base font-black text-gray-900">AKSelling Admin Control</h1>
+              <h1 className="text-sm sm:text-base font-black text-gray-900">AK Yadav Print Admin</h1>
               <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                <ShieldCheck size={10} /> OWNER SECURED
+                <ShieldCheck size={10} /> OWNER
               </span>
             </div>
             <p className="text-[11px] text-gray-500 font-medium">
-              Categories, Banners & Seller Payouts
+              AKSelling Categories, Banners & Seller Payouts
             </p>
           </div>
         </div>
@@ -655,58 +740,121 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
         </div>
       </div>
 
-      {/* Admin Tab Switcher: Categories, Banners, Payouts */}
-      <div className="bg-white border-b border-gray-200 px-3 py-2 flex items-center gap-1.5 sticky top-[57px] z-10 shadow-xs">
+      {/* Quick Hindi Helper & Shortcut Banner */}
+      <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white px-3 py-2 flex items-center justify-between text-xs font-bold shadow-2xs">
+        <div className="flex items-center gap-1.5 truncate">
+          <IndianRupee size={14} className="text-yellow-200 shrink-0" />
+          <span className="truncate">रुपया लगाने की सूची (Price List) या UPI QR:</span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setAdminTab('price_list')}
+            className="bg-white text-stone-900 px-2 py-0.5 rounded-lg text-[10px] font-black hover:bg-yellow-100 transition-colors cursor-pointer shadow-xs"
+          >
+            रुपया सूची
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminTab('direct_upi')}
+            className="bg-stone-950 text-white px-2 py-0.5 rounded-lg text-[10px] font-black hover:bg-stone-800 transition-colors cursor-pointer shadow-xs"
+          >
+            UPI QR
+          </button>
+        </div>
+      </div>
+
+      {/* Admin Tab Switcher */}
+      <div className="bg-white border-b border-gray-200 px-2 py-2 flex items-center gap-1 sticky top-[57px] z-10 shadow-xs overflow-x-auto no-scrollbar">
         <button
           type="button"
           onClick={() => setAdminTab('categories')}
-          className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+          className={`py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
             adminTab === 'categories'
               ? 'bg-[#9f2089] text-white shadow-xs'
               : 'text-stone-600 hover:bg-stone-100'
           }`}
         >
-          <Grid size={14} />
-          <span className="truncate">Categories</span>
+          <Grid size={13} />
+          <span>Categories</span>
         </button>
 
         <button
           type="button"
           onClick={() => setAdminTab('banners')}
-          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+          className={`py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
             adminTab === 'banners'
               ? 'bg-stone-900 text-white shadow-xs'
               : 'text-stone-600 hover:bg-stone-100'
           }`}
         >
-          <ImageIcon size={14} />
-          <span className="truncate">Banners</span>
+          <ImageIcon size={13} />
+          <span>Banners</span>
         </button>
 
         <button
           type="button"
           onClick={() => setAdminTab('products')}
-          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+          className={`py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
             adminTab === 'products'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-stone-600 hover:bg-stone-100'
           }`}
         >
-          <Package size={14} />
-          <span className="truncate">Products</span>
+          <Package size={13} />
+          <span>Products</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('price_list')}
+          className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
+            adminTab === 'price_list'
+              ? 'bg-amber-500 text-stone-950 shadow-xs ring-2 ring-amber-300'
+              : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
+          }`}
+        >
+          <IndianRupee size={13} />
+          <span>रुपया सूची</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('direct_upi')}
+          className={`py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
+            adminTab === 'direct_upi'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-stone-600 hover:bg-stone-100'
+          }`}
+        >
+          <QrCode size={13} />
+          <span>Direct UPI</span>
         </button>
 
         <button
           type="button"
           onClick={() => setAdminTab('payouts')}
-          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+          className={`py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
             adminTab === 'payouts'
-              ? 'bg-amber-400 text-stone-950 shadow-xs'
+              ? 'bg-purple-600 text-white shadow-xs'
               : 'text-stone-600 hover:bg-stone-100'
           }`}
         >
-          <Wallet size={14} />
-          <span className="truncate">Payouts</span>
+          <Wallet size={13} />
+          <span>Payouts</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('videos')}
+          className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
+            adminTab === 'videos'
+              ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-300'
+              : 'text-rose-800 bg-rose-50 hover:bg-rose-100'
+          }`}
+        >
+          <Video size={13} />
+          <span>वीडियो रील</span>
         </button>
       </div>
 
@@ -1357,14 +1505,24 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                     {productsList.length} items synced live with Firebase Firestore
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleOpenAddProduct}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                >
-                  <Plus size={15} />
-                  <span>Add Product</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAdminTab('price_list')}
+                    className="bg-amber-500 hover:bg-amber-600 text-stone-950 font-black text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <IndianRupee size={14} />
+                    <span>रुपया सूची</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddProduct}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Plus size={15} />
+                    <span>Add Product</span>
+                  </button>
+                </div>
               </div>
 
               {/* Search bar & Category filter */}
@@ -1546,68 +1704,115 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
                     </div>
                   </div>
 
-                  {/* Image Upload / URL */}
+                  {/* Multi-Image Upload & Gallery Manager */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-[11px] font-bold text-gray-700">
-                        Product Image (Ultra-HD 100% Crisp / Crystal Clear)
+                        Product Images ({productForm.images.length || (productForm.image ? 1 : 0)} Active • Full Multi-Photo Gallery) *
                       </label>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                        Zero Blur • Retina Ready
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        3 to 4 Photos • Auto-Synced to Firestore
                       </span>
                     </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        value={productForm.image}
-                        onChange={e => setProductForm(prev => ({ ...prev, image: e.target.value }))}
-                        placeholder="Paste Ultra-HD image URL or click Upload..."
-                        className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-blue-500"
-                      />
-                      <input
-                        type="file"
-                        ref={productFileInputRef}
-                        onChange={handleProductImageUpload}
-                        accept="image/*"
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => productFileInputRef.current?.click()}
-                        disabled={isCompressingProduct}
-                        className="bg-[#1b365d] hover:bg-slate-900 text-amber-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-amber-400/30"
-                      >
-                        {isCompressingProduct ? (
-                          <Loader2 size={14} className="animate-spin text-amber-400" />
-                        ) : (
-                          <Upload size={14} />
-                        )}
-                        <span>{isCompressingProduct ? 'Optimizing HD...' : 'Upload Photo'}</span>
-                      </button>
-                    </div>
 
-                    {productForm.image && (
-                      <div className="mt-2 flex items-center gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                        <img
-                          src={productForm.image}
-                          alt="Preview"
-                          className="w-16 h-16 rounded-lg object-cover bg-white border border-slate-200 shrink-0 shadow-xs"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = DEFAULT_PRODUCT_PLACEHOLDER;
-                          }}
+                    {/* Upload button & URL paste bar */}
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          value={imageInputUrl}
+                          onChange={e => setImageInputUrl(e.target.value)}
+                          placeholder="Paste image URL (Unsplash, CDN or link)..."
+                          className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-blue-500"
                         />
-                        <div className="text-[11px] text-gray-600 overflow-hidden flex-1">
-                          <div className="flex items-center gap-1 text-emerald-700 font-bold">
-                            <CheckCircle2 size={12} />
-                            <span>Ultra-HD Image Active</span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 mt-0.5">
-                            High-definition colors and fine details will be displayed without blurriness on mobile and desktop screens.
-                          </p>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddImageUrl()}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
+                        >
+                          + Add URL
+                        </button>
+                        <input
+                          type="file"
+                          ref={productFileInputRef}
+                          onChange={handleProductImageUpload}
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => productFileInputRef.current?.click()}
+                          disabled={isCompressingProduct}
+                          className="bg-[#1b365d] hover:bg-slate-900 text-amber-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-amber-400/30"
+                        >
+                          {isCompressingProduct ? (
+                            <Loader2 size={14} className="animate-spin text-amber-400" />
+                          ) : (
+                            <Upload size={14} />
+                          )}
+                          <span>{isCompressingProduct ? 'Optimizing...' : 'Upload Photos (मल्टीपल)'}</span>
+                        </button>
                       </div>
-                    )}
+
+                      {/* Display All Uploaded Thumbnails */}
+                      {(productForm.images.length > 0 || productForm.image) && (
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                            <span>Uploaded Photos ({productForm.images.length || 1}):</span>
+                            <span className="text-[10px] text-slate-500">Tap 'Set Cover' to pick primary display photo</span>
+                          </div>
+
+                          <div className="grid grid-cols-4 gap-2">
+                            {(productForm.images.length > 0 ? productForm.images : [productForm.image]).map((imgSrc, idx) => (
+                              <div
+                                key={`prod-img-${idx}`}
+                                className={`relative rounded-lg overflow-hidden border-2 bg-white aspect-square group shadow-xs ${
+                                  idx === 0 ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-gray-200'
+                                }`}
+                              >
+                                <img
+                                  src={imgSrc}
+                                  alt={`Product Photo ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = DEFAULT_PRODUCT_PLACEHOLDER;
+                                  }}
+                                />
+
+                                {/* Cover Badge */}
+                                {idx === 0 && (
+                                  <span className="absolute top-1 left-1 bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded shadow-xs">
+                                    ★ Cover
+                                  </span>
+                                )}
+
+                                {/* Hover/Action Buttons */}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1">
+                                  {idx !== 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetCoverProductImage(idx)}
+                                      className="bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer"
+                                    >
+                                      Set Cover
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveProductImage(idx)}
+                                    className="bg-rose-600 text-white p-1 rounded-full hover:bg-rose-700 cursor-pointer shadow-xs"
+                                    title="Remove photo"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2.5">
@@ -1796,6 +2001,26 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
         {/* TAB 4: SELLER PAYOUTS & WITHDRAWALS */}
         {adminTab === 'payouts' && (
           <AdminWithdrawalManager />
+        )}
+
+        {/* TAB 5: DIRECT PERSONAL UPI & OWNER BANK PAYMENTS */}
+        {adminTab === 'direct_upi' && (
+          <AdminDirectUpiSettings />
+        )}
+
+        {/* TAB 6: PRODUCT PRICE LIST / RUPYA LAGANE KI SUCHI */}
+        {adminTab === 'price_list' && (
+          <AdminPriceListManager
+            products={productsList}
+            categories={categoriesList}
+            onProductUpdated={() => fetchProducts().then((p) => setProductsList(p))}
+            onOpenDirectUpi={() => setAdminTab('direct_upi')}
+          />
+        )}
+
+        {/* TAB 7: HD VIDEO REELS & AUDIO SHOPPING FEED */}
+        {adminTab === 'videos' && (
+          <AdminVideoReelsManager />
         )}
       </div>
     </div>

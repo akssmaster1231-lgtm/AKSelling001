@@ -60,6 +60,7 @@ export const CATEGORY_FALLBACK_IMAGES: Record<string, string> = {
 // Default high-grade cotton crewneck t-shirt in studio lighting
 export const DEFAULT_PRODUCT_IMAGE =
   'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=800&q=80';
+export const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;
 
 /**
  * Checks if a given image string is empty, broken, or a legacy shopping-bag SVG.
@@ -79,16 +80,17 @@ export function isPlaceholderOrBroken(url: string | null | undefined): boolean {
  * Dynamically infers the best matching authentic product photo based on
  * title, category, keywords, description, or tags.
  */
-export function getProductFallbackImage(item?: Record<string, unknown> | null): string {
-  if (!item) return DEFAULT_PRODUCT_IMAGE;
+export function getProductFallbackImage(item?: unknown): string {
+  if (!item || typeof item !== 'object') return DEFAULT_PRODUCT_IMAGE;
 
-  const category = String(item.category || '').toLowerCase().trim();
-  const title = String(item.title || '').toLowerCase().trim();
-  const desc = String(item.description || '').toLowerCase().trim();
-  const prodType = String(item.productType || '').toLowerCase().trim();
-  const fabric = String(item.fabric || '').toLowerCase().trim();
-  const tags = Array.isArray(item.tags) ? item.tags.join(' ').toLowerCase() : '';
-  const keywords = Array.isArray(item.keywords) ? item.keywords.join(' ').toLowerCase() : '';
+  const rec = item as Record<string, unknown>;
+  const category = String(rec.category || '').toLowerCase().trim();
+  const title = String(rec.title || '').toLowerCase().trim();
+  const desc = String(rec.description || '').toLowerCase().trim();
+  const prodType = String(rec.productType || '').toLowerCase().trim();
+  const fabric = String(rec.fabric || '').toLowerCase().trim();
+  const tags = Array.isArray(rec.tags) ? rec.tags.join(' ').toLowerCase() : '';
+  const keywords = Array.isArray(rec.keywords) ? rec.keywords.join(' ').toLowerCase() : '';
 
   const fullText = `${title} ${desc} ${prodType} ${fabric} ${tags} ${keywords} ${category}`;
 
@@ -232,7 +234,34 @@ export function getProductFallbackImage(item?: Record<string, unknown> | null): 
  * Guarantees a non-empty array of valid, high-resolution URLs.
  */
 export function resolveProductImages(item: unknown): string[] {
-  if (!item || typeof item !== 'object') {
+  if (!item) {
+    return [DEFAULT_PRODUCT_IMAGE];
+  }
+
+  // Handle case where an array of image strings is directly passed: resolveProductImages(images)
+  if (Array.isArray(item)) {
+    const list: string[] = [];
+    for (const entry of item) {
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed && !isPlaceholderOrBroken(trimmed) && !list.includes(trimmed)) {
+          list.push(trimmed);
+        }
+      } else if (entry && typeof entry === 'object') {
+        const obj = entry as Record<string, unknown>;
+        const candidate = obj.url || obj.src || obj.downloadURL || obj.secure_url || obj.imageUrl;
+        if (typeof candidate === 'string') {
+          const trimmed = candidate.trim();
+          if (trimmed && !isPlaceholderOrBroken(trimmed) && !list.includes(trimmed)) {
+            list.push(trimmed);
+          }
+        }
+      }
+    }
+    return list.length > 0 ? list : [DEFAULT_PRODUCT_IMAGE];
+  }
+
+  if (typeof item !== 'object') {
     return [DEFAULT_PRODUCT_IMAGE];
   }
 

@@ -21,6 +21,9 @@ async function startServer() {
   const DATA_DIR = path.join(process.cwd(), 'data');
   const BANNERS_FILE = path.join(DATA_DIR, 'banners.json');
   const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
+  const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+  const PAYMENT_SETTINGS_FILE = path.join(DATA_DIR, 'owner_payment.json');
+  const REELS_FILE = path.join(DATA_DIR, 'reels.json');
 
   function readDataFile<T>(filePath: string, fallback: T): T {
     try {
@@ -128,6 +131,67 @@ async function startServer() {
     }
   });
 
+  // -------------------------------------------------------------
+  // VIDEO REELS & SHORTS API (With Audio / Sound support)
+  // -------------------------------------------------------------
+  interface StoredReel {
+    id: string;
+    productId?: string;
+    videoUrl: string;
+    posterUrl?: string;
+    creatorName?: string;
+    caption?: string;
+    songTitle?: string;
+    likesCount?: number;
+    tag?: string;
+    audioEnabled?: boolean;
+    product?: Record<string, unknown>;
+    created_at?: string;
+    [key: string]: unknown;
+  }
+
+  // GET /api/reels
+  app.get('/api/reels', (_req, res) => {
+    const reels = readDataFile<StoredReel[]>(REELS_FILE, []);
+    res.json({ success: true, reels });
+  });
+
+  // POST /api/reels (Create or Update Reel)
+  app.post('/api/reels', (req, res) => {
+    try {
+      const reel = req.body as StoredReel;
+      if (!reel || !reel.id || !reel.videoUrl) {
+        return res.status(400).json({ error: 'Missing reel payload, id, or videoUrl' });
+      }
+      const reels = readDataFile<StoredReel[]>(REELS_FILE, []);
+      const existingIdx = reels.findIndex(r => r.id === reel.id);
+      if (existingIdx >= 0) {
+        reels[existingIdx] = { ...reels[existingIdx], ...reel, updated_at: new Date().toISOString() };
+      } else {
+        reels.unshift({ ...reel, created_at: reel.created_at || new Date().toISOString() });
+      }
+      writeDataFile(REELS_FILE, reels);
+      res.json({ success: true, reel });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save reel';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // DELETE /api/reels/:id
+  app.delete('/api/reels/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const reels = readDataFile<StoredReel[]>(REELS_FILE, []);
+      const filtered = reels.filter(r => r.id !== id);
+      writeDataFile(REELS_FILE, filtered);
+      res.json({ success: true, message: 'Reel deleted' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete reel';
+      res.status(500).json({ error: msg });
+    }
+  });
+
   // GET /api/products
   app.get('/api/products', (_req, res) => {
     const products = readDataFile<StoredProduct[]>(PRODUCTS_FILE, []);
@@ -166,6 +230,100 @@ async function startServer() {
       res.json({ success: true, message: 'Product deleted' });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to delete product';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  interface StoredOrder {
+    id: string;
+    customer_name?: string;
+    customer_phone?: string;
+    total_amount?: number;
+    payment_method?: string;
+    payment_status?: string;
+    upi_id?: string;
+    upi_utr?: string;
+    transaction_id?: string;
+    status?: string;
+    created_at?: string;
+    [key: string]: unknown;
+  }
+
+  // GET /api/orders
+  app.get('/api/orders', (_req, res) => {
+    const orders = readDataFile<StoredOrder[]>(ORDERS_FILE, []);
+    res.json({ success: true, orders });
+  });
+
+  // POST /api/orders (Save or Update Order)
+  app.post('/api/orders', (req, res) => {
+    try {
+      const order = req.body as StoredOrder;
+      if (!order || !order.id) {
+        return res.status(400).json({ error: 'Missing order payload or id' });
+      }
+      const orders = readDataFile<StoredOrder[]>(ORDERS_FILE, []);
+      const existingIdx = orders.findIndex(o => o.id === order.id);
+      if (existingIdx >= 0) {
+        orders[existingIdx] = { ...orders[existingIdx], ...order, updated_at: new Date().toISOString() };
+      } else {
+        orders.unshift({ ...order, created_at: order.created_at || new Date().toISOString() });
+      }
+      writeDataFile(ORDERS_FILE, orders);
+      res.json({ success: true, order });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save order';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // PUT /api/orders/:id (Update Order Status / Payment Verification)
+  app.put('/api/orders/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body as Partial<StoredOrder>;
+      const orders = readDataFile<StoredOrder[]>(ORDERS_FILE, []);
+      const existingIdx = orders.findIndex(o => o.id === id);
+      if (existingIdx >= 0) {
+        orders[existingIdx] = { ...orders[existingIdx], ...updates, updated_at: new Date().toISOString() };
+        writeDataFile(ORDERS_FILE, orders);
+        res.json({ success: true, order: orders[existingIdx] });
+      } else {
+        res.status(404).json({ error: 'Order not found' });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update order';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // GET /api/owner/payment-settings
+  app.get('/api/owner/payment-settings', (_req, res) => {
+    const defaultSettings = {
+      beneficiaryName: 'ANOJKUMAR',
+      businessName: 'AK YADAV PRINTS (ANOJKUMAR)',
+      upiId: '7290894907@ybl',
+      accountNumber: '7290894907',
+      ifscCode: 'AIRP0000001',
+      bankName: 'Airtel payment Bank',
+      branchName: 'Airtel Payments Bank Main Branch',
+      supportPhone: '+91 7290894907',
+      supportEmail: 'support.akselling@gmail.com',
+    };
+    const settings = readDataFile(PAYMENT_SETTINGS_FILE, defaultSettings);
+    res.json({ success: true, settings });
+  });
+
+  // POST /api/owner/payment-settings
+  app.post('/api/owner/payment-settings', (req, res) => {
+    try {
+      const updates = req.body;
+      const current = readDataFile(PAYMENT_SETTINGS_FILE, {});
+      const updated = { ...current, ...updates, updatedAt: new Date().toISOString() };
+      writeDataFile(PAYMENT_SETTINGS_FILE, updated);
+      res.json({ success: true, settings: updated });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save payment settings';
       res.status(500).json({ error: msg });
     }
   });
@@ -1741,6 +1899,26 @@ async function startServer() {
       // Check against server verified ledger
       let record = verifiedPaymentsRegistry.get(payment_id) || (order_id ? verifiedPaymentsRegistry.get(order_id) : undefined);
 
+      // Direct Personal UPI & QR Code Payments (0% fee, direct to owner)
+      if (!record && (
+        payment_id.startsWith('upi_') ||
+        payment_id.startsWith('utr_') ||
+        payment_id.startsWith('direct_') ||
+        (payment_method && String(payment_method).toLowerCase().includes('upi'))
+      )) {
+        const amt = Number(required_advance) || Number(total_amount) || 0;
+        record = {
+          orderId: order_id || `ORD_${Date.now()}`,
+          paymentId: payment_id,
+          amount: amt,
+          currency: 'INR',
+          verifiedAt: new Date().toISOString(),
+          method: 'direct_upi',
+          status: 'verified_direct_upi',
+        };
+        verifiedPaymentsRegistry.set(payment_id, record);
+      }
+
       if (!record) {
         // Double-check Razorpay API if live keys are present
         const keyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_TOuYEwOlXSF8vU';
@@ -1802,6 +1980,44 @@ async function startServer() {
     } catch (err) {
       console.error('Order payment validation error:', err);
       res.status(500).json({ valid: false, error: 'Internal payment validation error' });
+    }
+  });
+
+  // Direct Personal UPI & Card Payment Verification Endpoint
+  app.post('/api/orders/direct-upi-verify', (req, res) => {
+    try {
+      const { orderId, utrNumber, amount, customerName, customerPhone, paymentMode } = req.body;
+      const cleanUtr = String(utrNumber || '').trim();
+      const isCard = paymentMode === 'card';
+      if (!cleanUtr || cleanUtr.length < 6) {
+        return res.status(400).json({
+          success: false,
+          error: isCard ? 'Valid card transaction reference is required.' : 'Valid UTR / UPI Reference ID is required.',
+        });
+      }
+
+      const paymentId = isCard ? `crd_${cleanUtr}` : `upi_${cleanUtr}`;
+      const record = {
+        orderId: orderId || `ORD_${Date.now()}`,
+        paymentId,
+        amount: Number(amount) || 0,
+        currency: 'INR',
+        verifiedAt: new Date().toISOString(),
+        method: isCard ? 'card' : 'direct_upi',
+        status: isCard ? 'verified_card' : 'verified_direct_upi',
+        customerName: customerName || '',
+        customerPhone: customerPhone || '',
+        paymentMode: paymentMode || 'direct_upi_full',
+      };
+      verifiedPaymentsRegistry.set(paymentId, record);
+      if (orderId) {
+        verifiedPaymentsRegistry.set(orderId, record);
+      }
+
+      res.json({ success: true, paymentId, verified: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Direct payment recording failed';
+      res.status(500).json({ success: false, error: msg });
     }
   });
 

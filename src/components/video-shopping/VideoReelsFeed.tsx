@@ -12,6 +12,7 @@ import {
   Flame,
 } from 'lucide-react';
 import { FASHION_REELS, type VideoReelItem } from './reelsData';
+import { subscribeVideoReels } from '@/utils/videoReelsService';
 import { formatPrice } from '@/data';
 import type { Product } from '@/types';
 
@@ -21,8 +22,9 @@ interface VideoReelsFeedProps {
 }
 
 export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsFeedProps) {
+  const [reels, setReels] = useState<VideoReelItem[]>(FASHION_REELS);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false); // Audio active with sound by default
   const [isPlaying, setIsPlaying] = useState(true);
   const [likedReels, setLikedReels] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>(() => {
@@ -40,26 +42,53 @@ export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsF
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef<number | null>(null);
 
-  const currentReel = FASHION_REELS[currentIndex];
+  // Subscribe to live video reels from Firestore & Server
+  useEffect(() => {
+    const unsub = subscribeVideoReels((liveReels) => {
+      if (Array.isArray(liveReels) && liveReels.length > 0) {
+        setReels(liveReels);
+        const initialLikes: Record<string, number> = {};
+        liveReels.forEach((r) => {
+          initialLikes[r.id] = r.likesCount || 0;
+        });
+        setLikeCounts((prev) => ({ ...initialLikes, ...prev }));
+      }
+    });
+    return () => unsub();
+  }, []);
 
-  // Sync video play/pause on index change
+  const currentReel = reels[currentIndex] || reels[0] || FASHION_REELS[0];
+
+  // Sync video play/pause on index or mute change
   useEffect(() => {
     videoRefs.current.forEach((vid, idx) => {
       if (!vid) return;
       if (idx === currentIndex) {
         vid.currentTime = 0;
+        vid.muted = isMuted;
         vid.play().catch(() => {
-          // autoplay policy catch
+          // If browser policy requires mute for first gesture, mute and retry
+          vid.muted = true;
+          vid.play().catch(() => {});
         });
       } else {
         vid.pause();
       }
     });
     setIsPlaying(true);
-  }, [currentIndex]);
+  }, [currentIndex, isMuted, reels]);
+
+  const toggleSound = () => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    const activeVid = videoRefs.current[currentIndex];
+    if (activeVid) {
+      activeVid.muted = nextMuted;
+    }
+  };
 
   const handleNext = () => {
-    if (currentIndex < FASHION_REELS.length - 1) {
+    if (currentIndex < reels.length - 1) {
       setCurrentIndex((prev) => prev + 1);
     } else {
       setCurrentIndex(0); // loop back
@@ -128,13 +157,14 @@ export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsF
   };
 
   const handleShare = async (reel: VideoReelItem) => {
-    const shareUrl = `${window.location.origin}?productId=${reel.productId}&reels=true`;
-    const shareText = `Check out this trending ${reel.product.title} on AKSelling Video Shopping! Only ${formatPrice(reel.product.price)}: ${shareUrl}`;
+    const prod = mapReelProduct(reel);
+    const shareUrl = `${window.location.origin}?productId=${prod.id}&reels=true`;
+    const shareText = `Check out this trending ${prod.title} on AKSelling Video Shopping! Only ${formatPrice(prod.price)}: ${shareUrl}`;
 
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
         await navigator.share({
-          title: reel.product.title,
+          title: prod.title,
           text: shareText,
           url: shareUrl,
         });
@@ -152,22 +182,43 @@ export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsF
   };
 
   const mapReelProduct = (reel: VideoReelItem): Product => {
+    if (reel.product) {
+      return {
+        id: reel.product.id,
+        title: reel.product.title,
+        brand: reel.product.brand || 'AKSelling',
+        price: reel.product.price,
+        mrp: reel.product.mrp || reel.product.price,
+        discount: reel.product.discount || 0,
+        rating: reel.product.rating || 4.8,
+        ratingCount: 124,
+        image: reel.product.image || reel.posterUrl,
+        images: [reel.product.image || reel.posterUrl],
+        category: 'fashion',
+        description: reel.caption,
+        delivery: 'Free delivery by tomorrow',
+        inStock: true,
+        sizes: reel.product.sizes || ['M', 'L', 'XL'],
+        colors: reel.product.colors || ['Black', 'Navy Blue'],
+      };
+    }
     return {
-      id: reel.product.id,
-      title: reel.product.title,
-      brand: reel.product.brand,
-      price: reel.product.price,
-      mrp: reel.product.mrp,
-      discount: reel.product.discount,
-      rating: reel.product.rating,
-      ratingCount: 124,
-      image: reel.product.image,
-      images: [reel.product.image],
-      category: 'clothing',
+      id: reel.productId || reel.id,
+      title: reel.caption || 'AKSelling Featured Outfit',
+      brand: reel.creatorName || 'AKSelling',
+      price: 499,
+      mrp: 999,
+      discount: 50,
+      rating: 4.8,
+      ratingCount: 120,
+      image: reel.posterUrl,
+      images: [reel.posterUrl],
+      category: 'fashion',
       description: reel.caption,
+      delivery: 'Free delivery by tomorrow',
       inStock: true,
-      sizes: reel.product.sizes,
-      colors: reel.product.colors,
+      sizes: ['M', 'L', 'XL'],
+      colors: ['Black', 'White'],
     };
   };
 
@@ -190,17 +241,22 @@ export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsF
 
         <button
           type="button"
-          onClick={() => setIsMuted((prev) => !prev)}
-          className="w-9 h-9 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-lg active:scale-95 transition-transform"
-          title={isMuted ? 'Tap to Unmute' : 'Mute'}
+          onClick={toggleSound}
+          className={`px-3 py-1.5 rounded-full backdrop-blur-md border flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer text-xs font-black ${
+            isMuted
+              ? 'bg-black/70 text-amber-300 border-amber-400/40'
+              : 'bg-emerald-600/95 text-white border-emerald-400/60 shadow-emerald-500/20'
+          }`}
+          title={isMuted ? 'आवाज़ चालू करें' : 'म्यूट करें'}
         >
-          {isMuted ? <VolumeX size={17} className="text-amber-400" /> : <Volume2 size={17} className="text-emerald-400" />}
+          {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} className="animate-pulse" />}
+          <span>{isMuted ? '🔇 आवाज़ चालू करें' : '🔊 आवाज़ चालू है'}</span>
         </button>
       </div>
 
       {/* Main Video Presentation */}
       <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
-        {FASHION_REELS.map((reel, idx) => {
+        {reels.map((reel, idx) => {
           const isCurrent = idx === currentIndex;
           const hasError = videoErrors[reel.id];
           return (
@@ -350,77 +406,86 @@ export default function VideoReelsFeed({ onProductClick, onBuyNow }: VideoReelsF
           </div>
 
           {/* Interactive Floating Product Card */}
-          <div className="bg-white/95 backdrop-blur-md rounded-xl p-2.5 shadow-2xl border border-white/40 flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => onProductClick(mapReelProduct(currentReel))}
-              className="relative w-14 h-14 rounded-lg overflow-hidden shrink-0 border border-slate-200 cursor-pointer"
-            >
-              <img
-                src={currentReel.product.image}
-                alt={currentReel.product.title}
-                className="w-full h-full object-cover"
-              />
-              <span className="absolute bottom-0 inset-x-0 bg-[#1b365d] text-amber-300 text-[9px] font-black text-center py-0.5">
-                {currentReel.product.discount}% OFF
-              </span>
-            </button>
+          {(() => {
+            const prod = mapReelProduct(currentReel);
+            return (
+              <div className="bg-white/95 backdrop-blur-md rounded-xl p-2.5 shadow-2xl border border-white/40 flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => onProductClick(prod)}
+                  className="relative w-14 h-14 rounded-lg overflow-hidden shrink-0 border border-slate-200 cursor-pointer"
+                >
+                  <img
+                    src={prod.image || currentReel.posterUrl}
+                    alt={prod.title}
+                    className="w-full h-full object-cover"
+                  />
+                  {prod.discount ? (
+                    <span className="absolute bottom-0 inset-x-0 bg-[#1b365d] text-amber-300 text-[9px] font-black text-center py-0.5">
+                      {prod.discount}% OFF
+                    </span>
+                  ) : null}
+                </button>
 
-            <div
-              onClick={() => onProductClick(mapReelProduct(currentReel))}
-              className="flex-1 min-w-0 cursor-pointer text-left"
-            >
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate">
-                {currentReel.product.brand}
-              </p>
-              <h4 className="text-xs font-bold text-slate-900 truncate leading-snug">
-                {currentReel.product.title}
-              </h4>
-              <div className="flex items-baseline gap-1.5 mt-0.5">
-                <span className="text-sm font-black text-slate-950">
-                  {formatPrice(currentReel.product.price)}
-                </span>
-                <span className="text-[11px] text-slate-400 line-through">
-                  {formatPrice(currentReel.product.mrp)}
-                </span>
-                <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
-                  <Star size={10} className="fill-emerald-600 text-emerald-600" />
-                  {currentReel.product.rating}
-                </span>
+                <div
+                  onClick={() => onProductClick(prod)}
+                  className="flex-1 min-w-0 cursor-pointer text-left"
+                >
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate">
+                    {prod.brand}
+                  </p>
+                  <h4 className="text-xs font-bold text-slate-900 truncate leading-snug">
+                    {prod.title}
+                  </h4>
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="text-sm font-black text-slate-950">
+                      {formatPrice(prod.price)}
+                    </span>
+                    {prod.mrp && prod.mrp > prod.price ? (
+                      <span className="text-[11px] text-slate-400 line-through">
+                        {formatPrice(prod.mrp)}
+                      </span>
+                    ) : null}
+                    <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
+                      <Star size={10} className="fill-emerald-600 text-emerald-600" />
+                      {prod.rating || 4.8}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 1-Tap Buy Now Button */}
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onBuyNow(
+                        prod,
+                        prod.sizes?.[0] || 'M',
+                        prod.colors?.[0] || 'Black'
+                      )
+                    }
+                    className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
+                    id="reels-buy-now-btn"
+                  >
+                    <Zap size={13} className="fill-slate-950" />
+                    <span>1-Tap Buy</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onProductClick(prod)}
+                    className="text-[10px] font-bold text-slate-600 hover:text-slate-900 text-center"
+                  >
+                    View Details
+                  </button>
+                </div>
               </div>
-            </div>
-
-            {/* 1-Tap Buy Now Button */}
-            <div className="flex flex-col gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={() =>
-                  onBuyNow(
-                    mapReelProduct(currentReel),
-                    currentReel.product.sizes[0],
-                    currentReel.product.colors[0]
-                  )
-                }
-                className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
-                id="reels-buy-now-btn"
-              >
-                <Zap size={13} className="fill-slate-950" />
-                <span>1-Tap Buy</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onProductClick(mapReelProduct(currentReel))}
-                className="text-[10px] font-bold text-slate-600 hover:text-slate-900 text-center"
-              >
-                View Details
-              </button>
-            </div>
-          </div>
+            );
+          })()}
         </div>
 
         {/* Progress Dots Indicator */}
         <div className="absolute bottom-1.5 inset-x-0 flex justify-center gap-1 z-30 pointer-events-none">
-          {FASHION_REELS.map((_, i) => (
+          {reels.map((_, i) => (
             <div
               key={i}
               className={`h-1 rounded-full transition-all duration-300 ${

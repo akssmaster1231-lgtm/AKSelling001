@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Loader2,
   FileText,
+  Plus,
 } from 'lucide-react';
 import { useAuth } from '@/auth-context';
 import type { WalletTransaction, WithdrawalFormData, WithdrawalRequest } from '@/types/wallet';
@@ -33,6 +34,7 @@ import {
   subscribeUserWithdrawalRequests,
 } from '@/utils/walletService';
 import { DigitalParchiModal } from '@/components/DigitalParchiModal';
+import { AddMoneyModal } from '@/components/wallet/AddMoneyModal';
 
 interface WalletPageProps {
   onBack: () => void;
@@ -53,6 +55,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
   const [isLoadingTx, setIsLoadingTx] = useState<boolean>(true);
   const [filterType, setFilterType] = useState<'all' | 'CREDIT' | 'DEBIT'>('all');
   const [showRulesModal, setShowRulesModal] = useState<boolean>(false);
+  const [showAddMoneyModal, setShowAddMoneyModal] = useState<boolean>(false);
 
   // Withdrawal Form State
   const [withdrawForm, setWithdrawForm] = useState<WithdrawalFormData>({
@@ -340,6 +343,18 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
                   ₹{SIGNUP_BONUS_FLAT} (Active)
                 </p>
               </div>
+            </div>
+
+            {/* Quick Action: Add Money / Deposit Funds */}
+            <div className="mt-4 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowAddMoneyModal(true)}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl text-xs font-black shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer hover:shadow-lg active:scale-[0.99]"
+              >
+                <Plus size={15} className="text-white" />
+                <span>+ खुद का रुपया जोड़ें (Add Money to Wallet)</span>
+              </button>
             </div>
           </div>
         </section>
@@ -854,6 +869,17 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
         isOpen={Boolean(selectedParchi)}
         request={selectedParchi}
         onClose={() => setSelectedParchi(null)}
+      />
+
+      {/* Add Money to Wallet Modal (Direct UPI) */}
+      <AddMoneyModal
+        isOpen={showAddMoneyModal}
+        onClose={() => setShowAddMoneyModal(false)}
+        userId={userId}
+        userName={user?.name}
+        userPhone={user?.phone}
+        userEmail={user?.email}
+        onSuccess={(newBal) => setBalance(newBal)}
       />
     </div>
   );

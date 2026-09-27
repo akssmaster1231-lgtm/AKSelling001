@@ -242,11 +242,20 @@ export default function AuthPage({ onClose, onSuccess, isStrictGate = false }: A
         <div>
           {/* Brand Header */}
           <div className="flex flex-col items-center mb-6 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#2874f0] to-blue-600 shadow-md shadow-blue-500/20 flex items-center justify-center mb-3">
-              <span className="text-2xl font-black text-white tracking-wider">AK</span>
+            <div className="w-16 h-16 rounded-2xl p-1 bg-[#0a192f] border border-amber-400/40 shadow-lg shadow-black/20 flex items-center justify-center mb-2.5">
+              <img
+                src="/ak_brand_logo.jpg"
+                alt="AK Yadav Print / AKSelling"
+                className="w-full h-full object-contain rounded-xl"
+              />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Welcome to AKSelling</h2>
-            <p className="text-xs text-gray-500 mt-1 max-w-xs">
+            <h2 className="text-xl font-black text-gray-900">
+              AK<span className="text-amber-500">Selling</span>
+            </h2>
+            <p className="text-[11px] font-bold text-amber-600 uppercase tracking-widest -mt-0.5 mb-1">
+              AK Yadav Print
+            </p>
+            <p className="text-xs text-gray-500 max-w-xs">
               {step === 'phone'
                 ? 'Get instant access to your orders, cart, seller dashboard, and live Shiprocket tracking.'
                 : `Enter the 6-digit OTP code sent to +91 ${phone}`}

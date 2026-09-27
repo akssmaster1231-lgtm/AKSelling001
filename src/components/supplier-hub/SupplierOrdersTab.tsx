@@ -568,15 +568,35 @@ Logistics Provider: ${providerName}`;
                           City/State: {order.customerCity} • PIN: {order.customerPincode || '201301'}
                         </p>
                       )}
-                      {(order.razorpayPaymentId || order.transactionId || order.razorpayOrderId) && (
+                      {(order.upiUtr || order.razorpayPaymentId || order.transactionId || order.razorpayOrderId) && (
                         <div className="text-[10px] text-gray-500 font-mono pt-0.5 flex items-center gap-1.5 flex-wrap">
-                          <span className="bg-gray-200 text-gray-700 px-1.5 py-0.2 rounded font-sans font-bold">
-                            Txn ID:
+                          <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-sans font-bold flex items-center gap-1">
+                            Direct UPI UTR:
                           </span>
-                          <span className="text-gray-800 font-medium truncate max-w-xs">
-                            {order.razorpayPaymentId || order.transactionId || order.razorpayOrderId}
+                          <span className="text-gray-900 font-bold truncate max-w-xs">
+                            {order.upiUtr || order.transactionId || order.razorpayPaymentId || order.razorpayOrderId}
                           </span>
+                          {order.paymentScreenshot && (
+                            <a
+                              href={order.paymentScreenshot}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] text-indigo-600 underline font-sans font-semibold hover:text-indigo-800"
+                            >
+                              [View UPI Receipt Proof]
+                            </a>
+                          )}
                         </div>
+                      )}
+                      {order.walletDiscountApplied && order.walletDiscountApplied > 0 && (
+                        <p className="text-emerald-700 text-[11px] font-medium pt-0.5">
+                          🎁 Wallet Reward Applied: ₹{order.walletDiscountApplied}
+                        </p>
+                      )}
+                      {order.advancePaid !== undefined && order.advancePaid > 0 && (
+                        <p className="text-amber-800 text-[11px] font-semibold pt-0.5">
+                          💵 10% UPI Token Paid: ₹{order.advancePaid} • Balance Due on Delivery: ₹{order.balanceDue}
+                        </p>
                       )}
                     </div>
                   </div>

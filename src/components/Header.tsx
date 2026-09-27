@@ -208,11 +208,20 @@ export default function Header({
           {/* Top Row: Logo & Location & Action Buttons */}
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-2 min-w-0">
-              <button onClick={onNavigateHome} className="flex items-baseline gap-0.5 shrink-0 group" id="header-logo-btn">
-                <span className="text-xl font-black text-white tracking-tight drop-shadow-xs">
-                  AK<span className="text-amber-400 group-hover:text-yellow-300 transition-colors">Selling</span>
-                </span>
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block ml-0.5" />
+              <button onClick={onNavigateHome} className="flex items-center gap-1.5 shrink-0 group text-left" id="header-logo-btn">
+                <img
+                  src="/ak_brand_logo.jpg"
+                  alt="AK Yadav Print / AKSelling"
+                  className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-amber-400/50 shadow-xs group-hover:border-amber-300 transition-all shrink-0"
+                />
+                <div className="flex flex-col leading-tight">
+                  <span className="text-base font-black text-white tracking-tight drop-shadow-xs flex items-center gap-0.5">
+                    AK<span className="text-amber-400 group-hover:text-yellow-300 transition-colors">Selling</span>
+                  </span>
+                  <span className="text-[9px] font-extrabold text-amber-300/90 tracking-wider uppercase">
+                    AK Yadav Print
+                  </span>
+                </div>
               </button>
               <HeaderLocationWidget />
             </div>

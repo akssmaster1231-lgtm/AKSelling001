@@ -25,6 +25,12 @@ export interface CustomerPlacedOrder {
   total_amount: number;
   payment_method?: string;
   payment_status?: string;
+  upi_utr?: string;
+  upi_id?: string;
+  payment_screenshot?: string;
+  wallet_discount_applied?: number;
+  advance_paid?: number;
+  balance_due?: number;
   razorpay_order_id?: string;
   razorpay_payment_id?: string;
   transaction_id?: string;
@@ -73,11 +79,17 @@ export function recordPlacedOrder(order: CustomerPlacedOrder): void {
         brand: item.brand,
       })),
       totalAmount: order.total_amount,
-      paymentMethod: order.payment_method || 'Prepaid (UPI / Card)',
+      paymentMethod: order.payment_method || 'Direct Personal UPI & QR',
       paymentStatus: order.payment_status || (order.payment_method?.toLowerCase().includes('cod') ? 'Partially Paid' : 'Paid'),
+      upiUtr: order.upi_utr,
+      upiId: order.upi_id || '7290894907@ybl',
+      paymentScreenshot: order.payment_screenshot,
+      walletDiscountApplied: order.wallet_discount_applied,
+      advancePaid: order.advance_paid,
+      balanceDue: order.balance_due,
       razorpayOrderId: order.razorpay_order_id,
       razorpayPaymentId: order.razorpay_payment_id,
-      transactionId: order.razorpay_payment_id || order.transaction_id || order.razorpay_order_id,
+      transactionId: order.upi_utr || order.transaction_id || order.razorpay_payment_id || order.razorpay_order_id,
       status: 'pending',
       orderDate: new Date().toLocaleDateString('en-IN', {
         day: 'numeric',

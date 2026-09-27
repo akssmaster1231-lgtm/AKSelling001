@@ -687,3 +687,130 @@ export function subscribeWalletTransactions(
     return () => {};
   }
 }
+
+/**
+ * Deduct wallet balance for order discount at checkout
+ */
+export async function deductWalletBalanceForOrder(
+  userId: string,
+  orderId: string,
+  amountToDeduct: number
+): Promise<{ success: boolean; newBalance: number }> {
+  if (!userId || userId === 'guest' || amountToDeduct <= 0) {
+    return { success: false, newBalance: 0 };
+  }
+  try {
+    let newBalance = 0;
+    if (isFirebaseConfigured) {
+      const userDocRef = doc(db, 'users', userId);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(userDocRef);
+        if (snap.exists()) {
+          const cur = typeof snap.data().walletBalance === 'number' ? snap.data().walletBalance : 0;
+          newBalance = Math.max(0, Math.round((cur - amountToDeduct) * 100) / 100);
+          tx.update(userDocRef, { walletBalance: newBalance });
+        }
+      });
+
+      const txId = `tx_order_use_${orderId}_${Date.now()}`;
+      await setDoc(doc(db, 'wallet_transactions', txId), {
+        id: txId,
+        userId,
+        type: 'DEBIT',
+        amount: amountToDeduct,
+        title: `Order Discount Applied (Order #${orderId})`,
+        description: `₹${amountToDeduct} redeemed from wallet for order #${orderId}`,
+        category: 'purchase_discount',
+        status: 'COMPLETED',
+        orderId,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const currentCache = getLocalWalletCache(userId);
+    const updated = Math.max(0, Math.round((currentCache.walletBalance - amountToDeduct) * 100) / 100);
+    setLocalWalletCache(userId, { walletBalance: updated });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('akselling_wallet_updated', { detail: { newBalance: updated } }));
+    }
+    return { success: true, newBalance: updated };
+  } catch (err) {
+    console.warn('deductWalletBalanceForOrder error:', err);
+    return { success: false, newBalance: 0 };
+  }
+}
+
+/**
+ * Add / deposit money directly into user wallet via Direct UPI
+ */
+export async function depositMoneyToUserWallet(
+  userId: string,
+  amount: number,
+  utrNumber: string,
+  extraProfileData: { name?: string; phone?: string; email?: string } = {}
+): Promise<{ success: boolean; newBalance: number; error?: string }> {
+  if (!userId || userId === 'guest' || amount <= 0) {
+    return { success: false, newBalance: 0, error: 'Invalid user or amount' };
+  }
+
+  try {
+    let newBalance = amount;
+
+    if (isFirebaseConfigured) {
+      const userDocRef = doc(db, 'users', userId);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(userDocRef);
+        if (snap.exists()) {
+          const current = typeof snap.data().walletBalance === 'number' ? snap.data().walletBalance : 0;
+          newBalance = Math.round((current + amount) * 100) / 100;
+          tx.update(userDocRef, {
+            walletBalance: newBalance,
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          newBalance = amount;
+          tx.set(userDocRef, {
+            id: userId,
+            name: extraProfileData.name || 'AKSelling Member',
+            phone: extraProfileData.phone || '',
+            email: extraProfileData.email || '',
+            walletBalance: newBalance,
+            totalCashbackEarned: 0,
+            signupBonusClaimed: true,
+            successfulOrdersCount: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      });
+
+      const txId = `tx_deposit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      await setDoc(doc(db, 'wallet_transactions', txId), {
+        id: txId,
+        userId,
+        type: 'CREDIT',
+        amount,
+        title: 'Wallet Deposit (Direct UPI)',
+        description: `₹${amount} added via Direct UPI (UTR: ${utrNumber})`,
+        category: 'wallet_deposit',
+        status: 'SUCCESS',
+        utr: utrNumber,
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      const currentCache = getLocalWalletCache(userId);
+      newBalance = Math.round((currentCache.walletBalance + amount) * 100) / 100;
+    }
+
+    setLocalWalletCache(userId, { walletBalance: newBalance });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('akselling_wallet_updated', { detail: { newBalance } }));
+    }
+
+    return { success: true, newBalance };
+  } catch (err: unknown) {
+    console.warn('depositMoneyToUserWallet error:', err);
+    return { success: false, newBalance: 0, error: err instanceof Error ? err.message : 'Deposit failed' };
+  }
+}
+

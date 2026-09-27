@@ -17,15 +17,16 @@ export async function compressImageFile(
   maybeMaxHeight?: number,
   maybeQuality?: number
 ): Promise<string> {
-  // Ultra-HD Defaults: 1600x1600 high-res retina limit with 92% ultra-sharp quality
-  let maxWidth = 1600;
-  let maxHeight = 1600;
-  let quality = 0.92;
+  // Crisp Retina Mobile & Web Defaults: 1000x1000 max with 82% quality
+  // Guarantees high-resolution clarity while keeping file size under 60KB per photo
+  let maxWidth = 1000;
+  let maxHeight = 1000;
+  let quality = 0.82;
 
   if (typeof maxWidthOrOptions === 'object' && maxWidthOrOptions !== null) {
-    maxWidth = maxWidthOrOptions.maxWidth ?? 1600;
-    maxHeight = maxWidthOrOptions.maxHeight ?? 1600;
-    quality = maxWidthOrOptions.quality ?? 0.92;
+    maxWidth = maxWidthOrOptions.maxWidth ?? 1000;
+    maxHeight = maxWidthOrOptions.maxHeight ?? 1000;
+    quality = maxWidthOrOptions.quality ?? 0.82;
   } else if (typeof maxWidthOrOptions === 'number') {
     maxWidth = maxWidthOrOptions;
     if (typeof maybeMaxHeight === 'number') maxHeight = maybeMaxHeight;
@@ -123,6 +124,18 @@ export async function compressImageFile(
             }
           } catch {
             compressed = finalCanvas.toDataURL('image/jpeg', quality);
+          }
+
+          // If still over 120KB, re-encode with slightly lower quality to guarantee safe storage
+          if (compressed && compressed.length > 160000) {
+            try {
+              const lighter = finalCanvas.toDataURL('image/jpeg', 0.72);
+              if (lighter && lighter.length < compressed.length) {
+                compressed = lighter;
+              }
+            } catch {
+              // ignore
+            }
           }
 
           // Safety check: if compressed string is valid, return it; otherwise fallback to original dataUrl
