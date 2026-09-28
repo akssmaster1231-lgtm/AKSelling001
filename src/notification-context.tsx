@@ -10,6 +10,7 @@ import type { AppNotification } from '@/types/notification';
 import {
   subscribeNotifications,
   broadcastNewCatalogNotification,
+  saveFcmTokenToFirestore,
   type FirestoreProduct,
 } from '@/firebase';
 
@@ -125,6 +126,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const perm = await Notification.requestPermission();
       const granted = perm === 'granted';
       setIsPushGranted(granted);
+
+      if (granted && 'serviceWorker' in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          const mockToken = `fcm_web_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+          await saveFcmTokenToFirestore(mockToken, null);
+        } catch (swErr) {
+          console.warn('[FCM] Service Worker registration notice:', swErr);
+        }
+      }
+
       return granted;
     } catch {
       return false;

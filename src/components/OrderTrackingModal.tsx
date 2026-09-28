@@ -168,6 +168,26 @@ export default function OrderTrackingModal({
                 </div>
               </div>
             </div>
+
+            {/* Live Carrier Partner Portal Buttons (Shiprocket & NimbusPost) */}
+            <div className="flex gap-2 pt-2 border-t border-slate-200/60">
+              <a
+                href={order.awb_code?.startsWith('NMB') ? `https://nimbuspost.com/tracking?awb=${displayAwb}` : `https://shiprocket.co/tracking/${displayAwb}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 py-1.5 px-2.5 rounded-xl text-[11px] font-bold text-center transition-all flex items-center justify-center gap-1 shadow-2xs"
+              >
+                <span>Track on {order.awb_code?.startsWith('NMB') ? 'NimbusPost' : 'Shiprocket'}</span>
+              </a>
+              <a
+                href={`https://shiprocket.co/tracking/${displayAwb}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 py-1.5 px-2.5 rounded-xl text-[11px] font-bold text-center transition-all flex items-center justify-center gap-1"
+              >
+                <span>Live GPS Radar</span>
+              </a>
+            </div>
           </div>
 
           {/* Visual Steps Progress Bar */}

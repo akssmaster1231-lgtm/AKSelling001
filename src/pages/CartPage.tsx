@@ -25,12 +25,13 @@ import { useAuth } from '@/auth-context';
 import { formatPrice } from '@/data';
 import DirectUpiPaymentModal, { DirectUpiPaymentResult } from '@/components/payment/DirectUpiPaymentModal';
 import { getOwnerPaymentSettings } from '@/config/ownerPaymentConfig';
-import { saveOrderToFirestore, deductProductInventory, type FirestoreOrder } from '@/firebase';
+import { saveOrderToFirestore, deductProductInventory, savePaymentTransactionToFirestore, type FirestoreOrder } from '@/firebase';
 import { recordPlacedOrder } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
 import { awardOrderCashback, deductWalletBalanceForOrder, getLocalWalletCache } from '@/utils/walletService';
 import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
 import { ScratchCardModal } from '@/components/ScratchCardModal';
+import TrustBadges from '@/components/trust/TrustBadges';
 import type { Product, CartItem } from '@/types';
 
 interface CartPageProps {
@@ -200,6 +201,22 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
         const errJson = await verifyResp.json().catch(() => ({}));
         throw new Error(errJson.error || 'Server could not record UPI transaction reference.');
       }
+
+      // Record in Firebase Payment Ledger in real-time
+      savePaymentTransactionToFirestore({
+        id: `tx_${Date.now()}_${result.utrNumber.slice(-4)}`,
+        orderId: pendingOrderId,
+        utrNumber: result.utrNumber,
+        amount: result.amountPaid,
+        currency: 'INR',
+        customerName: form.name,
+        customerPhone: form.phone,
+        paymentMethod: result.paymentMode === 'card' ? 'Debit/Credit Card' : 'Direct UPI',
+        paymentMode: result.paymentMode,
+        status: 'verified',
+        screenshotUrl: result.screenshotUrl,
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
 
       // 2. Deduct wallet rewards if applied
       if (walletDiscount > 0 && user?.id) {
@@ -1173,6 +1190,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
               )}
             </div>
           </div>
+          <TrustBadges variant="checkout" className="mt-3" />
         </div>
       )}
     </div>

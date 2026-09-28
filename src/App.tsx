@@ -21,6 +21,8 @@ import { isWhitelistedSellerEmail } from '@/utils/sellerWhitelist';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import type { Product } from '@/types';
 import { fetchProductById } from '@/data';
+import { db, resolveProductImages } from '@/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 import { NotificationProvider } from '@/notification-context';
 import NotificationToastBanner from '@/components/NotificationToastBanner';
@@ -89,6 +91,43 @@ function AppContent() {
     window.addEventListener('akselling_open_product_id', handleOpenProdEvent);
     return () => window.removeEventListener('akselling_open_product_id', handleOpenProdEvent);
   }, []);
+
+  // 100% Real-Time Live Sync: Instant microsecond reflection for open product details
+  useEffect(() => {
+    if (!selectedProduct?.id) return;
+    try {
+      const unsub = onSnapshot(doc(db, 'products', selectedProduct.id), (snap) => {
+        if (snap.exists()) {
+          const d = snap.data();
+          const resolvedImgs = resolveProductImages({ id: snap.id, ...d });
+          setSelectedProduct(prev => {
+            if (!prev || prev.id !== snap.id) return prev;
+            return {
+              ...prev,
+              ...d,
+              id: snap.id,
+              images: resolvedImgs,
+              image: resolvedImgs[0],
+              imageUrl: resolvedImgs[0],
+              price: Number(d.price) || prev.price,
+              mrp: Number(d.mrp) || Number(d.price) || prev.mrp,
+              discount: Number(d.discount) || prev.discount,
+              sizes: d.sizes || prev.sizes,
+              stock: typeof d.stock === 'number' ? d.stock : (typeof d.inventoryCount === 'number' ? d.inventoryCount : prev.stock),
+              inventoryCount: typeof d.inventoryCount === 'number' ? d.inventoryCount : (typeof d.stock === 'number' ? d.stock : prev.inventoryCount),
+              pickupLocation: d.pickupLocation || prev.pickupLocation,
+              pickupAddress: d.pickupAddress || prev.pickupAddress,
+              delivery: d.delivery || prev.delivery,
+              description: d.description || prev.description,
+            };
+          });
+        }
+      });
+      return () => unsub();
+    } catch {
+      return () => {};
+    }
+  }, [selectedProduct?.id]);
 
   const handleSwitchMode = (mode: 'buying' | 'selling') => {
     setAppMode(mode);

@@ -26,7 +26,7 @@
     },
     "products": {
       "title": "Product Catalog",
-      "description": "Store products for all categories and sellers",
+      "description": "Store products for all categories, full multi-image galleries, pricing, sizes, inventory, and logistics pickup details",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -36,12 +36,42 @@
         "mrp": { "type": "number" },
         "discount": { "type": "number" },
         "category": { "type": "string" },
-        "images": { "type": "array" },
+        "images": { "type": "array", "description": "Array of 4-5 permanent public URLs for multi-photo gallery" },
+        "image": { "type": "string" },
+        "imageUrl": { "type": "string" },
         "rating": { "type": "number" },
         "ratingCount": { "type": "number" },
         "brand": { "type": "string" },
         "inStock": { "type": "boolean" },
-        "delivery": { "type": "string" }
+        "stock": { "type": "number", "description": "Total available inventory count" },
+        "inventoryCount": { "type": "number" },
+        "sizes": { "type": "array", "description": "Available product sizes (e.g. XS, S, M, L, XL, XXL, 3XL, Free Size)" },
+        "colors": { "type": "array" },
+        "delivery": { "type": "string" },
+        "pickupLocation": { "type": "string" },
+        "pickupAddress": {
+          "type": "object",
+          "description": "Fulfillment hub and pickup address tied to product",
+          "properties": {
+            "businessName": { "type": "string" },
+            "street": { "type": "string" },
+            "city": { "type": "string" },
+            "state": { "type": "string" },
+            "pincode": { "type": "string" },
+            "phone": { "type": "string" },
+            "sellerGstin": { "type": "string" },
+            "logisticsPartner": { "type": "string" },
+            "dispatchTimeDays": { "type": "number" }
+          }
+        },
+        "sellerId": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "sellerPhone": { "type": "string" },
+        "tags": { "type": "array" },
+        "keywords": { "type": "array" },
+        "permanenceLocked": { "type": "boolean", "description": "Flag ensuring lifetime data permanence and zero deletion" },
+        "updatedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
       },
       "required": ["id", "title", "price", "category"]
     },
@@ -77,6 +107,36 @@
         "isActive": { "type": "boolean" }
       },
       "required": ["id", "imageUrl"]
+    },
+    "product_reviews": {
+      "title": "Customer Reviews & Photo Ratings",
+      "description": "Verified buyer reviews, ratings, and customer-uploaded apparel photos",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "rating": { "type": "number" },
+        "title": { "type": "string" },
+        "comment": { "type": "string" },
+        "photos": { "type": "array" },
+        "verifiedPurchase": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "productId", "rating", "userName"]
+    },
+    "fcm_tokens": {
+      "title": "Push Notification Tokens",
+      "description": "Device tokens for Firebase Cloud Messaging marketing alerts and flash sales",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "platform": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["token"]
     },
     "sellers": {
       "title": "Sellers and Suppliers",
@@ -170,6 +230,28 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "videoUrl", "caption"]
+    },
+    "payments_ledger": {
+      "title": "Payment & Order Ledger",
+      "description": "Incoming transactions for Direct UPI, Card, and Bank payments with customer info, UTR, amount, and screenshots",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "paymentId": { "type": "string" },
+        "utrNumber": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "paymentMode": { "type": "string" },
+        "status": { "type": "string" },
+        "screenshotUrl": { "type": "string" },
+        "verifiedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "amount", "status"]
     }
   },
   "firestore": {
@@ -208,6 +290,10 @@
     "/notifications/{notificationId}": {
       "schema": "notifications",
       "description": "App-wide new catalog & product broadcast alerts"
+    },
+    "/payments_ledger/{transactionId}": {
+      "schema": "payments_ledger",
+      "description": "Real-time payment transactions ledger for merchant audit"
     }
   }
 }

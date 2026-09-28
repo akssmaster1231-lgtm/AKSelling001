@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, ShieldAlert, Mail, ArrowRight, X, UserCheck } from 'lucide-react';
+import { ShieldAlert, Mail, ArrowRight, X, UserCheck } from 'lucide-react';
 import { WHITELISTED_SELLER_EMAIL, OFFICIAL_SUPPORT_EMAIL } from '@/utils/sellerWhitelist';
 
 interface SellerLockedModalProps {

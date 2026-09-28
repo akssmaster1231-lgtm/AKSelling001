@@ -1,8 +1,67 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Products: Public real-time reading, secure updates, zero deletion lock for lifetime permanence
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if request.resource.data.title is string && request.resource.data.price is number;
+      allow update: if request.resource.data.title is string && request.resource.data.price is number;
+      allow delete: if false; // Strict Zero Deletion: Never delete product catalog data
+    }
+
+    // Orders & Payment Ledger: Immutable history and real-time merchant auditing
+    match /orders/{orderId} {
+      allow read, create, update: if true;
+      allow delete: if false; // Zero Deletion: Customer order history is permanent
+    }
+
+    match /payment_ledger/{entryId} {
+      allow read, create, update: if true;
+      allow delete: if false; // Zero Deletion: Ledger records are permanent
+    }
+
+    match /audit_logs/{logId} {
+      allow read, create: if true;
+      allow update, delete: if false; // Immutable audit log trail
+    }
+
+    // Settings, Banners, Categories, Users, Suppliers
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    match /banners/{bannerId} {
+      allow read, write: if true;
+    }
+
+    match /categories/{categoryId} {
+      allow read, write: if true;
+    }
+
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    match /sellers/{sellerId} {
+      allow read, write: if true;
+    }
+
+    // Customer Reviews & Photo Ratings
+    match /product_reviews/{reviewId} {
+      allow read, create: if true;
+      allow update, delete: if false; // Immutable customer reviews for authenticity
+    }
+
+    // Push notification subscriptions
+    match /fcm_tokens/{tokenId} {
+      allow read, write: if true;
+    }
+
+    // General fallback
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
+

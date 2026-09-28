@@ -24,6 +24,10 @@ import {
   QrCode,
   IndianRupee,
   Video,
+  Receipt,
+  MapPin,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
 import { useAuth } from '@/auth-context';
 import { isVerifiedOwnerAdmin, OWNER_ADMIN_EMAIL, ADMIN_MASTER_PASSCODE } from '@/utils/sellerWhitelist';
@@ -33,6 +37,7 @@ import { AdminWithdrawalManager } from '@/components/AdminWithdrawalManager';
 import { AdminDirectUpiSettings } from '@/components/admin/AdminDirectUpiSettings';
 import { AdminPriceListManager } from '@/components/admin/AdminPriceListManager';
 import { AdminVideoReelsManager } from '@/components/admin/AdminVideoReelsManager';
+import { AdminPaymentLedger } from '@/components/admin/AdminPaymentLedger';
 import { getAllCategories, fetchProducts, formatPrice, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 import {
   saveCategoryToFirestore,
@@ -42,6 +47,7 @@ import {
   deleteProductFromFirestore,
   subscribeProducts,
   getCachedProducts,
+  uploadMediaToPermanentStorage,
 } from '@/firebase';
 import type { Category, Product } from '@/types';
 import CategoryIcon, {
@@ -51,7 +57,7 @@ import CategoryIcon, {
 
 interface AdminPanelProps {
   onBack: () => void;
-  initialTab?: 'categories' | 'banners' | 'products' | 'price_list' | 'payouts' | 'direct_upi' | 'videos';
+  initialTab?: 'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos';
 }
 
 const SAMPLE_BANNER_PRESETS = [
@@ -92,7 +98,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'products' | 'price_list' | 'payouts' | 'direct_upi' | 'videos'>(initialTab || 'categories');
+  const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos'>(initialTab || 'categories');
 
   // Categories State & Management
   const [categoriesList, setCategoriesList] = useState<Category[]>(() => getAllCategories());
@@ -143,9 +149,18 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
     image: '',
     images: [] as string[],
     inStock: true,
+    stock: '100',
     delivery: 'Free delivery by tomorrow',
     description: '',
     tags: '',
+    sizes: ['S', 'M', 'L', 'XL'] as string[],
+    customSizeInput: '',
+    pickupBusinessName: 'AK Yadav Print Hub',
+    pickupStreet: 'Plot 14, Phase 2, Industrial Area',
+    pickupCity: 'Gurugram',
+    pickupState: 'Haryana',
+    pickupPincode: '122016',
+    pickupPhone: '7290894907',
   });
   const [imageInputUrl, setImageInputUrl] = useState('');
   const [savingProduct, setSavingProduct] = useState(false);
@@ -514,16 +529,18 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
     if (!files || files.length === 0) return;
     setIsCompressingProduct(true);
     try {
-      const newImgs: string[] = [];
+      const prodId = editingProductId || `prod_${Date.now()}`;
+      const newUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const compressedBase64 = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.82 });
-        if (compressedBase64) {
-          newImgs.push(compressedBase64);
+        // Compresses and uploads to permanent cloud storage bucket (Firebase Storage -> Server Upload -> WebP)
+        const permanentUrl = await uploadMediaToPermanentStorage(file, 'products', `${prodId}_img_${Date.now()}_${i}`);
+        if (permanentUrl) {
+          newUrls.push(permanentUrl);
         }
       }
       setProductForm(prev => {
-        const combined = [...prev.images, ...newImgs];
+        const combined = [...prev.images, ...newUrls];
         return {
           ...prev,
           images: combined,
@@ -536,6 +553,20 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       setIsCompressingProduct(false);
       if (productFileInputRef.current) productFileInputRef.current.value = '';
     }
+  };
+
+  const handleMoveProductImage = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= productForm.images.length) return;
+    setProductForm(prev => {
+      const copy = [...prev.images];
+      const [moved] = copy.splice(fromIdx, 1);
+      copy.splice(toIdx, 0, moved);
+      return {
+        ...prev,
+        images: copy,
+        image: copy[0] || '',
+      };
+    });
   };
 
   const handleAddImageUrl = (urlToAdd?: string) => {
@@ -577,6 +608,36 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
     });
   };
 
+  const handleToggleSize = (sizeToToggle: string) => {
+    setProductForm(prev => {
+      const exists = prev.sizes.includes(sizeToToggle);
+      const nextSizes = exists ? prev.sizes.filter(s => s !== sizeToToggle) : [...prev.sizes, sizeToToggle];
+      return { ...prev, sizes: nextSizes };
+    });
+  };
+
+  const handleAddCustomSize = () => {
+    const custom = productForm.customSizeInput.trim().toUpperCase();
+    if (!custom || productForm.sizes.includes(custom)) return;
+    setProductForm(prev => ({
+      ...prev,
+      sizes: [...prev.sizes, custom],
+      customSizeInput: '',
+    }));
+  };
+
+  const handleFillDefaultLogistics = () => {
+    setProductForm(prev => ({
+      ...prev,
+      pickupBusinessName: 'AK Yadav Print Hub',
+      pickupStreet: 'Plot 14, Phase 2, Industrial Area',
+      pickupCity: 'Gurugram',
+      pickupState: 'Haryana',
+      pickupPincode: '122016',
+      pickupPhone: '7290894907',
+    }));
+  };
+
   const handleOpenAddProduct = () => {
     setEditingProductId(null);
     setProductFormError('');
@@ -591,9 +652,18 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       image: '',
       images: [],
       inStock: true,
+      stock: '100',
       delivery: 'Free delivery by tomorrow',
       description: '',
       tags: '',
+      sizes: ['S', 'M', 'L', 'XL'],
+      customSizeInput: '',
+      pickupBusinessName: 'AK Yadav Print Hub',
+      pickupStreet: 'Plot 14, Phase 2, Industrial Area',
+      pickupCity: 'Gurugram',
+      pickupState: 'Haryana',
+      pickupPincode: '122016',
+      pickupPhone: '7290894907',
     });
     setShowAddProduct(true);
   };
@@ -615,9 +685,18 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       image: allImages[0] || '',
       images: allImages,
       inStock: prod.inStock !== false,
+      stock: String(prod.stock ?? prod.inventoryCount ?? 100),
       delivery: prod.delivery || 'Free delivery by tomorrow',
       description: prod.description || '',
       tags: Array.isArray(prod.tags) ? prod.tags.join(', ') : '',
+      sizes: Array.isArray(prod.sizes) && prod.sizes.length > 0 ? prod.sizes : ['S', 'M', 'L', 'XL'],
+      customSizeInput: '',
+      pickupBusinessName: prod.pickupAddress?.businessName || 'AK Yadav Print Hub',
+      pickupStreet: prod.pickupAddress?.street || 'Plot 14, Phase 2, Industrial Area',
+      pickupCity: prod.pickupAddress?.city || prod.pickupLocation || 'Gurugram',
+      pickupState: prod.pickupAddress?.state || 'Haryana',
+      pickupPincode: prod.pickupAddress?.pincode || '122016',
+      pickupPhone: prod.pickupAddress?.phone || '7290894907',
     });
     setShowAddProduct(true);
   };
@@ -648,6 +727,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         ? productForm.images
         : (productForm.image.trim() ? [productForm.image.trim()] : [DEFAULT_PRODUCT_PLACEHOLDER]);
 
+      const stockNum = Number(productForm.stock) || 100;
       const prodToSave: Product = {
         id: prodId,
         title: productForm.title.trim(),
@@ -662,6 +742,22 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         rating: 4.5,
         ratingCount: 145,
         inStock: productForm.inStock,
+        stock: stockNum,
+        inventoryCount: stockNum,
+        sizes: productForm.sizes.length > 0 ? productForm.sizes : ['S', 'M', 'L', 'XL'],
+        pickupLocation: productForm.pickupCity.trim() || 'Gurugram Hub',
+        pickupAddress: {
+          businessName: productForm.pickupBusinessName.trim() || 'AK Yadav Print Hub',
+          street: productForm.pickupStreet.trim() || 'Plot 14, Phase 2, Industrial Area',
+          city: productForm.pickupCity.trim() || 'Gurugram',
+          state: productForm.pickupState.trim() || 'Haryana',
+          pincode: productForm.pickupPincode.trim() || '122016',
+          phone: productForm.pickupPhone.trim() || '7290894907',
+          sellerGstin: '07AAACK1234F1Z5',
+        },
+        sellerId: 'owner',
+        sellerName: productForm.pickupBusinessName.trim() || 'AK Yadav Print',
+        sellerPhone: productForm.pickupPhone.trim() || '7290894907',
         delivery: productForm.delivery.trim() || 'Free delivery by tomorrow',
         description: productForm.description.trim() || `Verified authentic product from ${productForm.brand.trim() || 'AKSelling'}.`,
         tags: tagsArray,
@@ -669,7 +765,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       };
 
       await saveProductToFirestore(prodToSave);
-      setSavedMsg(editingProductId ? 'Product and all images updated in Firestore!' : 'New product published live in store!');
+      setSavedMsg(editingProductId ? 'Product and all images permanently saved in Firestore!' : 'New product published live in store!');
       setTimeout(() => setSavedMsg(''), 3000);
 
       setShowAddProduct(false);
@@ -683,9 +779,13 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
   };
 
   const handleDeleteProduct = async (productId: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this product from the live catalog?')) {
+      return;
+    }
     try {
       await deleteProductFromFirestore(productId);
-      setSavedMsg('Product removed from catalog!');
+      setProductsList(prev => prev.filter(p => p.id !== productId));
+      setSavedMsg('Product permanently removed from store catalog!');
       setTimeout(() => setSavedMsg(''), 3000);
     } catch (err) {
       console.warn('Failed to delete product notice:', err);
@@ -744,9 +844,16 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white px-3 py-2 flex items-center justify-between text-xs font-bold shadow-2xs">
         <div className="flex items-center gap-1.5 truncate">
           <IndianRupee size={14} className="text-yellow-200 shrink-0" />
-          <span className="truncate">रुपया लगाने की सूची (Price List) या UPI QR:</span>
+          <span className="truncate">रुपया सूची / पेमेंट लेजर (UTR Audit):</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setAdminTab('ledger')}
+            className="bg-stone-950 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-black hover:bg-stone-800 transition-colors cursor-pointer shadow-xs"
+          >
+            पेमेंट लेजर
+          </button>
           <button
             type="button"
             onClick={() => setAdminTab('price_list')}
@@ -757,7 +864,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
           <button
             type="button"
             onClick={() => setAdminTab('direct_upi')}
-            className="bg-stone-950 text-white px-2 py-0.5 rounded-lg text-[10px] font-black hover:bg-stone-800 transition-colors cursor-pointer shadow-xs"
+            className="bg-emerald-950 text-white px-2 py-0.5 rounded-lg text-[10px] font-black hover:bg-emerald-900 transition-colors cursor-pointer shadow-xs"
           >
             UPI QR
           </button>
@@ -803,6 +910,19 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         >
           <Package size={13} />
           <span>Products</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('ledger')}
+          className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
+            adminTab === 'ledger'
+              ? 'bg-amber-500 text-stone-950 shadow-xs ring-2 ring-amber-300'
+              : 'text-amber-900 bg-amber-50 hover:bg-amber-100'
+          }`}
+        >
+          <Receipt size={13} />
+          <span>पेमेंट लेजर</span>
         </button>
 
         <button
@@ -1708,10 +1828,10 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-[11px] font-bold text-gray-700">
-                        Product Images ({productForm.images.length || (productForm.image ? 1 : 0)} Active • Full Multi-Photo Gallery) *
+                        Product Images ({productForm.images.length || (productForm.image ? 1 : 0)} Active • Multi-Image Gallery) *
                       </label>
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        3 to 4 Photos • Auto-Synced to Firestore
+                        4-5 Heavy Photos Supported • Permanent Public Cloud Bucket
                       </span>
                     </div>
 
@@ -1788,14 +1908,36 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                                 )}
 
                                 {/* Hover/Action Buttons */}
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1">
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1">
+                                  <div className="flex items-center gap-1">
+                                    {idx > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveProductImage(idx, idx - 1)}
+                                        className="bg-white/20 hover:bg-white/40 text-white p-1 rounded cursor-pointer"
+                                        title="Move Left"
+                                      >
+                                        <ArrowLeft size={11} />
+                                      </button>
+                                    )}
+                                    {idx < (productForm.images.length - 1) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveProductImage(idx, idx + 1)}
+                                        className="bg-white/20 hover:bg-white/40 text-white p-1 rounded cursor-pointer"
+                                        title="Move Right"
+                                      >
+                                        <ArrowRight size={11} />
+                                      </button>
+                                    )}
+                                  </div>
                                   {idx !== 0 && (
                                     <button
                                       type="button"
                                       onClick={() => handleSetCoverProductImage(idx)}
-                                      className="bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer"
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer"
                                     >
-                                      Set Cover
+                                      ★ Set Cover
                                     </button>
                                   )}
                                   <button
@@ -1815,23 +1957,67 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                     </div>
                   </div>
 
+                  {/* Available Sizes Selection */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Available Sizes & Fits *
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'].map((sz) => {
+                        const isSelected = productForm.sizes.includes(sz);
+                        return (
+                          <button
+                            key={sz}
+                            type="button"
+                            onClick={() => handleToggleSize(sz)}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-600 text-white shadow-2xs'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {sz} {isSelected ? '✓' : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={productForm.customSizeInput}
+                        onChange={e => setProductForm(prev => ({ ...prev, customSizeInput: e.target.value }))}
+                        placeholder="Add custom size (e.g. 32, 34, 36)..."
+                        className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomSize}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
+                      >
+                        + Add Size
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inventory Units & Stock Status */}
                   <div className="grid grid-cols-2 gap-2.5">
                     <div>
                       <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Delivery Tag
+                        Inventory Units in Stock *
                       </label>
                       <input
-                        type="text"
-                        value={productForm.delivery}
-                        onChange={e => setProductForm(prev => ({ ...prev, delivery: e.target.value }))}
-                        placeholder="Free delivery by tomorrow"
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-blue-500"
+                        type="number"
+                        min="0"
+                        value={productForm.stock}
+                        onChange={e => setProductForm(prev => ({ ...prev, stock: e.target.value }))}
+                        placeholder="100"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 font-bold focus:outline-none focus:border-blue-500"
                       />
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Stock Availability
+                        Stock Status
                       </label>
                       <button
                         type="button"
@@ -1843,8 +2029,100 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                         }`}
                       >
                         {productForm.inStock ? <Check size={14} /> : null}
-                        <span>{productForm.inStock ? 'In Stock (Ready)' : 'Out of Stock'}</span>
+                        <span>{productForm.inStock ? 'Active (Ready to Buy)' : 'Out of Stock'}</span>
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Delivery Tag */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Delivery Promise Tag
+                    </label>
+                    <input
+                      type="text"
+                      value={productForm.delivery}
+                      onChange={e => setProductForm(prev => ({ ...prev, delivery: e.target.value }))}
+                      placeholder="Free delivery by tomorrow"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Specific Pickup Address & Logistics */}
+                  <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                        <MapPin size={14} className="text-amber-600" />
+                        <span>Specific Pickup Address & Fulfillment Details</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleFillDefaultLogistics}
+                        className="text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-white px-2 py-0.5 rounded border border-amber-300 cursor-pointer shadow-2xs"
+                      >
+                        Fill Default Hub
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Warehouse / Hub Name</label>
+                        <input
+                          type="text"
+                          value={productForm.pickupBusinessName}
+                          onChange={e => setProductForm(prev => ({ ...prev, pickupBusinessName: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Dispatch Phone</label>
+                        <input
+                          type="text"
+                          value={productForm.pickupPhone}
+                          onChange={e => setProductForm(prev => ({ ...prev, pickupPhone: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Pickup Street Address / Floor</label>
+                      <input
+                        type="text"
+                        value={productForm.pickupStreet}
+                        onChange={e => setProductForm(prev => ({ ...prev, pickupStreet: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 font-medium"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-600 mb-0.5">City</label>
+                        <input
+                          type="text"
+                          value={productForm.pickupCity}
+                          onChange={e => setProductForm(prev => ({ ...prev, pickupCity: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-600 mb-0.5">State</label>
+                        <input
+                          type="text"
+                          value={productForm.pickupState}
+                          onChange={e => setProductForm(prev => ({ ...prev, pickupState: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Pincode</label>
+                        <input
+                          type="text"
+                          value={productForm.pickupPincode}
+                          onChange={e => setProductForm(prev => ({ ...prev, pickupPincode: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 font-mono font-medium"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -2021,6 +2299,11 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         {/* TAB 7: HD VIDEO REELS & AUDIO SHOPPING FEED */}
         {adminTab === 'videos' && (
           <AdminVideoReelsManager />
+        )}
+
+        {/* TAB 8: REAL-TIME PAYMENT & ORDER LEDGER (UTR & RECEIPT AUDIT) */}
+        {adminTab === 'ledger' && (
+          <AdminPaymentLedger />
         )}
       </div>
     </div>

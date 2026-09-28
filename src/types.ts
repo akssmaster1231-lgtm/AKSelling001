@@ -36,6 +36,11 @@ export interface Product {
   weightGsm?: string | number;
   shippingCharge?: number;
   isFreeShipping?: boolean;
+  stock?: number;
+  inventoryCount?: number;
+  sellerId?: string;
+  sellerName?: string;
+  sellerPhone?: string;
   pickupAddress?: {
     businessName?: string;
     street?: string;
@@ -43,6 +48,7 @@ export interface Product {
     state?: string;
     pincode?: string;
     phone?: string;
+    sellerGstin?: string;
   };
   variants?: Array<{
     id?: string;
@@ -57,6 +63,24 @@ export interface Product {
     categoryPages?: boolean;
     bestDeals?: boolean;
   };
+}
+
+export interface PaymentLedgerEntry {
+  id: string;
+  orderId: string;
+  paymentId?: string;
+  utrNumber: string;
+  amount: number;
+  currency?: string;
+  customerName: string;
+  customerPhone: string;
+  paymentMethod: string;
+  paymentMode?: string;
+  status: 'verified' | 'pending' | 'flagged' | 'settled' | string;
+  screenshotUrl?: string;
+  verifiedAt?: string;
+  createdAt: string;
+  notes?: string;
 }
 
 export interface CartItem {

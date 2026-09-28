@@ -25,6 +25,9 @@ import SocialProofBadge from '@/components/flash-drop/SocialProofBadge';
 import GroupBuyTriggerButton from '@/components/group-buy/GroupBuyTriggerButton';
 import GroupBuyModal from '@/components/group-buy/GroupBuyModal';
 import CompleteTheLook from '@/components/combo-bundle/CompleteTheLook';
+import PincodeServiceabilityWidget from '@/components/logistics/PincodeServiceabilityWidget';
+import TrustBadges from '@/components/trust/TrustBadges';
+import ProductReviewsSection from '@/components/reviews/ProductReviewsSection';
 
 interface ProductDetailProps {
   product: Product;
@@ -218,6 +221,12 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
           <span className="text-base font-bold text-success-500">{product.discount}% off</span>
         </div>
         <p className="text-sm text-gray-500 mt-1">{product.delivery}</p>
+
+        {/* Automated Shiprocket & NimbusPost Pincode Serviceability */}
+        <PincodeServiceabilityWidget
+          defaultPincode="110001"
+          pickupPincode={product.pickupAddress?.pincode || '122016'}
+        />
 
         {/* Live Social Proof Badge & Urgency Stock Bar */}
         <SocialProofBadge productId={product.id} className="mt-3" />
@@ -468,6 +477,17 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
           <SpecRow label="Delivery" value={product.delivery} />
         </div>
       </div>
+
+      {/* Prominent Trust Badges & Secure Policies */}
+      <TrustBadges variant="full" className="mt-2" />
+
+      {/* Verified Customer Reviews & Photo Rating Engine */}
+      <ProductReviewsSection
+        productId={product.id}
+        productTitle={product.title}
+        defaultRating={dynamicRating.rating > 0 ? dynamicRating.rating : 4.8}
+        defaultRatingCount={dynamicRating.ratingCount > 0 ? dynamicRating.ratingCount : 142}
+      />
 
       {/* Bottom Action Buttons */}
       <div className="sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-3 flex items-center gap-2.5 shadow-[0_-3px_12px_rgba(15,23,42,0.08)]">

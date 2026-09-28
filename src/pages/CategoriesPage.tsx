@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { getAllCategories, products as fallbackProducts, fetchProductsByCategory, deduplicateProducts, categories as defaultCategories } from '@/data';
-import { subscribeCategories } from '@/firebase';
+import { subscribeCategories, subscribeProducts } from '@/firebase';
 import type { Product, Category } from '@/types';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 import CategoryIcon from '@/components/CategoryIcon';
@@ -52,6 +52,14 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
 
     loadCategoryProducts();
 
+    // 100% Real-time Firestore subscription for selected category
+    const unsub = subscribeProducts((remoteProds) => {
+      if (!cancelled) {
+        setDbProducts(remoteProds);
+        setLoading(false);
+      }
+    }, selectedCategory);
+
     const handleUpdate = () => {
       loadCategoryProducts();
     };
@@ -59,6 +67,7 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
     window.addEventListener('akselling_products_updated', handleUpdate);
     return () => {
       cancelled = true;
+      unsub();
       window.removeEventListener('akselling_products_updated', handleUpdate);
     };
   }, [selectedCategory]);

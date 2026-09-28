@@ -23,7 +23,7 @@ import {
 import { formatPrice } from '@/data';
 import DirectUpiPaymentModal, { DirectUpiPaymentResult } from '@/components/payment/DirectUpiPaymentModal';
 import { getOwnerPaymentSettings } from '@/config/ownerPaymentConfig';
-import { saveOrderToFirestore, deductProductInventory, type FirestoreOrder } from '@/firebase';
+import { saveOrderToFirestore, deductProductInventory, savePaymentTransactionToFirestore, type FirestoreOrder } from '@/firebase';
 import { INDIAN_STATES_AND_UTS } from '@/shiprocket-api';
 import { useI18n } from '@/i18n';
 import { useAuth } from '@/auth-context';
@@ -33,6 +33,7 @@ import { awardOrderCashback, deductWalletBalanceForOrder, getLocalWalletCache } 
 import { grantBonusSpin } from '@/utils/gamificationService';
 import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
 import { ScratchCardModal } from '@/components/ScratchCardModal';
+import TrustBadges from '@/components/trust/TrustBadges';
 import type { Product } from '@/types';
 
 interface BuyNowCheckoutProps {
@@ -228,6 +229,22 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         const errJson = await verifyResp.json().catch(() => ({}));
         throw new Error(errJson.error || 'Server could not record UPI transaction reference.');
       }
+
+      // Record in Firebase Payment Ledger in real-time
+      savePaymentTransactionToFirestore({
+        id: `tx_${Date.now()}_${result.utrNumber.slice(-4)}`,
+        orderId: pendingOrderId,
+        utrNumber: result.utrNumber,
+        amount: result.amountPaid,
+        currency: 'INR',
+        customerName: form.name,
+        customerPhone: form.phone,
+        paymentMethod: result.paymentMode === 'card' ? 'Debit/Credit Card' : 'Direct UPI',
+        paymentMode: result.paymentMode,
+        status: 'verified',
+        screenshotUrl: result.screenshotUrl,
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
 
       // 2. Deduct wallet balance if redeemed
       if (walletDiscount > 0 && user?.id) {
@@ -1055,21 +1072,8 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               </div>
             </div>
 
-            {/* Trust badges */}
-            <div className="flex items-center justify-around bg-white rounded-xl shadow-card p-3 mb-3">
-              <div className="flex flex-col items-center gap-1">
-                <Shield size={18} className="text-success-500" />
-                <span className="text-[10px] text-gray-500">0% Commission Direct Pay</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <Truck size={18} className="text-flipkart-500" />
-                <span className="text-[10px] text-gray-500">{t('fastDelivery')}</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <CheckCircle2 size={18} className="text-accent-500" />
-                <span className="text-[10px] text-gray-500">{t('easyReturns')}</span>
-              </div>
-            </div>
+            {/* Prominent Trust Badges */}
+            <TrustBadges variant="checkout" className="mb-3" />
 
             {error && <p className="text-sm text-error-500 bg-error-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
           </>
