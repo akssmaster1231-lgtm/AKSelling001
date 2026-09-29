@@ -60,8 +60,19 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
       }
     }, selectedCategory);
 
-    const handleUpdate = () => {
-      loadCategoryProducts();
+    const handleUpdate = (e: Event) => {
+      if (cancelled) return;
+      const custom = e as CustomEvent<{ products?: Product[] }>;
+      if (custom.detail?.products && custom.detail.products.length > 0) {
+        const catProds = custom.detail.products.filter(p => {
+          const pCat = (p.category || '').toLowerCase();
+          const sCat = selectedCategory.toLowerCase();
+          return sCat === 'all' || pCat === sCat || (sCat === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion')) || (sCat === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing'));
+        });
+        setDbProducts(catProds);
+      } else {
+        loadCategoryProducts();
+      }
     };
 
     window.addEventListener('akselling_products_updated', handleUpdate);

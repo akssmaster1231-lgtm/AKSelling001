@@ -10,71 +10,74 @@ export interface PincodeInfo {
   state: string;
   country: string;
   isDeliverable: boolean;
+  area?: string;
+  colony?: string;
+  areas?: string[];
 }
 
 // Prefix mappings for instant 0ms offline fallback for major Indian logistics hubs
-const REGION_PREFIX_MAP: Record<string, { city: string; state: string }> = {
+const REGION_PREFIX_MAP: Record<string, { city: string; state: string; area: string }> = {
   // Delhi NCR
-  '1100': { city: 'New Delhi', state: 'Delhi' },
-  '1210': { city: 'Faridabad', state: 'Haryana' },
-  '1220': { city: 'Gurugram', state: 'Haryana' },
-  '2013': { city: 'Noida', state: 'Uttar Pradesh' },
-  '2010': { city: 'Ghaziabad', state: 'Uttar Pradesh' },
+  '1100': { city: 'New Delhi', state: 'Delhi', area: 'Connaught Place / Central Area' },
+  '1210': { city: 'Faridabad', state: 'Haryana', area: 'Sector 15 / Industrial Area' },
+  '1220': { city: 'Gurugram', state: 'Haryana', area: 'DLF Phase 2 / Udyog Vihar' },
+  '2013': { city: 'Noida', state: 'Uttar Pradesh', area: 'Sector 62 / Electronic City' },
+  '2010': { city: 'Ghaziabad', state: 'Uttar Pradesh', area: 'Raj Nagar / Kavi Nagar' },
   // Maharashtra
-  '4000': { city: 'Mumbai', state: 'Maharashtra' },
-  '4006': { city: 'Thane', state: 'Maharashtra' },
-  '4007': { city: 'Navi Mumbai', state: 'Maharashtra' },
-  '4110': { city: 'Pune', state: 'Maharashtra' },
-  '4400': { city: 'Nagpur', state: 'Maharashtra' },
+  '4000': { city: 'Mumbai', state: 'Maharashtra', area: 'Fort / Colaba / Marine Lines' },
+  '4006': { city: 'Thane', state: 'Maharashtra', area: 'Panchpakhadi / Naupada' },
+  '4007': { city: 'Navi Mumbai', state: 'Maharashtra', area: 'Vashi / Nerul Sector' },
+  '4110': { city: 'Pune', state: 'Maharashtra', area: 'Shivajinagar / Kothrud' },
+  '4400': { city: 'Nagpur', state: 'Maharashtra', area: 'Sitabuldi / Dharampeth' },
   // Karnataka
-  '5600': { city: 'Bengaluru', state: 'Karnataka' },
-  '5601': { city: 'Bengaluru', state: 'Karnataka' },
-  '5700': { city: 'Mysuru', state: 'Karnataka' },
+  '5600': { city: 'Bengaluru', state: 'Karnataka', area: 'Koramangala / MG Road' },
+  '5601': { city: 'Bengaluru', state: 'Karnataka', area: 'Electronic City / HSR Layout' },
+  '5700': { city: 'Mysuru', state: 'Karnataka', area: 'Gokulam / Saraswathipuram' },
   // Tamil Nadu
-  '6000': { city: 'Chennai', state: 'Tamil Nadu' },
-  '6410': { city: 'Coimbatore', state: 'Tamil Nadu' },
-  '6250': { city: 'Madurai', state: 'Tamil Nadu' },
+  '6000': { city: 'Chennai', state: 'Tamil Nadu', area: 'T. Nagar / Anna Nagar' },
+  '6410': { city: 'Coimbatore', state: 'Tamil Nadu', area: 'Gandhipuram / RS Puram' },
+  '6250': { city: 'Madurai', state: 'Tamil Nadu', area: 'Simmakkal / KK Nagar' },
   // Telangana & Andhra Pradesh
-  '5000': { city: 'Hyderabad', state: 'Telangana' },
-  '5300': { city: 'Visakhapatnam', state: 'Andhra Pradesh' },
-  '5200': { city: 'Vijayawada', state: 'Andhra Pradesh' },
+  '5000': { city: 'Hyderabad', state: 'Telangana', area: 'Banjara Hills / Hitec City' },
+  '5300': { city: 'Visakhapatnam', state: 'Andhra Pradesh', area: 'Dwaraka Nagar / Beach Road' },
+  '5200': { city: 'Vijayawada', state: 'Andhra Pradesh', area: 'Benz Circle / Governorpet' },
   // West Bengal
-  '7000': { city: 'Kolkata', state: 'West Bengal' },
-  '7111': { city: 'Howrah', state: 'West Bengal' },
-  '7340': { city: 'Siliguri', state: 'West Bengal' },
+  '7000': { city: 'Kolkata', state: 'West Bengal', area: 'Park Street / Salt Lake' },
+  '7111': { city: 'Howrah', state: 'West Bengal', area: 'Shibpur / Salkia' },
+  '7340': { city: 'Siliguri', state: 'West Bengal', area: 'Pradhan Nagar / Hakim Para' },
   // Gujarat
-  '3800': { city: 'Ahmedabad', state: 'Gujarat' },
-  '3950': { city: 'Surat', state: 'Gujarat' },
-  '3900': { city: 'Vadodara', state: 'Gujarat' },
-  '3600': { city: 'Rajkot', state: 'Gujarat' },
+  '3800': { city: 'Ahmedabad', state: 'Gujarat', area: 'Navrangpura / Satellite' },
+  '3950': { city: 'Surat', state: 'Gujarat', area: 'Ring Road / Varachha' },
+  '3900': { city: 'Vadodara', state: 'Gujarat', area: 'Alkapuri / Sayajigunj' },
+  '3600': { city: 'Rajkot', state: 'Gujarat', area: 'Yagnik Road / Kalawad' },
   // Rajasthan
-  '3020': { city: 'Jaipur', state: 'Rajasthan' },
-  '3420': { city: 'Jodhpur', state: 'Rajasthan' },
-  '3130': { city: 'Udaipur', state: 'Rajasthan' },
+  '3020': { city: 'Jaipur', state: 'Rajasthan', area: 'C-Scheme / Malviya Nagar' },
+  '3420': { city: 'Jodhpur', state: 'Rajasthan', area: 'Shastri Nagar / Sardarpura' },
+  '3130': { city: 'Udaipur', state: 'Rajasthan', area: 'Panchwati / Hiran Magri' },
   // Uttar Pradesh
-  '2260': { city: 'Lucknow', state: 'Uttar Pradesh' },
-  '2080': { city: 'Kanpur', state: 'Uttar Pradesh' },
-  '2210': { city: 'Varanasi', state: 'Uttar Pradesh' },
-  '2820': { city: 'Agra', state: 'Uttar Pradesh' },
-  '2500': { city: 'Meerut', state: 'Uttar Pradesh' },
+  '2260': { city: 'Lucknow', state: 'Uttar Pradesh', area: 'Hazratganj / Gomti Nagar' },
+  '2080': { city: 'Kanpur', state: 'Uttar Pradesh', area: 'Civil Lines / Kakadeo' },
+  '2210': { city: 'Varanasi', state: 'Uttar Pradesh', area: 'Cantt / Sigra' },
+  '2820': { city: 'Agra', state: 'Uttar Pradesh', area: 'Sanjay Place / Tajganj' },
+  '2500': { city: 'Meerut', state: 'Uttar Pradesh', area: 'Shastri Nagar / Begum Bridge' },
   // Bihar & Jharkhand
-  '8000': { city: 'Patna', state: 'Bihar' },
-  '8340': { city: 'Ranchi', state: 'Jharkhand' },
-  '8310': { city: 'Jamshedpur', state: 'Jharkhand' },
+  '8000': { city: 'Patna', state: 'Bihar', area: 'Boring Road / Kankarbagh' },
+  '8340': { city: 'Ranchi', state: 'Jharkhand', area: 'Doranda / Main Road' },
+  '8310': { city: 'Jamshedpur', state: 'Jharkhand', area: 'Bistupur / Sakchi' },
   // Madhya Pradesh
-  '4520': { city: 'Indore', state: 'Madhya Pradesh' },
-  '4620': { city: 'Bhopal', state: 'Madhya Pradesh' },
-  '4820': { city: 'Jabalpur', state: 'Madhya Pradesh' },
+  '4520': { city: 'Indore', state: 'Madhya Pradesh', area: 'Amrakunj Colony / Vijay Nagar' },
+  '4620': { city: 'Bhopal', state: 'Madhya Pradesh', area: 'MP Nagar / Arera Colony' },
+  '4820': { city: 'Jabalpur', state: 'Madhya Pradesh', area: 'Civil Lines / Wright Town' },
   // Punjab & Chandigarh
-  '1600': { city: 'Chandigarh', state: 'Chandigarh' },
-  '1410': { city: 'Ludhiana', state: 'Punjab' },
-  '1430': { city: 'Amritsar', state: 'Punjab' },
+  '1600': { city: 'Chandigarh', state: 'Chandigarh', area: 'Sector 17 / Sector 35' },
+  '1410': { city: 'Ludhiana', state: 'Punjab', area: 'Model Town / Sarabha Nagar' },
+  '1430': { city: 'Amritsar', state: 'Punjab', area: 'Mall Road / Ranjit Avenue' },
   // Kerala
-  '6820': { city: 'Kochi', state: 'Kerala' },
-  '6950': { city: 'Thiruvananthapuram', state: 'Kerala' },
+  '6820': { city: 'Kochi', state: 'Kerala', area: 'MG Road / Marine Drive' },
+  '6950': { city: 'Thiruvananthapuram', state: 'Kerala', area: 'Palayam / Kowdiar' },
   // Odisha
-  '7510': { city: 'Bhubaneswar', state: 'Odisha' },
-  '7530': { city: 'Cuttack', state: 'Odisha' },
+  '7510': { city: 'Bhubaneswar', state: 'Odisha', area: 'Saheed Nagar / Jayadev Vihar' },
+  '7530': { city: 'Cuttack', state: 'Odisha', area: 'Badambadi / Buxi Bazar' },
 };
 
 // State code zone map fallback based on first 2 digits
@@ -178,6 +181,10 @@ export async function lookupPincode(pincode: string): Promise<PincodeInfo | null
       const data = await res.json();
       if (Array.isArray(data) && data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
         const po = data[0].PostOffice[0];
+        const allAreas = data[0].PostOffice
+          .map((p: Record<string, string>) => p.Name)
+          .filter(Boolean);
+        const areaName = po.Name || po.Block || po.Circle || '';
         const info: PincodeInfo = {
           pincode: clean,
           city: po.District || po.Block || po.Circle || 'City',
@@ -185,6 +192,9 @@ export async function lookupPincode(pincode: string): Promise<PincodeInfo | null
           state: po.State || '',
           country: po.Country || 'India',
           isDeliverable: true,
+          area: areaName,
+          colony: areaName,
+          areas: allAreas,
         };
         cache.set(clean, info);
         return info;
@@ -205,6 +215,9 @@ export async function lookupPincode(pincode: string): Promise<PincodeInfo | null
       state: r.state,
       country: 'India',
       isDeliverable: true,
+      area: r.area,
+      colony: r.area,
+      areas: [r.area],
     };
     cache.set(clean, info);
     return info;

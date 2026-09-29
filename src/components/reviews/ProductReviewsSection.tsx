@@ -29,7 +29,7 @@ export default function ProductReviewsSection({
 }: ProductReviewsSectionProps) {
   const { user } = useAuth();
   const [reviews, setReviews] = useState<ProductReview[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'all' | 'with_photos'>('all');
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 

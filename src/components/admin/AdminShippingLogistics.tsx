@@ -4,18 +4,15 @@ import {
   Package,
   Search,
   CheckCircle2,
-  Clock,
   ExternalLink,
   Copy,
   Check,
-  RefreshCw,
   Send,
   Loader2,
   MapPin,
-  AlertCircle,
 } from 'lucide-react';
-import { db, saveOrderToFirestore, type FirestoreOrder } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
+import { db, type FirestoreOrder } from '@/firebase';
+import { collection, onSnapshot, query, limit, doc, updateDoc } from 'firebase/firestore';
 import { formatPrice } from '@/data';
 
 export default function AdminShippingLogistics() {

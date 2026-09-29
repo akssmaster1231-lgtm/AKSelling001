@@ -252,6 +252,31 @@ async function startServer() {
       if (!product || !product.id) {
         return res.status(400).json({ error: 'Missing product payload or id' });
       }
+
+      // Safeguard: Convert any raw base64 images into permanent disk files in UPLOADS_DIR
+      if (Array.isArray(product.images)) {
+        product.images = product.images.map((img, idx) => {
+          if (typeof img === 'string' && img.startsWith('data:image/')) {
+            try {
+              const match = img.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+              if (match) {
+                const ext = match[1] === 'jpeg' ? 'jpg' : (match[1].includes('webp') ? 'webp' : match[1]);
+                const cleanId = String(product.id).replace(/[^a-zA-Z0-9_-]/g, '');
+                const uniqueName = `prod_${cleanId}_${Date.now()}_${idx}.${ext}`;
+                const filePath = path.join(UPLOADS_DIR, uniqueName);
+                fs.writeFileSync(filePath, Buffer.from(match[2], 'base64'));
+                return `/uploads/${uniqueName}`;
+              }
+            } catch (err) {
+              console.warn('[Products] Base64 image extraction notice:', err);
+            }
+          }
+          return img;
+        });
+        product.image = product.images[0];
+        product.imageUrl = product.images[0];
+      }
+
       const products = readDataFile<StoredProduct[]>(PRODUCTS_FILE, []);
       const existingIdx = products.findIndex(p => p.id === product.id);
       if (existingIdx >= 0) {

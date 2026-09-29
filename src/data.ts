@@ -1,7 +1,7 @@
 import type { Product, Category, Banner } from './types';
 import { safeLocalStorageGetItem } from './utils/storageHelper';
 import { db, getCachedProducts, setCachedProducts, getCachedCategories, getDeletedCategoryIds } from './firebase';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { deduplicateProducts, getProductDesignKey, DisplayDeduplicator } from './utils/productDeduplication';
 import {
   resolveProductImages,
@@ -173,55 +173,23 @@ export async function fetchProductById(productId: string): Promise<Product | nul
 }
 
 export async function fetchProductsByCategory(category: string): Promise<Product[]> {
-  const localSellerProducts = getLocalSellerProducts().filter(p => p.category === category);
-  const localIds = new Set(localSellerProducts.map(p => p.id));
+  const allProds = await fetchProducts();
+  const catLower = (category || '').toLowerCase();
 
-  try {
-    const productsRef = collection(db, 'products');
-    const q = query(productsRef, where('category', '==', category));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const dbItems: Product[] = [];
-      snap.forEach(docSnap => {
-        const d = docSnap.data();
-        if (!localIds.has(docSnap.id)) {
-          const resolvedImgs = resolveProductImages({ id: docSnap.id, ...d });
-          dbItems.push({
-            id: docSnap.id,
-            title: d.title || '',
-            description: d.description || '',
-            price: Number(d.price) || 0,
-            mrp: Number(d.mrp) || Number(d.price) || 0,
-            discount: Number(d.discount) || 0,
-            category: d.category || 'fashion',
-            images: resolvedImgs,
-            imageUrl: resolvedImgs[0],
-            image: resolvedImgs[0],
-            rating: typeof d.rating === 'number' ? d.rating : 4.2,
-            ratingCount: Number(d.ratingCount || d.rating_count || 120),
-            brand: d.brand || 'AKSelling',
-            inStock: d.inStock !== false && d.in_stock !== false,
-            delivery: d.delivery || 'Free delivery by tomorrow',
-            sizes: d.sizes,
-            colors: d.colors,
-            neckType: d.neckType,
-            sleeveType: d.sleeveType,
-            fitType: d.fitType,
-            fabric: d.fabric,
-            tags: Array.isArray(d.tags) ? d.tags : [],
-            keywords: Array.isArray(d.keywords) ? d.keywords : [],
-            pickupLocation: d.pickupLocation,
-            weight: d.weight,
-            dimensions: d.dimensions,
-          });
-        }
-      });
-      return deduplicateProducts([...localSellerProducts, ...dbItems]);
-    }
-    return deduplicateProducts([...localSellerProducts]);
-  } catch {
-    return deduplicateProducts([...localSellerProducts]);
+  if (!catLower || catLower === 'all') {
+    return allProds;
   }
+
+  const matched = allProds.filter(p => {
+    const pCat = (p.category || '').toLowerCase();
+    return (
+      pCat === catLower ||
+      (catLower === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing')) ||
+      (catLower === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion'))
+    );
+  });
+
+  return matched;
 }
 
 function getLocalSellerProducts(): Product[] {
@@ -301,11 +269,12 @@ export const REMOVED_NON_FASHION_IDS = new Set([
 ]);
 
 export const categories: Category[] = [
-  { id: 'apparel-manufacturing', name: 'Apparel & Garments', icon: 'Shirt', color: '#1b365d' },
-  { id: 'fabrics-textiles', name: 'Fabrics & Textiles', icon: 'Scissors', color: '#d97706' },
+  { id: 'fashion', name: 'Fashion & Apparel', icon: 'Shirt', color: '#1b365d' },
+  { id: 'apparel-manufacturing', name: 'Apparel & Garments', icon: 'Shirt', color: '#2563eb' },
   { id: 'custom-prints', name: 'Custom Prints & Graphics', icon: 'Palette', color: '#7c3aed' },
-  { id: 'bulk-wholesale', name: 'Bulk Wholesale & Lots', icon: 'Package', color: '#059669' },
   { id: 'hoodies-sweats', name: 'Hoodies & Winterwear', icon: 'Flame', color: '#dc2626' },
+  { id: 'fabrics-textiles', name: 'Fabrics & Textiles', icon: 'Scissors', color: '#d97706' },
+  { id: 'bulk-wholesale', name: 'Bulk Wholesale & Lots', icon: 'Package', color: '#059669' },
   { id: 'ethnic-wear', name: 'Ethnic & Festive Wear', icon: 'Heart', color: '#e11d48' },
   { id: 'footwear', name: 'Footwear & Shoes', icon: 'Footprints', color: '#0284c7' },
   { id: 'accessories', name: 'Fashion Accessories', icon: 'ShoppingBag', color: '#d97706' },

@@ -54,6 +54,7 @@ import CategoryIcon, {
   POPULAR_CATEGORY_ICONS,
   CATEGORY_PRESET_COLORS,
 } from '@/components/CategoryIcon';
+import { lookupPincode } from '@/utils/pincode';
 
 interface AdminPanelProps {
   onBack: () => void;
@@ -636,6 +637,25 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       pickupPincode: '122016',
       pickupPhone: '7290894907',
     }));
+  };
+
+  const handlePickupPincodeChange = async (val: string) => {
+    const pin = val.replace(/\D/g, '').slice(0, 6);
+    setProductForm(prev => ({ ...prev, pickupPincode: pin }));
+    if (pin.length === 6) {
+      try {
+        const info = await lookupPincode(pin);
+        if (info && info.city && info.state) {
+          setProductForm(prev => ({
+            ...prev,
+            pickupCity: info.city,
+            pickupState: info.state,
+          }));
+        }
+      } catch {
+        // silent
+      }
+    }
   };
 
   const handleOpenAddProduct = () => {

@@ -19,7 +19,7 @@ export default function BestDealsPage({ onProductClick, onNavigateHome }: BestDe
   const [activeFilter, setActiveFilter] = useState<DiscountFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('discount-desc');
 
-  // Real-time synchronization
+  // Real-time synchronization (Fixed: mounted once with stable subscription)
   useEffect(() => {
     let isMounted = true;
     if (dbProducts.length === 0) {
@@ -27,21 +27,28 @@ export default function BestDealsPage({ onProductClick, onNavigateHome }: BestDe
     }
 
     fetchProducts().then(prods => {
-      if (isMounted) {
+      if (isMounted && prods && prods.length > 0) {
         setDbProducts(prods);
         setLoading(false);
       }
     });
 
     const unsub = subscribeProducts((remoteProds) => {
-      if (isMounted) {
+      if (isMounted && remoteProds && remoteProds.length > 0) {
         setDbProducts(remoteProds);
         setLoading(false);
       }
     });
 
-    const handleUpdate = () => {
-      fetchProducts().then(p => isMounted && setDbProducts(p));
+    const handleUpdate = (e: Event) => {
+      if (!isMounted) return;
+      const custom = e as CustomEvent<{ products?: Product[] }>;
+      if (custom.detail?.products && custom.detail.products.length > 0) {
+        setDbProducts(custom.detail.products);
+      } else {
+        const cached = getCachedProducts();
+        if (cached.length > 0) setDbProducts(cached);
+      }
     };
 
     window.addEventListener('akselling_products_updated', handleUpdate);
@@ -51,11 +58,11 @@ export default function BestDealsPage({ onProductClick, onNavigateHome }: BestDe
       unsub();
       window.removeEventListener('akselling_products_updated', handleUpdate);
     };
-  }, [dbProducts.length]);
+  }, []);
 
   const allProducts = useMemo(() => {
-    const raw = dbProducts.length > 0 ? dbProducts : fallbackProducts;
-    return deduplicateProducts(raw);
+    const raw = dbProducts.length > 0 ? dbProducts : getCachedProducts();
+    return deduplicateProducts(raw.length > 0 ? raw : fallbackProducts);
   }, [dbProducts]);
 
   // Filter deals
@@ -80,23 +87,39 @@ export default function BestDealsPage({ onProductClick, onNavigateHome }: BestDe
           return rating >= 4.0;
         case 'all':
         default:
-          return discount > 0 || price < 1000;
+          return true; // Show all products under 'all'
       }
     });
   }, [allProducts, activeFilter]);
 
-  // Sort deals
+  // Stable Sort deals without jumpy renders
   const sortedProducts = useMemo(() => {
     const list = [...filteredProducts];
     switch (sortBy) {
       case 'discount-desc':
-        return list.sort((a, b) => (Number(b.discount) || 0) - (Number(a.discount) || 0));
+        return list.sort((a, b) => {
+          const diff = (Number(b.discount) || 0) - (Number(a.discount) || 0);
+          if (diff !== 0) return diff;
+          return (a.id || '').localeCompare(b.id || '');
+        });
       case 'price-asc':
-        return list.sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+        return list.sort((a, b) => {
+          const diff = (Number(a.price) || 0) - (Number(b.price) || 0);
+          if (diff !== 0) return diff;
+          return (a.id || '').localeCompare(b.id || '');
+        });
       case 'price-desc':
-        return list.sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
+        return list.sort((a, b) => {
+          const diff = (Number(b.price) || 0) - (Number(a.price) || 0);
+          if (diff !== 0) return diff;
+          return (a.id || '').localeCompare(b.id || '');
+        });
       case 'rating-desc':
-        return list.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
+        return list.sort((a, b) => {
+          const diff = (Number(b.rating) || 0) - (Number(a.rating) || 0);
+          if (diff !== 0) return diff;
+          return (a.id || '').localeCompare(b.id || '');
+        });
       default:
         return list;
     }

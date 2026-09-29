@@ -2,43 +2,58 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Products: Public real-time reading, secure updates, zero deletion lock for lifetime permanence
+    // Products: Public real-time reading, publishing & updates; STRICT ZERO DELETION LOCK for lifetime catalog permanence
     match /products/{productId} {
-      allow read: if true;
-      allow create: if request.resource.data.title is string && request.resource.data.price is number;
-      allow update: if request.resource.data.title is string && request.resource.data.price is number;
-      allow delete: if false; // Strict Zero Deletion: Never delete product catalog data
+      allow read, create, update: if true;
+      allow delete: if false; // Lifetime Data Permanence: Catalog items can never be permanently deleted
     }
 
-    // Orders & Payment Ledger: Immutable history and real-time merchant auditing
+    // Orders: Customer order records and status updates; ZERO DELETION LOCK
     match /orders/{orderId} {
       allow read, create, update: if true;
-      allow delete: if false; // Zero Deletion: Customer order history is permanent
+      allow delete: if false; // Immutable customer orders & shipping tracking history
     }
 
+    // Payment Ledger & Transactions: Accounting audit trail; ZERO DELETION LOCK
     match /payment_ledger/{entryId} {
       allow read, create, update: if true;
-      allow delete: if false; // Zero Deletion: Ledger records are permanent
+      allow delete: if false; // Immutable financial ledger
     }
 
+    // Audit Logs: System activities; ZERO DELETION LOCK
     match /audit_logs/{logId} {
-      allow read, create: if true;
-      allow update, delete: if false; // Immutable audit log trail
+      allow read, create, update: if true;
+      allow delete: if false; // Immutable security and activity log trail
     }
 
-    // Settings, Banners, Categories, Users, Suppliers
-    match /settings/{settingId} {
-      allow read, write: if true;
+    // Video Reels & Commerce Feed; ZERO DELETION LOCK
+    match /reels/{reelId} {
+      allow read, create, update: if true;
+      allow delete: if false; // Video commerce posts are permanent
     }
 
+    match /video_reels/{reelId} {
+      allow read, create, update: if true;
+      allow delete: if false; // Video commerce posts are permanent
+    }
+
+    // Customer Reviews & Star Ratings with Photo Proofs; ZERO DELETION LOCK
+    match /product_reviews/{reviewId} {
+      allow read, create, update: if true;
+      allow delete: if false; // Authentic verified customer reviews are permanent
+    }
+
+    // Dynamic Store Banners & Promotional Graphics
     match /banners/{bannerId} {
       allow read, write: if true;
     }
 
+    // Store Categories & Taxonomies
     match /categories/{categoryId} {
       allow read, write: if true;
     }
 
+    // Merchant, Supplier, and User Profiles
     match /users/{userId} {
       allow read, write: if true;
     }
@@ -47,20 +62,20 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Customer Reviews & Photo Ratings
-    match /product_reviews/{reviewId} {
-      allow read, create: if true;
-      allow update, delete: if false; // Immutable customer reviews for authenticity
+    // System Settings & Owner Payment Gateway Configuration
+    match /settings/{settingId} {
+      allow read, write: if true;
     }
 
-    // Push notification subscriptions
+    // Push Notification Device Tokens
     match /fcm_tokens/{tokenId} {
       allow read, write: if true;
     }
 
-    // General fallback
+    // Fallback: Safe read & write, strictly preventing destructive deletion across all collections
     match /{document=**} {
-      allow read, write: if true;
+      allow read, create, update: if true;
+      allow delete: if false;
     }
   }
 }

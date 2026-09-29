@@ -9,21 +9,15 @@ interface FlashDropSectionProps {
   onNavigateDeals: () => void;
 }
 
-export default function FlashDropSection({
-  products,
-  onProductClick,
-  onNavigateDeals,
-}: FlashDropSectionProps) {
-  // 1-hour live countdown calculation (synced to current hour)
+function FlashCountdownClock() {
   const calculateTimeRemaining = () => {
     const now = new Date();
     const endOfHour = new Date(now);
     endOfHour.setMinutes(59, 59, 999);
-    const diff = Math.max(0, Math.floor((endOfHour.getTime() - now.getTime()) / 1000));
-    return diff;
+    return Math.max(0, Math.floor((endOfHour.getTime() - now.getTime()) / 1000));
   };
 
-  const [secondsRemaining, setSecondsRemaining] = useState(calculateTimeRemaining());
+  const [secondsRemaining, setSecondsRemaining] = useState(calculateTimeRemaining);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -36,8 +30,25 @@ export default function FlashDropSection({
   const minutes = Math.floor((secondsRemaining % 3600) / 60);
   const seconds = secondsRemaining % 60;
 
+  return (
+    <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-xl border border-red-500/40">
+      <Clock size={12} className="text-red-400" />
+      <div className="font-mono text-xs font-black text-amber-400">
+        <span>{String(hours).padStart(2, '0')}</span>:
+        <span>{String(minutes).padStart(2, '0')}</span>:
+        <span className="text-white">{String(seconds).padStart(2, '0')}</span>
+      </div>
+    </div>
+  );
+}
+
+export default function FlashDropSection({
+  products,
+  onProductClick,
+  onNavigateDeals,
+}: FlashDropSectionProps) {
   // Flash drop showcase products (up to 4 products)
-  const flashProducts = products.slice(0, 4);
+  const flashProducts = React.useMemo(() => products.slice(0, 4), [products]);
   if (flashProducts.length === 0) return null;
 
   return (
@@ -67,15 +78,8 @@ export default function FlashDropSection({
             </div>
           </div>
 
-          {/* Countdown Clock */}
-          <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-xl border border-red-500/40">
-            <Clock size={12} className="text-red-400" />
-            <div className="font-mono text-xs font-black text-amber-400">
-              <span>{String(hours).padStart(2, '0')}</span>:
-              <span>{String(minutes).padStart(2, '0')}</span>:
-              <span className="text-white">{String(seconds).padStart(2, '0')}</span>
-            </div>
-          </div>
+          {/* Isolated Countdown Clock (Does not trigger parent or image re-renders) */}
+          <FlashCountdownClock />
         </div>
 
         {/* Flash Drop Products Shelf */}

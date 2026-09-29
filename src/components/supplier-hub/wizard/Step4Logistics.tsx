@@ -111,6 +111,7 @@ export default function Step4Logistics({
       try {
         const info = await lookupPincode(pin);
         if (info && info.city && info.state) {
+          const areaColony = info.area || info.colony || '';
           setFormData(prev => ({
             ...prev,
             pickupAddress: {
@@ -118,9 +119,10 @@ export default function Step4Logistics({
               city: info.city,
               state: info.state,
               country: info.country || 'India',
+              street: prev.pickupAddress?.street ? prev.pickupAddress.street : (areaColony ? `${areaColony}` : prev.pickupAddress?.street || ''),
             },
           }));
-          setAutofillSuccess(`✓ Auto-filled: ${info.city}, ${info.state} (${info.district || pin})`);
+          setAutofillSuccess(`✓ Auto-locked: ${areaColony ? `${areaColony}, ` : ''}${info.city}, ${info.state} (${pin})`);
           setTimeout(() => setAutofillSuccess(null), 5000);
         }
       } catch (err) {

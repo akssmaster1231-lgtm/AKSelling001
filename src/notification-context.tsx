@@ -129,7 +129,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
       if (granted && 'serviceWorker' in navigator) {
         try {
-          const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          await navigator.serviceWorker.register('/firebase-messaging-sw.js');
           const mockToken = `fcm_web_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
           await saveFcmTokenToFirestore(mockToken, null);
         } catch (swErr) {

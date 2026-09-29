@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ChevronRight, Gift, Calendar, Trophy, Clapperboard } from 'lucide-react';
-import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, DisplayDeduplicator } from '@/data';
+import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice, deduplicateProducts } from '@/data';
 import { fetchBanners } from '@/banner-api';
 import { subscribeProducts, subscribeBanners, getCachedProducts, subscribeCategories } from '@/firebase';
 import { useI18n } from '@/i18n';
@@ -90,14 +90,24 @@ export default function HomePage({
     });
 
     // 3. Local events fallback for immediate 0ms local reflection
+    const handleProductsUpdate = (e: Event) => {
+      if (!isMounted) return;
+      const custom = e as CustomEvent<{ products?: Product[] }>;
+      if (custom.detail?.products && custom.detail.products.length > 0) {
+        setDbProducts(custom.detail.products);
+      } else {
+        const cached = getCachedProducts();
+        if (cached.length > 0) setDbProducts(cached);
+      }
+    };
+
     const handleUpdate = () => {
-      fetchProducts().then(p => isMounted && setDbProducts(p));
       fetchBanners().then(b => isMounted && setDbBanners(b.length > 0 ? b : fallbackBanners));
       setActiveCategories(getAllCategories());
     };
 
     window.addEventListener('akselling_banners_updated', handleUpdate);
-    window.addEventListener('akselling_products_updated', handleUpdate);
+    window.addEventListener('akselling_products_updated', handleProductsUpdate);
     window.addEventListener('akselling_categories_updated', handleUpdate);
 
     const safetyTimer = setTimeout(() => {
@@ -111,13 +121,13 @@ export default function HomePage({
       unsubBanners();
       unsubCategories();
       window.removeEventListener('akselling_banners_updated', handleUpdate);
-      window.removeEventListener('akselling_products_updated', handleUpdate);
+      window.removeEventListener('akselling_products_updated', handleProductsUpdate);
       window.removeEventListener('akselling_categories_updated', handleUpdate);
     };
   }, []);
 
-  const rawProducts = dbProducts.length > 0 ? dbProducts : fallbackProducts;
-  const allProducts = useMemo(() => deduplicateProducts(rawProducts), [rawProducts]);
+  const rawProducts = dbProducts.length > 0 ? dbProducts : getCachedProducts();
+  const allProducts = useMemo(() => deduplicateProducts(rawProducts.length > 0 ? rawProducts : fallbackProducts), [rawProducts]);
   const displayBanners = dbBanners.length > 0 ? dbBanners : fallbackBanners;
 
   const filteredProducts = useMemo(() => {
@@ -134,48 +144,41 @@ export default function HomePage({
     );
   }, [searchQuery, allProducts]);
 
-  // Non-repeating product allocation across sections
-  // Guarantees each product design is displayed at most once on the entire Home Page
   const {
     trendingProducts,
     categoryShelves,
-    exploreCatalogProducts,
   } = useMemo(() => {
-    const dedup = new DisplayDeduplicator();
+    // 1. Trending Products
+    const trending = [...allProducts]
+      .sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0))
+      .slice(0, 8);
 
-    // 1. Trending Products (top rating/popular items)
-    const trendingCandidates = [...allProducts]
-      .filter(p => !dedup.isDisplayed(p))
-      .sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
-
-    const maxTrending = allProducts.length <= 6 ? Math.max(1, Math.floor(allProducts.length / 2)) : 8;
-    const trending = dedup.filterAndMark(trendingCandidates, maxTrending);
-
-    // 2. Category Shelves (unique un-displayed items per category)
+    // 2. Category Shelves (matching activeCategories)
     const shelves: { category: Category; products: Product[] }[] = [];
     for (const cat of activeCategories) {
       if (cat.id === 'all') continue;
-      const catRemaining = allProducts.filter(
-        p =>
-          !dedup.isDisplayed(p) &&
-          (p.category?.toLowerCase() === cat.id.toLowerCase() ||
-            p.category?.toLowerCase() === cat.name.toLowerCase())
-      );
+      const catRemaining = allProducts.filter(p => {
+        const pCat = (p.category || '').toLowerCase();
+        const cId = cat.id.toLowerCase();
+        const cName = cat.name.toLowerCase();
+        return (
+          pCat === cId ||
+          pCat === cName ||
+          (cId === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion')) ||
+          (cId === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing'))
+        );
+      });
 
       if (catRemaining.length > 0) {
-        const shelfItems = dedup.filterAndMark(catRemaining, 8);
-        if (shelfItems.length > 0) {
-          shelves.push({
-            category: cat,
-            products: shelfItems,
-          });
-        }
+        shelves.push({
+          category: cat,
+          products: catRemaining.slice(0, 8),
+        });
       }
     }
 
-    // 3. Explore Catalog / Best of AKSelling (any remaining un-displayed products)
-    const remainingCatalog = allProducts.filter(p => !dedup.isDisplayed(p));
-    const exploreItems = dedup.filterAndMark(remainingCatalog, 12);
+    // 3. Explore Catalog (All products)
+    const exploreItems = allProducts;
 
     return {
       trendingProducts: trending,
@@ -377,6 +380,46 @@ export default function HomePage({
         </div>
       ) : (
         <>
+          {/* Fresh Drops & New Arrivals (Latest Uploaded Products from AK Yadav Print) */}
+          {allProducts.length > 0 && (
+            <section className="mt-4 px-3" id="home-fresh-drops">
+              <div className="bg-white rounded-xl shadow-card overflow-hidden border border-slate-200/80">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-xs">
+                      🔥
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm sm:text-base font-black text-slate-900 leading-tight">
+                          Fresh Drops & New Arrivals
+                        </h2>
+                        <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                          NEW
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium">Direct factory prints & fresh stock ({allProducts.length} items)</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => (onNavigateDeals ? onNavigateDeals() : onCategoryClick('all'))}
+                    className="flex items-center text-xs font-bold text-[#1b365d] hover:text-amber-600 transition-colors cursor-pointer"
+                  >
+                    See all <ChevronRight size={14} />
+                  </button>
+                </div>
+                <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
+                  {allProducts.slice(0, 10).map(p => (
+                    <div key={`new-drop-${p.id}`} className="shrink-0 w-36 sm:w-44">
+                      <ProductCard product={p} onClick={() => onProductClick(p)} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Trending Products Carousel */}
           {trendingProducts.length > 0 && (
             <section className="mt-4 px-3" id="home-trending-now">
@@ -399,46 +442,6 @@ export default function HomePage({
                 <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
                   {trendingProducts.map(p => (
                     <div key={`trending-${p.id}`} className="shrink-0 w-36 sm:w-44">
-                      <ProductCard product={p} onClick={() => onProductClick(p)} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* Full Catalog / Best of AKSelling - only shows remaining distinct designs */}
-          {exploreCatalogProducts.length > 0 && (
-            <section className="mt-4 px-3" id="home-explore-all">
-              <div className="bg-white rounded-xl shadow-card overflow-hidden border border-slate-200/80">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#1b365d] to-slate-800 text-amber-400 font-black text-xs flex items-center justify-center shadow-xs border border-amber-500/30">
-                      AK
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
-                          {t('bestOf')} AKSelling
-                        </h2>
-                        <span className="bg-[#1b365d]/10 text-[#1b365d] text-[10px] font-black px-1.5 py-0.5 rounded border border-[#1b365d]/20">
-                          CATALOGUE
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 font-medium">More unique designs ({exploreCatalogProducts.length} items)</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onCategoryClick('all')}
-                    className="flex items-center text-xs font-bold text-[#1b365d] hover:text-amber-600 transition-colors cursor-pointer"
-                  >
-                    View All <ChevronRight size={14} />
-                  </button>
-                </div>
-                <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
-                  {exploreCatalogProducts.map(p => (
-                    <div key={`all-${p.id}`} className="shrink-0 w-36 sm:w-44">
                       <ProductCard product={p} onClick={() => onProductClick(p)} />
                     </div>
                   ))}
@@ -490,6 +493,44 @@ export default function HomePage({
               </div>
             </section>
           ))}
+
+          {/* Full Catalog / Best of AKSelling - Full Responsive Grid */}
+          {allProducts.length > 0 && (
+            <section className="mt-4 px-3" id="home-explore-all">
+              <div className="bg-white rounded-xl shadow-card overflow-hidden border border-slate-200/80">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#1b365d] to-slate-800 text-amber-400 font-black text-xs flex items-center justify-center shadow-xs border border-amber-500/30">
+                      AK
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+                          {t('bestOf')} AKSelling
+                        </h2>
+                        <span className="bg-[#1b365d]/10 text-[#1b365d] text-[10px] font-black px-1.5 py-0.5 rounded border border-[#1b365d]/20">
+                          ALL PRODUCTS
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium">Browse complete verified factory catalog ({allProducts.length} items)</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onCategoryClick('all')}
+                    className="flex items-center text-xs font-bold text-[#1b365d] hover:text-amber-600 transition-colors cursor-pointer"
+                  >
+                    View All <ChevronRight size={14} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3 p-3">
+                  {allProducts.map(p => (
+                    <ProductCard key={`all-grid-${p.id}`} product={p} onClick={() => onProductClick(p)} />
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Become a Seller Card */}
           <div className="mt-4 px-3">

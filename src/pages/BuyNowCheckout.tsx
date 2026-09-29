@@ -8,8 +8,6 @@ import {
   CheckCircle2,
   Tag,
   Zap,
-  Shield,
-  Truck,
   CreditCard,
   Check,
   ChevronRight,
@@ -119,12 +117,14 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
       try {
         const info = await lookupPincode(cleanPin);
         if (info) {
+          const areaColony = info.area || info.colony || '';
           setForm((prev) => ({
             ...prev,
             city: info.city,
             state: info.state,
+            address: prev.address.trim() ? prev.address : (areaColony ? `${areaColony}` : prev.address),
           }));
-          setPincodeSuccess(`${info.city}, ${info.state}`);
+          setPincodeSuccess(`${areaColony ? `${areaColony}, ` : ''}${info.city}, ${info.state}`);
         }
       } catch {
         // silent

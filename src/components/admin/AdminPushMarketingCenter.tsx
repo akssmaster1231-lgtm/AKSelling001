@@ -8,7 +8,6 @@ import {
   Send,
   CheckCircle2,
   Loader2,
-  AlertCircle,
   Smartphone,
   Radio,
 } from 'lucide-react';
@@ -63,7 +62,7 @@ export default function AdminPushMarketingCenter() {
   ];
 
   const handleApplyPreset = (preset: typeof presets[0]) => {
-    setCampaignType(preset.id as any);
+    setCampaignType(preset.id as 'flash_sale' | 'cart_abandonment' | 'order_update' | 'new_drop' | 'custom');
     setTitle(preset.title);
     setMessage(preset.message);
     setTargetUrl(preset.url);
@@ -78,7 +77,7 @@ export default function AdminPushMarketingCenter() {
 
     try {
       // 1. Broadcast to server push endpoint
-      const resp = await fetch('/api/notifications/broadcast', {
+      await fetch('/api/notifications/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
