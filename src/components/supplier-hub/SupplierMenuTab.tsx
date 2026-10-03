@@ -190,7 +190,7 @@ export default function SupplierMenuTab({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h2 className="text-sm font-bold text-white">{storeName || 'AK Yadav Prints'}</h2>
+                <h2 className="text-sm font-bold text-white">{storeName || 'AKSelling'}</h2>
                 <span className="bg-yellow-400 text-gray-950 text-[9px] font-black px-1.5 py-0.2 rounded">
                   {sellerId}
                 </span>

@@ -65,7 +65,7 @@ export default function TrustBadges({ variant = 'full', className = '' }: TrustB
           <Award size={16} className="text-amber-600 shrink-0" />
           <div>
             <p className="font-bold text-[11px] text-slate-900">Verified Merchant</p>
-            <p className="text-[9px] text-slate-500">AK Yadav Print Factory</p>
+            <p className="text-[9px] text-slate-500">AKSelling Direct Factory</p>
           </div>
         </div>
       </div>
@@ -96,7 +96,7 @@ export default function TrustBadges({ variant = 'full', className = '' }: TrustB
             <Award size={14} />
           </div>
           <h5 className="text-[11px] font-bold text-slate-900 leading-tight">Verified Manufacturer</h5>
-          <p className="text-[9px] text-slate-500 mt-0.5 leading-snug">Authentic AK Yadav Print direct factory pricing</p>
+          <p className="text-[9px] text-slate-500 mt-0.5 leading-snug">Authentic AKSelling direct factory pricing</p>
         </div>
 
         <div className="p-2.5 bg-emerald-50/60 border border-emerald-100 rounded-xl">

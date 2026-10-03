@@ -11,7 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { ProductReview } from '@/types/review';
-import { subscribeProductReviews, submitProductReview, uploadMediaToPermanentStorage } from '@/firebase';
+import { subscribeProductReviews, submitProductReview, voteReviewHelpful, uploadMediaToPermanentStorage } from '@/firebase';
 import { useAuth } from '@/auth-context';
 
 interface ProductReviewsSectionProps {
@@ -44,7 +44,17 @@ export default function ProductReviewsSection({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [votedHelpful, setVotedHelpful] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleVoteHelpful = async (revId: string) => {
+    if (votedHelpful[revId]) return;
+    setVotedHelpful((prev) => ({ ...prev, [revId]: true }));
+    setReviews((prev) =>
+      prev.map((r) => (r.id === revId ? { ...r, helpfulCount: (r.helpfulCount || 0) + 1 } : r))
+    );
+    await voteReviewHelpful(revId);
+  };
 
   // Real-time Firestore reviews listener
   useEffect(() => {
@@ -80,7 +90,7 @@ export default function ProductReviewsSection({
       userName: 'Priya Mehra',
       rating: 5,
       title: 'Flawless fit and vibrant colors after washing',
-      comment: 'Color did not fade after first wash! Stitching is solid and premium. Truly direct factory value from AK Yadav Print.',
+      comment: 'Color did not fade after first wash! Stitching is solid and premium. Truly direct factory value from AKSelling.',
       photos: [
         'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=600&q=80',
       ],
@@ -353,13 +363,22 @@ export default function ProductReviewsSection({
               </div>
             )}
 
-            {/* Helpful Counter */}
+            {/* Helpful Counter Button */}
             <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-              <span className="flex items-center gap-1">
-                <ThumbsUp size={12} className="text-slate-400" />
+              <button
+                type="button"
+                onClick={() => handleVoteHelpful(rev.id)}
+                disabled={Boolean(votedHelpful[rev.id])}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  votedHelpful[rev.id]
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                }`}
+              >
+                <ThumbsUp size={12} className={votedHelpful[rev.id] ? 'fill-emerald-600 text-emerald-600' : ''} />
                 <span>Helpful ({rev.helpfulCount || 0})</span>
-              </span>
-              <span className="text-[10px]">AK Yadav Print Quality Verified</span>
+              </button>
+              <span className="text-[10px] text-slate-400">AKSelling Quality Verified</span>
             </div>
           </div>
         ))}
@@ -553,7 +572,7 @@ export default function ProductReviewsSection({
               alt="Buyer Photo Zoom"
               className="max-h-[80vh] w-auto object-contain rounded-2xl shadow-2xl border border-white/20"
             />
-            <p className="text-white/80 text-xs font-bold mt-2">Verified Customer Photo • AK Yadav Print</p>
+            <p className="text-white/80 text-xs font-bold mt-2">Verified Customer Photo • AKSelling</p>
           </div>
         </div>
       )}

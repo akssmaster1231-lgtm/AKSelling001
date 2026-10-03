@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CartProvider, useCart } from '@/cart-context';
 import { AuthProvider, useAuth } from '@/auth-context';
 import { I18nProvider } from '@/i18n';
@@ -28,10 +28,12 @@ import { NotificationProvider } from '@/notification-context';
 import NotificationToastBanner from '@/components/NotificationToastBanner';
 import NotificationCenterModal from '@/components/NotificationCenterModal';
 import { addRecentlyViewedProduct } from '@/utils/searchHistory';
-import VideoReelsFeed from '@/components/video-shopping/VideoReelsFeed';
+import { captureReferralFromUrl } from '@/utils/referralService';
 import DailyStreakModal from '@/components/gamification/DailyStreakModal';
 import SpinWheelModal from '@/components/gamification/SpinWheelModal';
-import AiSupportWidget from '@/components/support/AiSupportWidget';
+import EdgeSwipeBackContainer from '@/components/navigation/EdgeSwipeBackContainer';
+import { PWAInstallBanner } from '@/components/pwa/PWAInstallBanner';
+import { GlobalVoiceSalesMaster } from '@/components/ai/GlobalVoiceSalesMaster';
 
 function AppContent() {
   const { user, authInitialized } = useAuth();
@@ -82,6 +84,7 @@ function AppContent() {
   };
 
   useEffect(() => {
+    captureReferralFromUrl();
     const handleOpenProdEvent = (e: Event) => {
       const custom = e as CustomEvent<string>;
       if (custom.detail) {
@@ -167,6 +170,7 @@ function AppContent() {
   };
 
   const handleProductClick = (product: Product) => {
+    if (!product || !product.id) return;
     addRecentlyViewedProduct(product);
     setSelectedProduct(product);
   };
@@ -195,6 +199,105 @@ function AppContent() {
       window.scrollTo(0, 0);
     }
   };
+
+  const [hasSubScreen, setHasSubScreen] = useState(false);
+
+  useEffect(() => {
+    const handleSubChange = () => {
+      setHasSubScreen(Boolean(window.__akselling_has_subscreen));
+    };
+    window.addEventListener('akselling_subscreen_changed', handleSubChange);
+    return () => window.removeEventListener('akselling_subscreen_changed', handleSubChange);
+  }, []);
+
+  const canGoBack = Boolean(
+    hasSubScreen ||
+    appMode === 'selling' ||
+    buyNowProduct ||
+    selectedProduct ||
+    showOrders ||
+    showAdmin ||
+    showNotifications ||
+    showSellerReg ||
+    showSellerLockedModal ||
+    showStreakModal ||
+    showSpinWheelModal ||
+    showAuth ||
+    searchQuery.trim() ||
+    activeTab !== 'home'
+  );
+
+  const handleBackGesture = useCallback(() => {
+    if (typeof window !== 'undefined' && window.__akselling_has_subscreen) {
+      window.dispatchEvent(new CustomEvent('akselling_back_pressed'));
+      return;
+    }
+    if (showStreakModal) {
+      setShowStreakModal(false);
+    } else if (showSpinWheelModal) {
+      setShowSpinWheelModal(false);
+    } else if (showNotifications) {
+      setShowNotifications(false);
+    } else if (showAuth) {
+      setShowAuth(false);
+    } else if (showSellerLockedModal) {
+      setShowSellerLockedModal(false);
+    } else if (showSellerReg) {
+      setShowSellerReg(false);
+    } else if (buyNowProduct) {
+      setBuyNowProduct(null);
+    } else if (selectedProduct) {
+      setSelectedProduct(null);
+    } else if (showOrders) {
+      setShowOrders(false);
+    } else if (showAdmin) {
+      setShowAdmin(false);
+    } else if (appMode === 'selling') {
+      handleSwitchMode('buying');
+    } else if (searchQuery.trim()) {
+      setSearchQuery('');
+    } else if (activeTab !== 'home') {
+      setActiveTab('home');
+    }
+  }, [
+    showStreakModal,
+    showSpinWheelModal,
+    showNotifications,
+    showAuth,
+    showSellerLockedModal,
+    showSellerReg,
+    buyNowProduct,
+    selectedProduct,
+    showOrders,
+    showAdmin,
+    appMode,
+    searchQuery,
+    activeTab,
+  ]);
+
+  // Maintain browser history state for seamless Android physical/software back button navigation
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (canGoBack) {
+      try {
+        window.history.pushState({ akselling_view: 'active', ts: Date.now() }, '');
+      } catch {
+        // ignore
+      }
+    }
+  }, [
+    canGoBack,
+    selectedProduct?.id,
+    buyNowProduct?.id,
+    showOrders,
+    showAdmin,
+    showNotifications,
+    showStreakModal,
+    showSpinWheelModal,
+    showAuth,
+    hasSubScreen,
+    activeTab,
+  ]);
 
   // Deep-linking: Automatically load and open full product page if ?productId=... is in URL
   useEffect(() => {
@@ -307,7 +410,7 @@ function AppContent() {
           <div className="w-24 h-24 rounded-3xl p-1 bg-gradient-to-tr from-amber-400/30 via-slate-800 to-amber-500/40 shadow-2xl shadow-black/80 flex items-center justify-center animate-pulse border border-amber-400/40 overflow-hidden">
             <img
               src="/ak_brand_logo.jpg"
-              alt="AK Yadav Print / AKSelling"
+              alt="AKSelling"
               className="w-full h-full object-contain rounded-2xl"
             />
           </div>
@@ -319,7 +422,7 @@ function AppContent() {
           AK<span className="text-amber-400">Selling</span>
         </h1>
         <p className="text-xs text-amber-200/80 font-bold uppercase tracking-widest mb-3">
-          AK Yadav Print
+          Direct Factory Store
         </p>
         <div className="flex items-center gap-2 text-amber-400 font-bold text-sm mb-1 bg-white/5 border border-amber-400/20 px-3.5 py-1.5 rounded-full">
           <Loader2 size={16} className="animate-spin text-amber-400" />
@@ -330,34 +433,36 @@ function AppContent() {
     );
   }
 
-  // 2. Strict Route Protection removed for preview experience:
-  // Visitors can view the entire store immediately. If they click Account or Checkout without logging in,
-  // they can log in via AuthPage.
   if (appMode === 'selling') {
     return (
-      <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
-        <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 overflow-x-hidden">
-          <SellerDashboard onBack={() => handleSwitchMode('buying')} />
+      <EdgeSwipeBackContainer canGoBack={canGoBack} onBack={handleBackGesture}>
+        <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
+          <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 overflow-x-hidden">
+            <SellerDashboard onBack={() => handleSwitchMode('buying')} />
+          </div>
         </div>
-      </div>
+      </EdgeSwipeBackContainer>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
-      <div className="min-h-screen bg-slate-50 max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 flex flex-col overflow-x-hidden">
-        <Header
-          onSearch={handleSearch}
-          onCartClick={() => setActiveTab('cart')}
-          onAccountClick={() => setActiveTab('account')}
-          onNotificationClick={() => setShowNotifications(true)}
-          onOpenProduct={handleOpenProductById}
-          onNavigateHome={() => {
-            setActiveTab('home');
-            setSearchQuery('');
-            setSelectedProduct(null);
-          }}
-        />
+    <EdgeSwipeBackContainer canGoBack={canGoBack} onBack={handleBackGesture}>
+      <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
+        <div className="min-h-screen bg-slate-50 max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 flex flex-col overflow-x-hidden">
+          <Header
+            onSearch={handleSearch}
+            onCartClick={() => setActiveTab('cart')}
+            onAccountClick={() => setActiveTab('account')}
+            onNotificationClick={() => setShowNotifications(true)}
+            onOpenProduct={handleOpenProductById}
+            onNavigateHome={() => {
+              setActiveTab('home');
+              setSearchQuery('');
+              setSelectedProduct(null);
+            }}
+          />
+
+          <PWAInstallBanner />
 
         <NotificationToastBanner onOpenProduct={handleOpenProductById} />
 
@@ -372,19 +477,6 @@ function AppContent() {
               onBecomeSeller={handleOpenSellerMode}
               onOpenStreak={() => setShowStreakModal(true)}
               onOpenSpinWheel={() => setShowSpinWheelModal(true)}
-              onNavigateReels={() => setActiveTab('reels')}
-            />
-          </ErrorBoundary>
-        )}
-        {activeTab === 'reels' && (
-          <ErrorBoundary fallbackTitle="Unable to load Video Reels">
-            <VideoReelsFeed
-              onBuyNow={(prod, size, color) => {
-                setBuyNowProduct(prod);
-                setBuyNowSize(size);
-                setBuyNowColor(color);
-              }}
-              onProductClick={handleProductClick}
             />
           </ErrorBoundary>
         )}
@@ -568,10 +660,11 @@ function AppContent() {
         }}
       />
 
-      {/* 24/7 AI Smart Support Assistant & WhatsApp Escalation Bridge */}
-      <AiSupportWidget />
+      {/* Revolutionary Global 3D Voice Sales Master (Native Mic Auto-Prompt & Male Voice Greeting) */}
+      <GlobalVoiceSalesMaster onSelectProduct={handleProductClick} />
       </div>
     </div>
+    </EdgeSwipeBackContainer>
   );
 }
 

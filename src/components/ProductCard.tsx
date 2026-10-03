@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { Star } from 'lucide-react';
 import type { Product } from '@/types';
 import { formatPrice, formatCount } from '@/data';
@@ -11,7 +11,21 @@ interface ProductCardProps {
 }
 
 const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardProps) {
-  const dynamicRating = calculateProductDynamicRating(product);
+  const [dynamicRating, setDynamicRating] = useState(() => calculateProductDynamicRating(product));
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Synchronize rating in real-time when customer reviews are submitted anywhere in app
+  useEffect(() => {
+    setDynamicRating(calculateProductDynamicRating(product));
+    const handleReviewsUpdated = (e: Event) => {
+      const custom = e as CustomEvent<{ productId?: string }>;
+      if (!custom.detail?.productId || custom.detail.productId === product.id) {
+        setDynamicRating(calculateProductDynamicRating(product));
+      }
+    };
+    window.addEventListener('akselling_reviews_updated', handleReviewsUpdated);
+    return () => window.removeEventListener('akselling_reviews_updated', handleReviewsUpdated);
+  }, [product]);
 
   // Safe image determination across all candidate fields (images, imageUrl, image, etc.)
   const resolvedImages = resolveProductImages(product);
@@ -22,22 +36,31 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
     <button
       type="button"
       onClick={onClick}
-      className="bg-white rounded-xl border border-slate-200/90 shadow-card hover:shadow-card-hover transition-all duration-200 overflow-hidden text-left flex flex-col group cursor-pointer w-full select-none"
+      className="bg-white rounded-xl border border-slate-200/90 shadow-card hover:shadow-card-hover active:scale-[0.99] transition-all duration-200 overflow-hidden text-left flex flex-col group cursor-pointer w-full touch-manipulation"
     >
       <div className="relative aspect-square bg-slate-50 overflow-hidden w-full">
+        {/* Progressive Skeleton Shimmer Placeholder while loading */}
+        {!isLoaded && (
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 animate-pulse" />
+        )}
+
         <img
           src={imageUrl}
           alt={product.title}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
+          onLoad={() => setIsLoaded(true)}
           onError={(e) => {
             const target = e.currentTarget;
             if (target.src !== fallbackImage) {
               target.src = fallbackImage;
             }
+            setIsLoaded(true);
           }}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 subpixel-antialiased"
+          className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-300 subpixel-antialiased ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
           style={{ imageRendering: 'auto' }}
         />
 
@@ -53,7 +76,8 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
         <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 leading-snug min-h-[2.5rem]">
           {product.title}
         </h3>
-        {/* Star Rating above price - starts at 0.00 and increases with sales/orders */}
+
+        {/* Flipkart-Grade Star Rating Badge - Real-Time Synced with Firebase Reviews */}
         <div className="flex items-center gap-1.5">
           <span
             className={`flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded ${
@@ -70,8 +94,9 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
               }
             />
           </span>
-          <span className="text-xs text-slate-400">({formatCount(dynamicRating.ratingCount)})</span>
+          <span className="text-xs text-slate-500 font-medium">({formatCount(dynamicRating.ratingCount)})</span>
         </div>
+
         <div className="flex items-baseline gap-1.5 mt-0.5">
           <span className="text-base font-extrabold text-slate-950">{formatPrice(product.price)}</span>
           <span className="text-xs text-slate-400 line-through">{formatPrice(product.mrp)}</span>

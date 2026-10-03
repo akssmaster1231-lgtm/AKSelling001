@@ -6,9 +6,12 @@ import {
   Share2,
   Mail,
   Send,
+  Gift,
 } from 'lucide-react';
 import type { Product } from '@/types';
 import { formatPrice } from '@/data';
+import { useAuth } from '@/auth-context';
+import { getReferralShareUrl, getUserReferralCode } from '@/utils/referralService';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -17,16 +20,16 @@ interface ShareModalProps {
 }
 
 export default function ShareModal({ isOpen, onClose, product }: ShareModalProps) {
+  const { user } = useAuth();
   const [copied, setCopied] = useState(false);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
 
-  // Generate canonical direct URL for this product
+  const refCode = useMemo(() => getUserReferralCode(user), [user]);
+
+  // Generate canonical direct URL for this product including referral code
   const shareUrl = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    const origin = window.location.origin;
-    const pathname = window.location.pathname;
-    return `${origin}${pathname}?productId=${encodeURIComponent(product.id)}`;
-  }, [product.id]);
+    return getReferralShareUrl(product.id, user);
+  }, [product.id, user]);
 
   const shareTitle = `${product.title} on AKSelling`;
   const shareText = `Check out ${product.title} at ${formatPrice(product.price)} on AKSelling! Free Delivery & Cash on Delivery available.\n\nShop here: ${shareUrl}`;
@@ -221,6 +224,30 @@ export default function ShareModal({ isOpen, onClose, product }: ShareModalProps
               <span>{copyNotice}</span>
             </div>
           )}
+
+          {/* Referral Reward Banner */}
+          <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10 border border-amber-300 rounded-xl p-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                ₹30
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-amber-950 flex items-center gap-1">
+                  <span>Referral Earnings Active</span>
+                  <Gift size={12} className="text-amber-600" />
+                </p>
+                <p className="text-[11px] text-amber-900 leading-tight">
+                  Earn ₹30 cash in your wallet when a friend buys via your link (Min withdrawal ₹100).
+                </p>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <span className="text-[9px] font-bold text-slate-500 uppercase block">Code</span>
+              <span className="text-xs font-mono font-black text-slate-950 bg-white px-2 py-0.5 rounded border border-amber-300 inline-block shadow-2xs">
+                {refCode}
+              </span>
+            </div>
+          </div>
 
           {/* Quick Direct Link Box */}
           <div>

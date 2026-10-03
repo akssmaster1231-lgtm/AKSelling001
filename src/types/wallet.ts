@@ -4,6 +4,12 @@ export type TransactionCategory =
   | 'signup_bonus'
   | 'order_cashback'
   | 'milestone_reward'
+  | 'referral_bonus'
+  | 'streak_reward'
+  | 'spin_wheel_win'
+  | 'coin_redemption'
+  | 'wallet_deposit'
+  | 'order_redemption'
   | 'withdrawal';
 
 export type TransactionStatus = 'SUCCESS' | 'PROCESSING' | 'FAILED';

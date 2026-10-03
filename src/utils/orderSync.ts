@@ -194,6 +194,27 @@ function getOrBuildSalesMap(): Map<string, number> {
   return map;
 }
 
+import { getLiveProductRating } from '@/firebase';
+
+/**
+ * Invalidates rating memoization cache so components immediately re-render with latest Firestore reviews
+ */
+export function invalidateProductRatingCache(productId?: string): void {
+  if (productId) {
+    ratingResultCache.delete(productId);
+  } else {
+    ratingResultCache.clear();
+  }
+}
+
+// Automatically clear rating cache when live reviews update
+if (typeof window !== 'undefined') {
+  window.addEventListener('akselling_reviews_updated', (e: Event) => {
+    const custom = e as CustomEvent<{ productId?: string }>;
+    invalidateProductRatingCache(custom.detail?.productId);
+  });
+}
+
 /**
  * Calculates a dynamic rating starting at 0.00 for new items and growing proportionally
  * with business volume, placed orders, and verified customer reviews.
@@ -203,6 +224,7 @@ export function calculateProductDynamicRating(product?: {
   id?: string;
   rating?: number;
   ratingCount?: number;
+  reviewsCount?: number;
   views?: number;
 }): DynamicProductRating {
   if (!product || !product.id) {
@@ -212,10 +234,19 @@ export function calculateProductDynamicRating(product?: {
   const cached = ratingResultCache.get(product.id);
   if (cached) return cached;
 
-  const salesMap = getOrBuildSalesMap();
-  const salesCount = salesMap.get(product.id) || 0;
+  // 1. Check live Firestore aggregate ratings cache from onSnapshot
+  const liveRating = getLiveProductRating(product.id);
+  if (liveRating && liveRating.count > 0) {
+    const result: DynamicProductRating = {
+      rating: liveRating.rating,
+      ratingCount: liveRating.count,
+      formattedRating: liveRating.rating.toFixed(1),
+    };
+    ratingResultCache.set(product.id, result);
+    return result;
+  }
 
-  // 3. Check customer submitted reviews (only once per product)
+  // 2. Check customer submitted reviews from localStorage cache
   let reviewsCount = 0;
   let reviewsSum = 0;
   try {
@@ -234,7 +265,33 @@ export function calculateProductDynamicRating(product?: {
     // ignore
   }
 
-  const totalVolume = salesCount + reviewsCount;
+  // If real reviews exist locally, use exact verified calculation
+  if (reviewsCount > 0) {
+    const avg = Number((reviewsSum / reviewsCount).toFixed(1));
+    const result: DynamicProductRating = {
+      rating: avg,
+      ratingCount: reviewsCount,
+      formattedRating: avg.toFixed(1),
+    };
+    ratingResultCache.set(product.id, result);
+    return result;
+  }
+
+  // 3. Check if product already has verified rating attributes from Firestore
+  if (typeof product.rating === 'number' && product.rating > 0) {
+    const count = Number(product.reviewsCount || product.ratingCount) || 1;
+    const result: DynamicProductRating = {
+      rating: Number(product.rating.toFixed(1)),
+      ratingCount: count,
+      formattedRating: product.rating.toFixed(1),
+    };
+    ratingResultCache.set(product.id, result);
+    return result;
+  }
+
+  const salesMap = getOrBuildSalesMap();
+  const salesCount = salesMap.get(product.id) || 0;
+  const totalVolume = salesCount;
 
   // Base state: If 0 sales & 0 reviews, star rating is strictly 0.00 (0 reviews)
   if (totalVolume === 0) {
@@ -247,19 +304,13 @@ export function calculateProductDynamicRating(product?: {
     return result;
   }
 
-  // Dynamically grows as sales and reviews increase:
-  let calculatedScore = 4.0;
-  if (reviewsCount > 0) {
-    calculatedScore = (reviewsSum + salesCount * 4.8) / totalVolume;
-  } else {
-    calculatedScore = Math.min(5.0, 4.0 + Math.min(0.95, salesCount * 0.12));
-  }
-
-  const finalScore = Number(calculatedScore.toFixed(2));
+  // Dynamically grows as sales increase:
+  const calculatedScore = Math.min(5.0, 4.0 + Math.min(0.95, salesCount * 0.12));
+  const finalScore = Number(calculatedScore.toFixed(1));
   const result: DynamicProductRating = {
     rating: finalScore,
     ratingCount: totalVolume,
-    formattedRating: finalScore.toFixed(2),
+    formattedRating: finalScore.toFixed(1),
   };
   ratingResultCache.set(product.id, result);
   return result;

@@ -8,6 +8,7 @@ import {
   Coins,
   Flame,
   ArrowRight,
+  Wallet,
 } from 'lucide-react';
 import { fireConfetti } from '@/utils/confetti';
 import {
@@ -15,8 +16,10 @@ import {
   getStreakData,
   canCheckInToday,
   claimTodayStreakReward,
+  convertCoinsToCash,
   type DailyStreakState,
 } from '@/utils/gamificationService';
+import { getLocalWalletCache } from '@/utils/walletService';
 import { useAuth } from '@/auth-context';
 
 interface DailyStreakModalProps {
@@ -36,14 +39,18 @@ export default function DailyStreakModal({
     null
   );
   const [canClaim, setCanClaim] = useState(() => canCheckInToday());
+  const [cashBalance, setCashBalance] = useState(() => {
+    return getLocalWalletCache(user?.id || 'guest').walletBalance;
+  });
 
   useEffect(() => {
     if (isOpen) {
       setStreakData(getStreakData());
       setCanClaim(canCheckInToday());
       setClaimedReward(null);
+      setCashBalance(getLocalWalletCache(user?.id || 'guest').walletBalance);
     }
-  }, [isOpen]);
+  }, [isOpen, user?.id]);
 
   if (!isOpen) return null;
 
@@ -56,12 +63,11 @@ export default function DailyStreakModal({
         amount: result.reward.amount,
         description: result.reward.description,
       });
+      setCashBalance(getLocalWalletCache(user?.id || 'guest').walletBalance);
 
       // Confetti burst
       try {
-        fireConfetti({
-          particleCount: 80,
-        });
+        fireConfetti({ particleCount: 80 });
       } catch {
         // ignore
       }
@@ -69,6 +75,7 @@ export default function DailyStreakModal({
   };
 
   const currentActiveDay = ((streakData.currentStreak - 1) % 7) + 1;
+  const cashEquivalent = convertCoinsToCash(streakData.coinsBalance);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/75 backdrop-blur-xs animate-fade-in">
@@ -93,16 +100,47 @@ export default function DailyStreakModal({
           </div>
 
           <h3 className="text-xl font-black text-slate-950 leading-tight">
-            7-Day Daily Shopping Streak
+            7-Day Daily Check-In Streak
           </h3>
           <p className="text-xs font-semibold text-slate-800 mt-0.5">
-            Log in daily to earn coins that deduct directly from your order total!
+            Collect coins daily! Locked rate: 100 Coins = ₹5 Cash
           </p>
 
           {/* Current Streak Pill */}
-          <div className="mt-3 inline-flex items-center gap-1.5 bg-slate-950 text-amber-400 px-3 py-1 rounded-full text-xs font-black shadow-md border border-amber-400/40">
-            <Flame size={14} className="fill-amber-400 text-amber-400 animate-bounce" />
-            <span>Current Streak: {streakData.currentStreak} Days</span>
+          <div className="mt-3 flex items-center justify-between">
+            <div className="inline-flex items-center gap-1.5 bg-slate-950 text-amber-400 px-3 py-1 rounded-full text-xs font-black shadow-md border border-amber-400/40">
+              <Flame size={14} className="fill-amber-400 text-amber-400 animate-bounce" />
+              <span>Streak: {streakData.currentStreak} Days</span>
+            </div>
+
+            <div className="text-[11px] font-bold text-slate-900 bg-white/40 px-2 py-0.5 rounded-lg border border-white/50">
+              100 Coins = ₹5 INR
+            </div>
+          </div>
+        </div>
+
+        {/* Balance Separation Info Card */}
+        <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border-b border-slate-200 text-xs">
+          <div className="bg-white p-2.5 rounded-xl border border-amber-200 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
+              <Coins size={14} />
+              <span>Shopping Coins</span>
+            </div>
+            <p className="text-base font-black text-slate-900 mt-0.5">
+              {streakData.coinsBalance} <span className="text-[10px] text-slate-500 font-medium">Coins</span>
+            </p>
+            <p className="text-[9px] text-slate-400">Worth ₹{cashEquivalent} Cash</p>
+          </div>
+
+          <div className="bg-white p-2.5 rounded-xl border border-indigo-200 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-[11px]">
+              <Wallet size={14} />
+              <span>Cash Balance</span>
+            </div>
+            <p className="text-base font-black text-slate-900 mt-0.5">
+              ₹{cashBalance} <span className="text-[10px] text-emerald-600 font-bold">(Active)</span>
+            </p>
+            <p className="text-[9px] text-slate-400">Withdrawable min ₹100</p>
           </div>
         </div>
 
@@ -141,7 +179,7 @@ export default function DailyStreakModal({
                   </div>
 
                   <span className="text-xs font-black text-slate-900">
-                    {item.rewardType === 'spin' ? '1 Spin' : `+₹${item.amount}`}
+                    {item.rewardType === 'spin' ? '1 Spin + 50C' : item.rewardType === 'jackpot' ? '₹10 Cash + 100C' : `+${item.amount} Coins`}
                   </span>
 
                   {isPassed && (
@@ -169,7 +207,7 @@ export default function DailyStreakModal({
               <div>
                 <h4 className="text-xs font-black text-emerald-950">Reward Claimed!</h4>
                 <p className="text-[11px] font-semibold text-emerald-700">
-                  {claimedReward.description} credited to your AKSelling wallet balance.
+                  {claimedReward.description} collected safely into your account.
                 </p>
               </div>
             </div>
@@ -185,12 +223,12 @@ export default function DailyStreakModal({
                 id="claim-streak-reward-btn"
               >
                 <Sparkles size={16} className="fill-slate-950" />
-                <span>Claim Today's Reward</span>
+                <span>Claim Today&apos;s Daily Reward</span>
               </button>
             ) : (
-              <div className="w-full bg-slate-100 text-slate-500 font-bold text-xs py-3 px-4 rounded-xl text-center border border-slate-200 flex items-center justify-center gap-1.5">
+              <div className="w-full bg-slate-100 text-slate-600 font-bold text-xs py-3 px-4 rounded-xl text-center border border-slate-200 flex items-center justify-center gap-1.5">
                 <CheckCircle2 size={15} className="text-emerald-600" />
-                <span>Checked in today! Come back tomorrow for the next reward.</span>
+                <span>Checked in today! Come back tomorrow for Day {(streakData.currentStreak % 7) + 1}.</span>
               </div>
             )}
 
@@ -201,10 +239,10 @@ export default function DailyStreakModal({
                   onClose();
                   onOpenSpinWheel();
                 }}
-                className="w-full bg-purple-50 hover:bg-purple-100 text-purple-800 font-bold text-xs py-2.5 px-3 rounded-xl border border-purple-200 flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-xs py-2.5 px-4 rounded-xl border border-amber-400/30 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Gift size={14} className="text-purple-600" />
-                <span>Have spins left? Try Lucky Spin Wheel ({streakData.spinsAvailable})</span>
+                <Gift size={14} />
+                <span>Open Strict 1-Spin Lucky Wheel</span>
                 <ArrowRight size={13} />
               </button>
             )}

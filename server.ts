@@ -373,7 +373,7 @@ async function startServer() {
   app.get('/api/owner/payment-settings', (_req, res) => {
     const defaultSettings = {
       beneficiaryName: 'ANOJKUMAR',
-      businessName: 'AK YADAV PRINTS (ANOJKUMAR)',
+      businessName: 'AKSELLING (ANOJKUMAR)',
       upiId: '7290894907@ybl',
       accountNumber: '7290894907',
       ifscCode: 'AIRP0000001',
@@ -1765,7 +1765,7 @@ async function startServer() {
           : `https://shiprocket.co/tracking/${awb}`,
         steps: [
           { status: 'Order Confirmed & Payment Verified', time: 'Yesterday, 04:30 PM', done: true, location: 'Seller Warehouse, Gurugram' },
-          { status: 'Manifest Generated & Quality Inspected', time: 'Yesterday, 06:15 PM', done: true, location: 'AK Yadav Print Fulfillment Center' },
+          { status: 'Manifest Generated & Quality Inspected', time: 'Yesterday, 06:15 PM', done: true, location: 'AKSelling Fulfillment Center' },
           { status: 'Picked Up by Courier Rider', time: 'Today, 09:20 AM', done: true, location: 'Linehaul Dispatch Dock' },
           { status: 'In Transit to Regional Sorting Hub', time: 'Today, 02:40 PM', done: true, location: 'Regional Expressway Hub' },
           { status: 'Out for Doorstep Delivery', time: 'Expected Tomorrow, 10:00 AM', done: false, location: 'Local Destination Delivery Center' },
@@ -2793,27 +2793,71 @@ async function startServer() {
 
       const systemPrompt = `You are the official 24/7 AI Smart Support Assistant for AKSelling — India's premier fashion, lifestyle, and direct manufacturing e-commerce platform.
 Your goals:
-1. Provide instant, helpful, and friendly customer support in natural Hinglish (mix of Hindi & English) or English as preferred by the user. Keep replies polite, well-structured, with clear bullet points and emojis.
-2. 240 GSM Heavy-Cotton Fabric Specs:
-   - AKSelling premium apparel (t-shirts, streetwear) is crafted from 100% combed ringspun cotton with dense 240 GSM (Grams per Square Meter) heavy-weight knit.
-   - Features: Silicon bio-washed for peach-soft skin comfort, pre-shrunk against wash shrinkage, fade-proof reactive dyes, double-needle stitched neckband and hemline.
-3. ₹30 Wallet Signup Bonus & Shopping Coins:
-   - Every user receives an instant ₹30 welcome bonus in their AKSelling Wallet.
-   - Daily check-in coins (Roz Check-In) award ₹5 to ₹50 daily.
+1. Provide instant, helpful, accurate, and friendly customer support in natural Hinglish (mix of Hindi & English) or English as preferred by the user. Keep replies polite, well-structured, with clear bullet points and emojis.
+2. 7-Day Easy Returns, Exchanges & Instant Refunds:
+   - AKSelling provides a 100% customer satisfaction guarantee with 7-day doorstep replacement or refund if product is defective, wrong size, or not as expected.
+   - Free doorstep reverse pickup by courier partner.
+   - Refunds credited within 24 hours of pickup back to original payment source or instant AKSelling wallet balance.
+   - 0 cancellation charges before dispatch.
+3. 240 GSM Heavy-Cotton Fabric Specs & Direct Manufacturing:
+   - AKSelling apparel (oversized tees, drop-shoulder streetwear) is crafted from 100% Super Combed Ringspun Cotton with dense 240 GSM heavy-weight knit.
+   - Features: Silicon enzyme bio-washed for peach-soft touch, pre-shrunk, fade-proof reactive dyes, double-needle stitched neckband and hemline.
+   - Direct manufacturing pricing straight from textile hubs (Tirupur / Surat) without middleman commission.
+4. Indian Standard Size & Fit Guide:
+   - Sizes: S (Chest 38"), M (Chest 40"), L (Chest 42"), XL (Chest 44"), XXL (Chest 46").
+   - Fit: Relaxed boxy streetwear drop-shoulder fit. If customer wants slim fit, choose 1 size smaller; for trendy oversized look, order true size.
+5. ₹30 Wallet Signup Bonus, Coins & Offers:
+   - Every user receives an instant ₹30 welcome bonus in their AKSelling Wallet on first visit.
+   - Roz Check-In rewards ₹5 to ₹50 daily shopping coins.
    - Spin & Win Lucky Wheel awards up to ₹200 cashback.
+   - Group Buying ("Saath Mein Khareedo") unlocks flat 15% extra discount.
    - Wallet balance and coins automatically deduct at checkout for instant savings!
-4. 10% Advance COD Payment Policy:
-   - Cash on Delivery orders require a 10% online advance deposit (via UPI/Razorpay) to verify genuine delivery intent and prevent RTO losses.
-   - Remaining 90% is collected at doorstep upon delivery. 100% secure with instant refund on cancellation.
-5. Shipping & Express Delivery:
+6. 10% Advance COD Payment Policy:
+   - Cash on Delivery orders require a 10% online advance token (via UPI/Razorpay) to verify genuine delivery intent and prevent RTO/fake addresses.
+   - Remaining 90% is collected at doorstep upon delivery (Cash or UPI). 100% safe with instant refund if canceled before dispatch.
+7. Shipping & Express Delivery:
    - FREE delivery on orders above ₹500 (₹49 for smaller orders).
-   - Standard delivery: 3 to 5 business days pan-India via Shiprocket, Bluedart, Delhivery.
-6. Order Tracking:
+   - Standard delivery: 3 to 5 business days pan-India across 28,000+ pincodes via Shiprocket, Bluedart, Delhivery Express.
+8. Guest Checkout & Direct Shopping:
+   - Zero mandatory signup or passwords! Customers can place orders directly as guests with instant Pincode auto-lookup (city/state auto-filled).
+9. Order Tracking:
    - Current Order Context:\n${orderContext}
    - Reference order status accurately if user asks.
-7. WhatsApp Escalation Bridge:
-   - Always let users know they can connect directly with the human support desk on WhatsApp: ${WHATSAPP_SUPPORT_URL} (${WHATSAPP_PHONE}) or email ${SUPPORT_EMAIL}.
+10. "Bhari Questions" / Complex Grievances / Human Escalation:
+   - If user asks a complex question (e.g. damaged/missing item, delayed refund, disputed bank deduction, changing address after dispatch, bulk custom manufacturing orders for 50+ pcs, or explicitly asks for manager, owner, human agent, phone call):
+   - Acknowledge empathetically, explain the standard protocol, and provide a direct 1-tap WhatsApp escalation link to our senior executive desk: ${WHATSAPP_SUPPORT_URL} (${WHATSAPP_PHONE}).
    - Permanent Owner Admin: ${ADMIN_EMAIL}.`;
+
+      // Detect "Bhari" / Complex Questions or Explicit Human Escalation
+      const lower = cleanMessage.toLowerCase();
+      const isComplexQuery =
+        lower.includes('damage') ||
+        lower.includes('tuta') ||
+        lower.includes('kharab') ||
+        lower.includes('galat') ||
+        lower.includes('wrong item') ||
+        lower.includes('refund nahi aaya') ||
+        lower.includes('paisa nahi aaya') ||
+        lower.includes('paisa kat gaya') ||
+        lower.includes('fraud') ||
+        lower.includes('dispute') ||
+        lower.includes('address badal') ||
+        lower.includes('change address') ||
+        lower.includes('cancel dispatch') ||
+        lower.includes('bulk') ||
+        lower.includes('wholesale') ||
+        lower.includes('50 piece') ||
+        lower.includes('100 piece') ||
+        lower.includes('custom print') ||
+        lower.includes('human') ||
+        lower.includes('executive') ||
+        lower.includes('manager') ||
+        lower.includes('baat kar') ||
+        lower.includes('call kar') ||
+        lower.includes('admin') ||
+        lower.includes('owner') ||
+        lower.includes('insan') ||
+        lower.includes('complaint');
 
       // Check if GEMINI_API_KEY is available
       const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -2851,6 +2895,7 @@ Your goals:
               return res.json({
                 reply: replyText.trim(),
                 provider: candidateModel,
+                isEscalatedToWhatsApp: isComplexQuery,
                 whatsappUrl: WHATSAPP_SUPPORT_URL,
                 whatsappPhone: WHATSAPP_PHONE,
                 supportEmail: SUPPORT_EMAIL,
@@ -2864,32 +2909,41 @@ Your goals:
       }
 
       // High-precision algorithmic Hinglish fallback engine
-      const lower = cleanMessage.toLowerCase();
       let fallbackReply = '';
+      let isEscalatedToWhatsApp = false;
 
-      if (lower.includes('order') || lower.includes('track') || lower.includes('status') || lower.includes('kaha') || lower.includes('kab')) {
+      if (isComplexQuery) {
+        isEscalatedToWhatsApp = true;
+        fallbackReply = `🚨 **Human Support Executive Escalation Desk**:\n\nAapka sawal ya request hamare automated assistant se zyada personalized attention mangti hai. Humne aapki inquiry ko high priority mark kar diya hai!\n\n• **Direct Solution**: Hamare Senior Support Executive turant aapke issue (order resolution / dispute / custom order) ko solve karenge.\n• **WhatsApp Direct Desk**: [Click here to Chat on WhatsApp](${WHATSAPP_SUPPORT_URL}) (\`${WHATSAPP_PHONE}\`)\n• **Official Email**: \`${SUPPORT_EMAIL}\`\n\nNeeche diye green WhatsApp button par click karke turant live connect karein! 🙏`;
+      } else if (lower.includes('return') || lower.includes('replace') || lower.includes('exchange') || lower.includes('wapas') || lower.includes('badalna') || lower.includes('refund')) {
+        fallbackReply = `🔄 **AKSelling 7-Day Doorstep Return & Refund Policy**:\n\n• **7 Din Ka Easy Return**: Product deliver hone ke 7 dino ke andar aap replacement ya 100% refund request kar sakte hain agar size fit na ho ya koi defect ho.\n• **Free Doorstep Pickup**: Courier delivery partner aapke ghar se parcel bina kisi extra charge ke pickup karega.\n• **Instant 24-Hr Refund**: Pickup complete hote hi refund amount 24 ghante me aapke original payment source ya instant AKSelling Wallet me credit ho jata hai!\n• **Zero Cancellation Fee**: Order dispatch hone se pehle cancel karne par 100% full refund milta hai.`;
+      } else if (lower.includes('size') || lower.includes('chart') || lower.includes('fit') || lower.includes('measurement') || lower.includes('chhota') || lower.includes('bada') || lower.includes('fitting')) {
+        fallbackReply = `📏 **AKSelling Indian Standard Size & Fit Guide**:\n\n• **Standard Chest Sizes**:\n  - **S**: 38 inch\n  - **M**: 40 inch\n  - **L**: 42 inch\n  - **XL**: 44 inch\n  - **XXL**: 46 inch\n• **Streetwear Fit Guide**: AKSelling t-shirts modern relaxed boxy drop-shoulder cut me aati hain. Agar aapko trendy baggy streetwear look pasand hai toh apna true size order karein; standard regular slim fit ke liye 1 size chhota select kar sakte hain! 👕`;
+      } else if (lower.includes('order') || lower.includes('track') || lower.includes('status') || lower.includes('kaha') || lower.includes('kab')) {
         if (orderId) {
           fallbackReply = `📦 **Order Status Update (Order #${orderId})**:\n\nAapka order hamare automated warehouse system me register ho chuka hai aur dispatch processing me hai! 🚚\n\n• **Estimated Delivery**: 3-5 business days me aapke address par deliver ho jayega.\n• **Courier Partner**: Shiprocket / Bluedart Express.\n• **Tracking**: Order dispatch hote hi live AWB link aapko SMS aur Email par send kar diya jata hai.\n\nKoi urgent inquiry hai toh direct WhatsApp par connect karein: [Chat on WhatsApp](${WHATSAPP_SUPPORT_URL})`;
         } else {
-          fallbackReply = `📦 **Track Your Order**:\n\nApna **Order ID** (jaise \`AKS-123456\`) yahan enter kijiye ya app ke **Orders** tab me jakar live status stepper dekh sakte hain!\n\n• **Standard Delivery**: 3 se 5 business days pan-India.\n• **Courier**: Shiprocket / Bluedart / Delhivery Express.\n• **Help**: [WhatsApp Support](${WHATSAPP_SUPPORT_URL}) 🚚`;
+          fallbackReply = `📦 **Track Your Order**:\n\nApna **Order ID** (jaise \`ORD-123456\`) yahan enter kijiye ya app ke **Orders** tab me jakar live status stepper dekh sakte hain!\n\n• **Standard Delivery**: 3 se 5 business days pan-India.\n• **Courier**: Shiprocket / Bluedart / Delhivery Express.\n• **Live Help**: [WhatsApp Support](${WHATSAPP_SUPPORT_URL}) 🚚`;
         }
       } else if (lower.includes('240') || lower.includes('gsm') || lower.includes('fabric') || lower.includes('kapda') || lower.includes('cotton') || lower.includes('quality') || lower.includes('tshirt') || lower.includes('t-shirt')) {
-        fallbackReply = `👕 **AKSelling 240 GSM Fabric Specifications**:\n\n• **100% Combed Ringspun Cotton**: Heavyweight **240 GSM** super-dense knit jo standard 180 GSM t-shirts se kaafi zyada premium aur thick hoti hai.\n• **Bio-Washed**: Silicon enzyme bio-wash se fabric ultra-soft peach feel deta hai aur skin par gentle rehta hai.\n• **Pre-Shrunk & Non-Fading**: Multiple wash ke baad bhi na shrink hota hai aur na color fade hota hai.\n• **Streetwear Boxy Fit**: Double-needle stitched neck ribbing aur side seams jo perfect drop-shoulder look dete hain! ✨`;
+        fallbackReply = `👕 **AKSelling 240 GSM Fabric Specifications**:\n\n• **100% Combed Ringspun Cotton**: Heavyweight **240 GSM** super-dense knit jo market ki ordinary 160-180 GSM t-shirts se 2 guna zyada thick aur premium hoti hai.\n• **Bio-Washed**: Silicon enzyme bio-wash se fabric ultra-soft peach feel deta hai aur skin par rash-free rehta hai.\n• **Pre-Shrunk & Non-Fading**: Multiple wash ke baad bhi na shrink hota hai aur na color fade hota hai.\n• **Direct Factory Price**: Bina kisi middleman markup ke direct Tirupur textile manufacturing price par milta hai! ✨`;
       } else if (lower.includes('bonus') || lower.includes('30') || lower.includes('wallet') || lower.includes('coin') || lower.includes('paisa') || lower.includes('cashback') || lower.includes('reward')) {
-        fallbackReply = `💰 **AKSelling ₹30 Wallet Bonus & Rewards**:\n\n• **Instant ₹30 Welcome Bonus**: Har naye customer ko signup karte hi wallet me direct ₹30 credit milta hai!\n• **Roz Check-In**: App par daily aane se ₹5 se ₹50 tak ke shopping coins milte hain.\n• **Spin & Win**: Order complete karne par free lucky spin milta hai jisme ₹200 tak additional cash jeet sakte hain.\n• **Automatic Checkout Discount**: Checkout karte waqt wallet balance direct aapke order total se deduct ho jata hai! 🎉`;
-      } else if (lower.includes('advance') || lower.includes('10%') || lower.includes('cod') || lower.includes('cash on delivery') || lower.includes('payment')) {
-        fallbackReply = `🛡️ **10% Advance Token Payment for Cash on Delivery**:\n\n• **Kyu zaroori hai?**: Fake addresses aur return-to-origin (RTO) parcels ko filter karne ke liye COD orders par 10% online token payment (UPI/GPay/PhonePe/Card) secure gateway se liya jata hai.\n• **Doorstep Payment**: Baki bacha 90% payment aapko parcel receive karte waqt courier partner ko cash ya UPI se dena hota hai.\n• **Safe & Guaranteed**: Order cancel hone par 10% advance turant aapke bank account me refund ho jata hai! 🔒`;
-      } else if (lower.includes('shipping') || lower.includes('delivery') || lower.includes('charges') || lower.includes('charge') || lower.includes('free delivery') || lower.includes('speed')) {
-        fallbackReply = `🚚 **Shipping & Express Delivery Details**:\n\n• **FREE Shipping**: ₹500 se zyada ke order par delivery bilkul FREE hai! (₹500 se kam par ₹49 flat fee).\n• **Delivery Speed**: 3 se 5 business days me pan-India delivery guaranteed.\n• **Insured Delivery**: Sabhi shipments tamper-evident packaging ke sath insured hote hain. 📦`;
-      } else if (lower.includes('whatsapp') || lower.includes('admin') || lower.includes('contact') || lower.includes('call') || lower.includes('owner') || lower.includes('phone') || lower.includes('help')) {
-        fallbackReply = `💬 **Direct Admin & WhatsApp Support Escalation**:\n\nAap direct hamari official executive desk se jud sakte hain:\n\n• **WhatsApp Support**: [Click to Chat on WhatsApp](${WHATSAPP_SUPPORT_URL}) (\`${WHATSAPP_PHONE}\`)\n• **Support Email**: \`${SUPPORT_EMAIL}\`\n• **Owner Admin**: \`${ADMIN_EMAIL}\`\n\nHamari dedicated customer support team 24/7 aapki sahayata ke liye hazir hai! 🙏`;
+        fallbackReply = `💰 **AKSelling ₹30 Wallet Bonus & Rewards**:\n\n• **Instant ₹30 Welcome Bonus**: Har naye customer ko visit/signup karte hi wallet me direct ₹30 credit milta hai!\n• **Roz Check-In**: App par daily aane se ₹5 se ₹50 tak ke shopping coins milte hain.\n• **Spin & Win**: Order complete karne par free lucky spin milta hai jisme ₹200 tak additional cash jeet sakte hain.\n• **Saath Mein Khareedo**: WhatsApp par friend ke sath order share karne par flat 15% instant extra discount milta hai!\n• **Automatic Checkout Deduction**: Payment karte waqt wallet balance direct deduct ho jata hai! 🎉`;
+      } else if (lower.includes('advance') || lower.includes('10%') || lower.includes('cod') || lower.includes('cash on delivery') || lower.includes('payment') || lower.includes('upi')) {
+        fallbackReply = `🛡️ **Payment Modes & 10% Advance COD System**:\n\n• **Payment Options**: 100% Secure UPI (Google Pay, PhonePe, Paytm, BHIM), Debit/Credit Cards (RuPay, Visa, Mastercard) & Net Banking.\n• **10% Advance for COD**: Fake orders aur RTO losses rokne ke liye COD orders par 10% online token payment liya jata hai.\n• **90% at Doorstep**: Baki bacha 90% payment parcel receive karte waqt courier wale ko cash ya UPI se dena hota hai.\n• **100% Safe**: Agar order cancel hota hai toh 10% advance turant aapke account me wapas mil jata hai! 🔒`;
+      } else if (lower.includes('shipping') || lower.includes('delivery') || lower.includes('charges') || lower.includes('charge') || lower.includes('free delivery') || lower.includes('speed') || lower.includes('pincode')) {
+        fallbackReply = `🚚 **Shipping & Express Delivery Details**:\n\n• **FREE Shipping**: ₹500 se zyada ke sabhi orders par delivery bilkul FREE hai! (₹500 se kam par flat ₹49 delivery fee).\n• **Pan-India Coverage**: 28,000+ pincodes across all Indian states.\n• **Speed**: Metro cities me 2-3 din aur rest of India me 3-5 business days.\n• **Insured Delivery**: Tamper-evident secure packaging ke sath safely deliver hota hai. 📦`;
+      } else if (lower.includes('whatsapp') || lower.includes('contact') || lower.includes('phone') || lower.includes('help')) {
+        isEscalatedToWhatsApp = true;
+        fallbackReply = `💬 **Direct Admin & WhatsApp Support Desk**:\n\nAap direct hamari official executive desk se connect ho sakte hain:\n\n• **WhatsApp Support**: [Click to Chat on WhatsApp](${WHATSAPP_SUPPORT_URL}) (\`${WHATSAPP_PHONE}\`)\n• **Support Email**: \`${SUPPORT_EMAIL}\`\n• **Owner Admin**: \`${ADMIN_EMAIL}\`\n\nHamari customer care team 24/7 aapki sahayata ke liye live hai! 🙏`;
       } else {
-        fallbackReply = `Namaste! 🙏 AKSelling 24/7 AI Smart Assistant me aapka swagat hai!\n\nMain aapki kya madad kar sakta hoon? Aap mujhse pooch sakte hain:\n\n1. 📦 **Order Status & Live Tracking** (Apna Order ID batayein)\n2. 👕 **240 GSM Heavy-Cotton Fabric Specs**\n3. 💰 **₹30 Wallet Welcome Bonus & Daily Coins**\n4. 🛡️ **10% Advance COD Payment System**\n5. 🚚 **Free Shipping & Delivery Timeline**\n\nAgar aapko direct human support se baat karni hai, toh aap [Direct WhatsApp Support](${WHATSAPP_SUPPORT_URL}) par click kar sakte hain! ✨`;
+        fallbackReply = `Namaste! 🙏 Welcome to AKSelling 24/7 AI Smart Assistant!\n\nMain aapki kya madad kar sakta hoon? Aap mujhse pooch sakte hain:\n\n1. 📦 **Order Status & Live Tracking** (Apna Order ID batayein)\n2. 🔄 **7-Day Easy Return & Refund Policy**\n3. 👕 **240 GSM Heavy-Cotton Fabric Specs**\n4. 📏 **Size Chart & Streetwear Fit Guide**\n5. 💰 **₹30 Wallet Welcome Bonus & Daily Coins**\n6. 🛡️ **10% Advance COD Payment System**\n7. 🚚 **Free Shipping & Delivery Timeline**\n\nKisi bhi complex ya personalized query ke liye aap hamare [WhatsApp Support Desk](${WHATSAPP_SUPPORT_URL}) par direct baat kar sakte hain! ✨`;
       }
 
       return res.json({
         reply: fallbackReply,
         provider: 'akselling-intelligent-engine',
+        isEscalatedToWhatsApp,
         whatsappUrl: WHATSAPP_SUPPORT_URL,
         whatsappPhone: WHATSAPP_PHONE,
         supportEmail: SUPPORT_EMAIL,
@@ -2897,6 +2951,211 @@ Your goals:
     } catch (err: unknown) {
       console.error('AI Support route error:', err);
       const message = err instanceof Error ? err.message : 'Error processing support chat';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // REVOLUTIONARY AI SALES MASTER (AKSELLING INDORE)
+  // -------------------------------------------------------------
+  app.post('/api/sales-master/chat', async (req, res) => {
+    try {
+      const { message, history = [], currentProductId, customerContext, generateVoice = false, liveProducts } = req.body;
+      const cleanMessage = String(message || '').trim();
+
+      // Read current store products + merge with live Firebase Firestore products from client
+      const storeProducts = readDataFile<Array<Record<string, unknown>>>(PRODUCTS_FILE, []);
+      if (Array.isArray(liveProducts) && liveProducts.length > 0) {
+        const seenIds = new Set(storeProducts.map(p => String(p.id)));
+        let hasNew = false;
+        for (const lp of liveProducts) {
+          if (!lp || !lp.id) continue;
+          if (!seenIds.has(String(lp.id))) {
+            storeProducts.unshift(lp);
+            seenIds.add(String(lp.id));
+            hasNew = true;
+          } else {
+            const idx = storeProducts.findIndex(p => String(p.id) === String(lp.id));
+            if (idx >= 0) {
+              storeProducts[idx] = { ...storeProducts[idx], ...lp };
+              hasNew = true;
+            }
+          }
+        }
+        if (hasNew) {
+          try {
+            writeDataFile(PRODUCTS_FILE, storeProducts);
+          } catch (err) {
+            console.warn('[Products Sync Disk Cache Notice]:', err);
+          }
+        }
+      }
+
+      const catalogSummary = storeProducts.slice(0, 25).map(p => ({
+        id: p.id,
+        title: p.title,
+        price: p.price,
+        mrp: p.mrp,
+        fabric: p.fabric || '100% Combed Cotton',
+        weight: p.weight || '180 GSM',
+        sizes: p.sizes || ['S', 'M', 'L', 'XL'],
+        colors: p.colors || ['Black'],
+        category: p.category || 'fashion',
+        description: typeof p.description === 'string' ? p.description.slice(0, 180) : '',
+        inStock: p.inStock !== false,
+        image: p.image || p.imageUrl || (Array.isArray(p.images) ? p.images[0] : null)
+      }));
+
+      const systemPrompt = `You are 'Bhaiya ji', the master salesman, co-founder, and expert tailor at the counter of 'AKSelling', direct factory manufacturing & printing brand in Indore, Madhya Pradesh.
+
+VOICE & GENDER IDENTITY (STRICT MALE):
+• You are a mature, confident, warm, and energetic Indian MALE shopkeeper ('bhai', 'dost').
+• Your speech is a deep, masculine, respectful, street-smart brotherly voice. 
+• Language: 100% natural, conversational Hindi / Hinglish as spoken in Indore/Madhya Pradesh ("Namaste bhai! Aao aao, bilkul sahi dukaan par aaye ho!", "Bhai tension bilkul mat lo, ekdum 1st quality 180 GSM combed cotton milega").
+• Absolutely NO robotic tone and NO female persona. You are purely 'Bhaiya ji' (the trusted Indian dukanwala brother).
+• Keep replies punchy (2 to 4 short conversational sentences max), friendly, and direct.
+
+REAL-TIME FIREBASE DATABASE SYNCHRONIZATION:
+• You are directly synchronized with the store's Firebase database catalog shown below.
+• Whenever admin adds a new product or apparel, you immediately know its fabric (180 GSM bio-wash, 240/260 GSM heavy drop shoulder, etc.), price, sizes, and stock.
+• You must quote exact product titles, fabric GSM, and prices from this catalog!
+
+SMART SALES GUIDANCE & DEAL CLOSING (ASLI DUKANWALA CLOSING):
+1. GREETING: "Namaste Boss, main AKSelling ki taraf se aapke liye kya seva pradan kar sakta hoon aur kya madad kar sakta hoon?"
+2. REQUIREMENT DISCOVERY: Ask if they want regular daily wear (180 GSM bio-wash) or trending oversized streetwear (240/260 GSM drop shoulder), their size (S, M, L, XL, XXL), and color preference.
+3. FABRIC & QUALITY EXPLANATION:
+   - 180 GSM: 100% pure combed bio-wash cotton. Light, ultra-breathable daily wear, zero shrinkage, no lint.
+   - 240/260 GSM: Heavy-duty luxury streetwear drop shoulder tee, premium thick drape.
+   - DTF / Screen Printing: High-definition graphics that survive 50+ wash cycles without cracking.
+4. RECOMMENDATION: Recommend 1 or 2 matching products from the live catalog below with exact title and price.
+5. CLOSING THE DEAL:
+   - COD (Cash on Delivery) available with doorstep verification.
+   - 10% advance fast-dispatch discount option.
+   - 7-Day Doorstep Replacement Guarantee if size doesn't fit perfectly.
+   - ₹30 instant signup bonus in their AKSelling wallet!
+   - Urge them: "Bhai abhi counter par book kar lo, size khatam hone se pehle seedha factory se dispatch karwa deta hu!"
+
+LIVE SYNCHRONIZED CATALOG FROM FIREBASE DATABASE:
+${JSON.stringify(catalogSummary, null, 1)}
+
+Current viewing product ID if any: ${currentProductId || 'None'}
+Customer context: ${JSON.stringify(customerContext || {})}`;
+
+      const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+      let replyText = '';
+      let audioBase64: string | null = null;
+      let recommendedProductIds: string[] = [];
+
+      if (apiKey) {
+        try {
+          const ai = new GoogleGenAI({
+            apiKey,
+            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+          });
+
+          // Text generation
+          const response = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: [
+              ...history.slice(-8).map((h: Record<string, unknown>) => ({
+                role: h.role === 'user' ? 'user' : 'model',
+                parts: [{ text: String(h.text || h.message || '') }],
+              })),
+              {
+                role: 'user',
+                parts: [{ text: cleanMessage || 'Namaste Bhaiya ji' }],
+              },
+            ],
+            config: {
+              systemInstruction: systemPrompt,
+              temperature: 0.75,
+              maxOutputTokens: 350,
+            },
+          });
+
+          replyText = response.text || '';
+
+          // High-speed deep male TTS voice generation
+          if (generateVoice && replyText.trim()) {
+            try {
+              const ttsResponse = await ai.models.generateContent({
+                model: 'gemini-3.8-flash-lite-tts',
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [
+                      {
+                        text: replyText.slice(0, 300),
+                        speechMetadata: {
+                          style: 'Deep, rich, confident, warm Indian male shopkeeper (Bhaiya ji) speaking natural respectful Hindi with Indore shopkeeper dialect. Mature masculine resonance.',
+                        },
+                      },
+                    ],
+                  },
+                ],
+                config: {
+                  responseModalities: ['AUDIO'],
+                  speechConfig: {
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: 'Charon' }, // Deep masculine male voice
+                    },
+                  },
+                },
+              });
+
+              const audioData = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+              if (audioData) {
+                audioBase64 = audioData;
+              }
+            } catch (ttsErr) {
+              console.warn('[Sales Master TTS Notice]:', ttsErr);
+            }
+          }
+        } catch (genErr) {
+          console.warn('[Sales Master Gemini API Notice]:', genErr);
+        }
+      }
+
+      // Algorithmic Fallback if Gemini key is busy or offline
+      if (!replyText.trim()) {
+        const lower = cleanMessage.toLowerCase();
+        if (!cleanMessage || lower.includes('namaste') || lower.includes('hello') || lower.includes('hi')) {
+          replyText = 'Namaste Boss, main AKSelling ki taraf se aapke liye kya seva pradan kar sakta hoon aur kya madad kar sakta hoon? Indore ki sabse badiya factory quality t-shirts aur prints milenge!';
+        } else if (lower.includes('180') || lower.includes('gsm') || lower.includes('fabric') || lower.includes('cloth') || lower.includes('kapda')) {
+          replyText = 'Bhai 180 GSM ka matlab hai 100% pure combed bio-wash cotton! Ye kapda garmi mein ekdum halka, soft aur paseena sokhne wala hota hai. Rang bilkul fade nahi hota!';
+        } else if (lower.includes('oversized') || lower.includes('drop shoulder') || lower.includes('240')) {
+          replyText = 'Bhai oversized t-shirt mein hum 240 GSM heavy luxury fabric dete hain. Iska drop shoulder fit ekdum streetwear look deta hai aur collar bilkul stretch nahi hota!';
+        } else if (lower.includes('print') || lower.includes('custom') || lower.includes('dtf')) {
+          replyText = 'Bhai hamare paas High-Definition DTF printing hoti hai. 50+ wash ke baad bhi print na fategi na utregi. Aap apna design bhej kar custom bhi banwa sakte ho!';
+        } else if (lower.includes('rate') || lower.includes('sasta') || lower.includes('offer') || lower.includes('price') || lower.includes('discount')) {
+          replyText = 'Bhai direct factory rate hai ₹499 se shuru! COD available hai, 10% advance par extra discount hai, aur ₹30 aapke wallet mein pehle se jama hain!';
+        } else {
+          replyText = 'Bhai tension mat lo! AKSelling Indore se seedha aapke doorstep par 7-day replacement guarantee ke sath maal pahuchega. Aap bas apna size aur pasandida color batao!';
+        }
+      }
+
+      // Match recommended products from live catalog
+      const lowerReply = replyText.toLowerCase();
+      const matchedProducts = catalogSummary.filter(p =>
+        lowerReply.includes(p.title.toLowerCase()) ||
+        lowerReply.includes(String(p.id).toLowerCase())
+      );
+      if (matchedProducts.length > 0) {
+        recommendedProductIds = matchedProducts.slice(0, 2).map(p => String(p.id));
+      } else if (catalogSummary.length > 0 && (lowerReply.includes('t-shirt') || lowerReply.includes('oversized') || lowerReply.includes('cotton'))) {
+        recommendedProductIds = [String(catalogSummary[0].id)];
+      }
+
+      const recommendedFull = catalogSummary.filter(p => recommendedProductIds.includes(String(p.id)));
+
+      res.json({
+        reply: replyText,
+        audioBase64,
+        recommendedProducts: recommendedFull,
+      });
+    } catch (err: unknown) {
+      console.error('Sales Master error:', err);
+      const message = err instanceof Error ? err.message : 'Error in sales master';
       res.status(500).json({ error: message });
     }
   });

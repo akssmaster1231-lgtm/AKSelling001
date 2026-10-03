@@ -211,7 +211,7 @@ export default function Header({
               <button onClick={onNavigateHome} className="flex items-center gap-1.5 shrink-0 group text-left" id="header-logo-btn">
                 <img
                   src="/ak_brand_logo.jpg"
-                  alt="AK Yadav Print / AKSelling"
+                  alt="AKSelling"
                   className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-amber-400/50 shadow-xs group-hover:border-amber-300 transition-all shrink-0"
                 />
                 <div className="flex flex-col leading-tight">
@@ -219,7 +219,7 @@ export default function Header({
                     AK<span className="text-amber-400 group-hover:text-yellow-300 transition-colors">Selling</span>
                   </span>
                   <span className="text-[9px] font-extrabold text-amber-300/90 tracking-wider uppercase">
-                    AK Yadav Print
+                    AKSelling Store
                   </span>
                 </div>
               </button>

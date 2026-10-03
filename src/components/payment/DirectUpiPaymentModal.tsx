@@ -320,14 +320,14 @@ export default function DirectUpiPaymentModal({
             <div className="flex items-center gap-2.5">
               <img
                 src="/ak_brand_logo.jpg"
-                alt="AK Yadav Print / AKSelling"
+                alt="AKSelling"
                 className="w-10 h-10 rounded-xl object-contain border border-amber-400/50 shadow-sm bg-slate-950 shrink-0"
               />
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-base font-black leading-tight text-white">AK Yadav Print</h3>
+                  <h3 className="text-base font-black leading-tight text-white">AKSelling</h3>
                   <span className="text-[10px] font-black bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded shadow-2xs">
-                    AKSelling
+                    Verified
                   </span>
                 </div>
                 <p className="text-[11px] text-amber-200/90 font-medium">

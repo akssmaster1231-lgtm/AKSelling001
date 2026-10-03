@@ -83,7 +83,7 @@ export function ShippingLabelModal({
             <div className="grid grid-cols-2 gap-2 text-[10px] pt-1">
               <div>
                 <p className="font-bold uppercase text-gray-600">Return Address (Seller):</p>
-                <p className="font-bold">AK Yadav Prints Hub</p>
+                <p className="font-bold">AKSelling Hub</p>
                 <p>Khasra 42, Okhla Phase 3</p>
                 <p>New Delhi - 110020</p>
               </div>

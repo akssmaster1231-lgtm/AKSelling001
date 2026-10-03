@@ -198,7 +198,7 @@ export default function BankDetailsModal({
               type="text"
               value={details.beneficiaryName}
               onChange={e => setDetails({ ...details, beneficiaryName: e.target.value.toUpperCase() })}
-              placeholder="e.g. AK YADAV PRINTS ENTERPRISES"
+              placeholder="e.g. AKSELLING ENTERPRISES"
               className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl font-bold uppercase text-gray-900 focus:bg-white focus:ring-1 focus:ring-[#2874f0]"
               required
             />

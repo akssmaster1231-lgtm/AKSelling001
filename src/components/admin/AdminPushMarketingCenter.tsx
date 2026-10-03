@@ -27,7 +27,7 @@ export default function AdminPushMarketingCenter() {
       id: 'flash_sale',
       label: '⚡ Flash Sale (50% Off)',
       title: '⚡ 50% OFF Midnight Flash Drop is LIVE!',
-      message: 'Exclusive limited collection drop by AK Yadav Print. Flat 50% off for the next 2 hours!',
+      message: 'Exclusive limited collection drop by AKSelling. Flat 50% off for the next 2 hours!',
       url: '/?tab=deals',
       icon: Zap,
       color: 'from-amber-500 to-orange-500',
@@ -98,7 +98,7 @@ export default function AdminPushMarketingCenter() {
           link: targetUrl.trim(),
           read: false,
           createdAt: new Date().toISOString(),
-          senderName: 'AK Yadav Print Admin',
+          senderName: 'AKSelling Admin',
         });
       } catch (err) {
         console.warn('Firestore notification write notice:', err);

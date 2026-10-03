@@ -192,6 +192,8 @@ export async function fetchProductsByCategory(category: string): Promise<Product
   return matched;
 }
 
+const LEGACY_DUMMY_IDS = new Set(['sp_1', 'sp_2', 'sp_3', 'sp_4', 'sp_5', 'demo_tshirt']);
+
 function getLocalSellerProducts(): Product[] {
   try {
     const saved = safeLocalStorageGetItem('akselling_seller_products') || localStorage.getItem('akselling_seller_products');
@@ -199,7 +201,7 @@ function getLocalSellerProducts(): Product[] {
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter(p => !p.id?.startsWith('sp_') && p.catalogId !== 'CAT-98421' && p.catalogId !== 'CAT-89302' && p.catalogId !== 'CAT-74910' && p.catalogId !== 'CAT-62914' && p.catalogId !== 'CAT-51928' && p.catalogId !== 'CAT-41092')
+      .filter(p => !LEGACY_DUMMY_IDS.has(p.id) && p.catalogId !== 'CAT-98421' && p.catalogId !== 'CAT-89302' && p.catalogId !== 'CAT-74910' && p.catalogId !== 'CAT-62914' && p.catalogId !== 'CAT-51928' && p.catalogId !== 'CAT-41092')
       .map(p => {
         const resolvedImgs = resolveProductImages(p);
         return {

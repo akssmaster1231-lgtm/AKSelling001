@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -42,8 +42,9 @@ import { useI18n, type Language } from '@/i18n';
 import { getCleanSellerStoreName } from '@/utils/storageHelper';
 import { isVerifiedOwnerAdmin } from '@/utils/sellerWhitelist';
 import { WalletPage } from '@/pages/WalletPage';
-import { getLocalWalletCache } from '@/utils/walletService';
+import { getLocalWalletCache, initializeUserWallet } from '@/utils/walletService';
 import { SIGNUP_BONUS_FLAT } from '@/utils/cashbackEngine';
+import { PWAInstallButton } from '@/components/pwa/PWAInstallButton';
 
 interface AccountPageProps {
   onLogout: () => void;
@@ -103,6 +104,69 @@ export default function AccountPage({
   const [activeSellerName, setActiveSellerName] = useState<string>(() => {
     return getCleanSellerStoreName();
   });
+
+  // Reactive synchronized wallet balance for 100% real-time consistency across views
+  const getActiveWalletBalance = useCallback(() => {
+    const uid = user?.id || 'guest';
+    const cached = getLocalWalletCache(uid);
+    if (typeof user?.walletBalance === 'number' && user.walletBalance > 0) {
+      return user.walletBalance;
+    }
+    if (typeof cached.walletBalance === 'number' && cached.walletBalance > 0) {
+      return cached.walletBalance;
+    }
+    return SIGNUP_BONUS_FLAT; // Guaranteed ₹30 welcome bonus
+  }, [user?.id, user?.walletBalance]);
+
+  const [walletBalance, setWalletBalance] = useState<number>(getActiveWalletBalance);
+
+  useEffect(() => {
+    setWalletBalance(getActiveWalletBalance());
+  }, [getActiveWalletBalance]);
+
+  useEffect(() => {
+    const uid = user?.id || 'guest';
+    // Ensure wallet is initialized and credited with ₹30 even before opening wallet page
+    initializeUserWallet(uid, {
+      name: user?.name,
+      phone: user?.phone,
+      email: user?.email,
+    }).then((res) => {
+      setWalletBalance(res.walletBalance);
+    }).catch(() => {});
+
+    const syncWallet = () => {
+      setWalletBalance(getActiveWalletBalance());
+    };
+
+    window.addEventListener('akselling_wallet_updated', syncWallet);
+    window.addEventListener('focus', syncWallet);
+    window.addEventListener('storage', syncWallet);
+    return () => {
+      window.removeEventListener('akselling_wallet_updated', syncWallet);
+      window.removeEventListener('focus', syncWallet);
+      window.removeEventListener('storage', syncWallet);
+    };
+  }, [user?.id, user?.name, user?.phone, user?.email, getActiveWalletBalance]);
+
+  // Track subScreen for mobile edge-swipe & hardware back button handling
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__akselling_has_subscreen = Boolean(subScreen);
+      window.dispatchEvent(new CustomEvent('akselling_subscreen_changed'));
+    }
+    const handleSubBack = () => {
+      setSubScreen(null);
+    };
+    window.addEventListener('akselling_back_pressed', handleSubBack);
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.__akselling_has_subscreen = false;
+        window.dispatchEvent(new CustomEvent('akselling_subscreen_changed'));
+      }
+      window.removeEventListener('akselling_back_pressed', handleSubBack);
+    };
+  }, [subScreen]);
 
   useEffect(() => {
     const checkSeller = () => {
@@ -270,7 +334,7 @@ export default function AccountPage({
                 </div>
                 <div className="flex items-baseline gap-1.5 mt-0.5">
                   <span className="text-2xl font-black text-white">
-                    ₹{user?.walletBalance ?? getLocalWalletCache(user?.id || 'guest').walletBalance ?? SIGNUP_BONUS_FLAT}
+                    ₹{walletBalance}
                   </span>
                   <span className="text-xs text-blue-200">verified cash balance</span>
                 </div>
@@ -291,12 +355,17 @@ export default function AccountPage({
         </button>
       </div>
 
+      {/* Play Store / PWA Install Action Card */}
+      <div className="px-3 mt-3">
+        <PWAInstallButton />
+      </div>
+
       {/* Account Settings Section */}
       <Section title="Account Settings">
         <SettingItem
           icon={<Wallet size={19} className="text-amber-600" />}
-          label="AKSelling Rewards Wallet & Cashout"
-          value={`₹${user?.walletBalance ?? 0} Available`}
+          label="Rewards Wallet & Cashout"
+          value={`₹${walletBalance} Available`}
           onClick={() => setSubScreen('wallet')}
         />
         <SettingItem icon={<Smartphone size={19} />} label={t('manageDevices')} onClick={() => setSubScreen('devices')} />
@@ -439,7 +508,7 @@ function SubScreenRenderer({
   onOrders: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[65] bg-gray-50 overflow-y-auto animate-fade-in flex flex-col">
+    <div className="fixed inset-0 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-[480px] sm:w-full sm:shadow-2xl sm:border-x sm:border-slate-200 z-[65] bg-gray-50 overflow-y-auto animate-fade-in flex flex-col">
       <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 z-10 shadow-xs">
         <button onClick={onBack} className="p-1.5 -ml-1.5 text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
           <ChevronLeft size={22} />
@@ -517,12 +586,16 @@ function SettingItem({ icon, label, value, onClick }: { icon: React.ReactNode; l
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3.5 px-4 py-3.5 hover:bg-gray-50 transition-colors text-left"
+      className="w-full flex items-center gap-3 px-3.5 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left min-w-0 cursor-pointer"
     >
       <span className="text-gray-500 shrink-0">{icon}</span>
-      <span className="flex-1 text-sm font-medium text-gray-800">{label}</span>
-      {value && <span className="text-xs font-medium text-gray-400">{value}</span>}
-      <ChevronRight size={17} className="text-gray-300 shrink-0" />
+      <span className="flex-1 text-xs sm:text-sm font-medium text-gray-800 truncate">{label}</span>
+      {value && (
+        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
+          {value}
+        </span>
+      )}
+      <ChevronRight size={16} className="text-gray-400 shrink-0" />
     </button>
   );
 }

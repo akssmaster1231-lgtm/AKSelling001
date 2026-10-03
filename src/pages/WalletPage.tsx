@@ -16,6 +16,11 @@ import {
   Loader2,
   FileText,
   Plus,
+  Coins,
+  Share2,
+  Check,
+  RefreshCw,
+  Gift,
 } from 'lucide-react';
 import { useAuth } from '@/auth-context';
 import type { WalletTransaction, WithdrawalFormData, WithdrawalRequest } from '@/types/wallet';
@@ -33,8 +38,21 @@ import {
   submitWithdrawalRequest,
   subscribeUserWithdrawalRequests,
 } from '@/utils/walletService';
+import {
+  getStreakData,
+  convertCoinsToCash,
+  redeemCoinsToCash,
+  COINS_PER_FIVE_RUPEES,
+  RUPEES_PER_HUNDRED_COINS,
+} from '@/utils/gamificationService';
+import {
+  getUserReferralCode,
+  getReferralShareUrl,
+  REFERRAL_REWARD_AMOUNT,
+} from '@/utils/referralService';
 import { DigitalParchiModal } from '@/components/DigitalParchiModal';
 import { AddMoneyModal } from '@/components/wallet/AddMoneyModal';
+import DailyStreakModal from '@/components/gamification/DailyStreakModal';
 
 interface WalletPageProps {
   onBack: () => void;
@@ -82,6 +100,57 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
 
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
   const [selectedParchi, setSelectedParchi] = useState<WithdrawalRequest | null>(null);
+
+  // Shopping Coins & Streak State
+  const [streakData, setStreakData] = useState(() => getStreakData());
+  const [showStreakModal, setShowStreakModal] = useState(false);
+  const [coinsNotice, setCoinsNotice] = useState<string | null>(null);
+  const [copiedRef, setCopiedRef] = useState(false);
+
+  useEffect(() => {
+    const handleStreak = () => setStreakData(getStreakData());
+    window.addEventListener('akselling_streak_updated', handleStreak);
+    return () => window.removeEventListener('akselling_streak_updated', handleStreak);
+  }, []);
+
+  const handleConvertCoins = () => {
+    if (streakData.coinsBalance < COINS_PER_FIVE_RUPEES) {
+      setCoinsNotice(`Minimum ${COINS_PER_FIVE_RUPEES} Shopping Coins required to convert into ₹${RUPEES_PER_HUNDRED_COINS} cash.`);
+      setTimeout(() => setCoinsNotice(null), 3500);
+      return;
+    }
+    const res = redeemCoinsToCash(userId, 100);
+    if (res.success) {
+      setStreakData(getStreakData());
+      setBalance((prev) => prev + res.cashAdded);
+      setCoinsNotice(res.message);
+      setTimeout(() => setCoinsNotice(null), 3500);
+    } else {
+      setCoinsNotice(res.message);
+      setTimeout(() => setCoinsNotice(null), 3500);
+    }
+  };
+
+  const refCode = getUserReferralCode(user);
+  const handleShareReferral = async () => {
+    const url = getReferralShareUrl(undefined, user);
+    const text = `🛍️ Shop on AKSelling & get flat ₹30 instant signup cash! Use my referral code: ${refCode}\n\nShop here: ${url}`;
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'Join AKSelling & Get ₹30 Bonus', text, url });
+        return;
+      } catch {
+        // fallback
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedRef(true);
+      setTimeout(() => setCopiedRef(false), 2500);
+    } catch {
+      // fallback
+    }
+  };
 
   // Sync with auth user updates
   useEffect(() => {
@@ -356,6 +425,144 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
                 <span>+ खुद का रुपया जोड़ें (Add Money to Wallet)</span>
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* Shopping Coins & Conversion Economy Card */}
+        <section className="rounded-3xl bg-gradient-to-br from-amber-500/10 via-yellow-500/5 to-amber-600/10 border border-amber-300/80 p-5 shadow-sm space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-xs">
+                <Coins size={22} className="text-slate-950" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <span>AKSelling Shopping Coins</span>
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                    Rewards Economy
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">Collect daily coins and convert them to real cash</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] font-bold uppercase text-slate-400 block">Locked Rate</span>
+              <span className="text-xs font-black text-slate-900 bg-amber-200/80 px-2 py-0.5 rounded-md">
+                100 Coins = ₹5 Cash
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="bg-white p-3 rounded-2xl border border-amber-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Coins Balance</span>
+              <p className="text-2xl font-black text-amber-600 mt-0.5">
+                {streakData.coinsBalance} <span className="text-xs text-slate-500 font-semibold">Coins</span>
+              </p>
+              <p className="text-[11px] font-bold text-slate-600 mt-0.5">
+                Worth ₹{convertCoinsToCash(streakData.coinsBalance)} INR Cash
+              </p>
+            </div>
+
+            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Daily Streak</span>
+                <p className="text-lg font-black text-slate-900 mt-0.5">
+                  Day {streakData.currentStreak} <span className="text-xs text-amber-600 font-bold">Streak</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStreakModal(true)}
+                className="mt-1 w-full text-[11px] font-black text-amber-900 bg-amber-100 hover:bg-amber-200 py-1.5 px-2 rounded-xl transition-colors flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <Gift size={12} />
+                <span>Roz Check-In</span>
+              </button>
+            </div>
+          </div>
+
+          {coinsNotice && (
+            <div className="bg-amber-100 border border-amber-300 text-amber-950 text-xs font-bold p-2.5 rounded-xl animate-fade-in flex items-center gap-1.5">
+              <Sparkles size={14} className="text-amber-600 shrink-0" />
+              <span>{coinsNotice}</span>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleConvertCoins}
+              disabled={streakData.coinsBalance < COINS_PER_FIVE_RUPEES}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                streakData.coinsBalance >= COINS_PER_FIVE_RUPEES
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md hover:opacity-95 active:scale-95'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <RefreshCw size={13} />
+              <span>Convert 100 Coins to ₹5 Cash</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowStreakModal(true)}
+              className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              7-Day Streak
+            </button>
+          </div>
+        </section>
+
+        {/* Referral & Share Earnings System Card */}
+        <section className="rounded-3xl bg-gradient-to-br from-blue-900 to-indigo-950 text-white p-5 shadow-lg border border-blue-800/50 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-2xl bg-blue-500/20 text-amber-300 flex items-center justify-center font-black border border-blue-400/30">
+                <Share2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-white flex items-center gap-1.5">
+                  <span>Refer & Earn Cash</span>
+                  <span className="text-[10px] font-bold text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded-full border border-amber-400/40">
+                    ₹30 / Friend
+                  </span>
+                </h3>
+                <p className="text-xs text-blue-200">Fixed ₹25–₹30 reward per purchase (Max ₹30 cap)</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-2.5 py-1 rounded-full border border-emerald-400/30">
+              Min Payout ₹100
+            </span>
+          </div>
+
+          <p className="text-xs text-blue-200 leading-relaxed">
+            Share products or the AKSelling app with friends. When they place an order with your link,{' '}
+            <strong className="text-amber-300 font-bold">flat ₹{REFERRAL_REWARD_AMOUNT} cash</strong> is credited directly to your Cash Wallet!
+          </p>
+
+          <div className="flex items-center gap-2 bg-white/10 rounded-2xl p-2 border border-white/10">
+            <div className="flex-1 min-w-0 px-2">
+              <span className="text-[9px] uppercase font-bold text-blue-300 block">Your Referral Code</span>
+              <span className="text-sm font-mono font-black text-white tracking-wider truncate block">{refCode}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleShareReferral}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
+            >
+              {copiedRef ? (
+                <>
+                  <Check size={14} />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Share2 size={14} />
+                  <span>Share & Earn</span>
+                </>
+              )}
+            </button>
           </div>
         </section>
 
@@ -880,6 +1087,12 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onBack, onNavigateToOrde
         userPhone={user?.phone}
         userEmail={user?.email}
         onSuccess={(newBal) => setBalance(newBal)}
+      />
+
+      {/* 7-Day Daily Check-In & Streak Rewards Modal */}
+      <DailyStreakModal
+        isOpen={showStreakModal}
+        onClose={() => setShowStreakModal(false)}
       />
     </div>
   );

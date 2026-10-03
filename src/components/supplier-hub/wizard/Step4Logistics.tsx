@@ -83,9 +83,9 @@ export default function Step4Logistics({
   const handleAutofillWarehouse = () => {
     setFormData(prev => ({
       ...prev,
-      brand: prev.brand || 'AK Yadav Print',
+      brand: prev.brand || 'AKSelling',
       pickupAddress: {
-        businessName: 'AK Yadav Print Dispatch Hub',
+        businessName: 'AKSelling Dispatch Hub',
         street: 'Shop 14, Ground Floor, Textile Market, Ring Road',
         city: 'Indore',
         state: 'Madhya Pradesh',
@@ -140,7 +140,7 @@ export default function Step4Logistics({
       return;
     }
     if (!formData.brand.trim()) {
-      setValidationError('Please enter Brand Name (defaults to AK Yadav Print).');
+      setValidationError('Please enter Brand Name (defaults to AKSelling).');
       return;
     }
     if (!addr.businessName.trim() || !addr.street.trim() || !addr.city.trim() || !addr.pincode.trim()) {
@@ -255,11 +255,11 @@ export default function Step4Logistics({
               type="text"
               value={formData.brand}
               onChange={e => setFormData(prev => ({ ...prev, brand: e.target.value }))}
-              placeholder="AK Yadav Print"
+              placeholder="AKSelling"
               className="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-flipkart-500 font-bold text-gray-900"
               required
             />
-            <p className="text-[10px] text-gray-500 mt-1">Default: AK Yadav Print</p>
+            <p className="text-[10px] text-gray-500 mt-1">Default: AKSelling</p>
           </div>
 
           {/* Sleeve Type */}
@@ -364,7 +364,7 @@ export default function Step4Logistics({
                   pickupAddress: { ...prev.pickupAddress, businessName: e.target.value },
                 }))
               }
-              placeholder="e.g., AK Yadav Print Dispatch Hub"
+              placeholder="e.g., AKSelling Dispatch Hub"
               className="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-flipkart-500 font-medium"
               required
             />

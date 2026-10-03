@@ -65,9 +65,9 @@ export function safeLocalStorageGetItem(key: string): string | null {
 export function getCleanSellerStoreName(): string {
   try {
     const raw = localStorage.getItem('akselling_active_seller');
-    if (!raw || typeof raw !== 'string') return 'AK Yadav Prints';
+    if (!raw || typeof raw !== 'string') return 'AKSelling';
     const trimmed = raw.trim();
-    if (!trimmed) return 'AK Yadav Prints';
+    if (!trimmed) return 'AKSelling';
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
       try {
         const parsed = JSON.parse(trimmed);
@@ -77,7 +77,7 @@ export function getCleanSellerStoreName(): string {
             parsed.businessName ||
             parsed.storeName ||
             parsed.name ||
-            'AK Yadav Prints'
+            'AKSelling'
           );
         }
       } catch {
@@ -86,6 +86,6 @@ export function getCleanSellerStoreName(): string {
     }
     return trimmed;
   } catch {
-    return 'AK Yadav Prints';
+    return 'AKSelling';
   }
 }

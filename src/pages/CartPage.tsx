@@ -29,6 +29,12 @@ import { saveOrderToFirestore, deductProductInventory, savePaymentTransactionToF
 import { recordPlacedOrder } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
 import { awardOrderCashback, deductWalletBalanceForOrder, getLocalWalletCache } from '@/utils/walletService';
+import {
+  getActiveSpinDiscount,
+  clearActiveSpinDiscount,
+  type SpinDiscountCoupon,
+} from '@/utils/gamificationService';
+import { processReferralRewardOnOrder } from '@/utils/referralService';
 import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
 import { ScratchCardModal } from '@/components/ScratchCardModal';
 import TrustBadges from '@/components/trust/TrustBadges';
@@ -119,12 +125,15 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
       try {
         const info = await lookupPincode(clean);
         if (info) {
+          const areaColony = info.area || info.colony || (info.areas && info.areas[0]) || '';
           setForm((prev) => ({
             ...prev,
             city: info.city,
             state: info.state,
+            street: prev.street.trim() ? prev.street : areaColony,
           }));
-          setPincodeSuccess(`${info.city}, ${info.state}`);
+          const locDetails = [areaColony, info.city, info.state].filter(Boolean).join(', ');
+          setPincodeSuccess(locDetails);
         }
       } catch {
         // silent
@@ -141,7 +150,30 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
   const mrpTotal = activeItems.reduce((sum, item) => sum + (item.product.mrp || item.product.price || 0) * Math.max(1, item.quantity || 1), 0);
   const discount = Math.max(0, mrpTotal - effectiveCartTotal);
   const deliveryFee = effectiveCartTotal > 500 ? 0 : (effectiveCartTotal > 0 ? 49 : 0);
-  const totalAmount = effectiveCartTotal + deliveryFee;
+
+  // Auto-Discount from Lucky Spin Wheel (Automatically maps to checkout item prices)
+  const [spinDiscount, setSpinDiscount] = useState<SpinDiscountCoupon | null>(() => getActiveSpinDiscount());
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<SpinDiscountCoupon>;
+      setSpinDiscount(custom.detail || getActiveSpinDiscount());
+    };
+    const clearHandler = () => setSpinDiscount(null);
+    window.addEventListener('akselling_spin_discount_applied', handler);
+    window.addEventListener('akselling_spin_discount_cleared', clearHandler);
+    return () => {
+      window.removeEventListener('akselling_spin_discount_applied', handler);
+      window.removeEventListener('akselling_spin_discount_cleared', clearHandler);
+    };
+  }, []);
+
+  const spinDiscountAmount = spinDiscount && spinDiscount.discountPercent > 0
+    ? Math.round((effectiveCartTotal * spinDiscount.discountPercent) / 100)
+    : 0;
+
+  const subtotalAfterSpinDiscount = Math.max(1, effectiveCartTotal - spinDiscountAmount);
+  const totalAmount = subtotalAfterSpinDiscount + deliveryFee;
 
   // Wallet Rewards Balance & Redemption (Retaining ₹30+ Welcome Rewards & Earned Cashback)
   const userWalletBalance = user?.id ? (getLocalWalletCache(user.id).walletBalance ?? user.walletBalance ?? 30) : 30;
@@ -292,6 +324,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
       transaction_id: `upi_${utrNumber}`,
       payment_screenshot: screenshotUrl,
       wallet_discount_applied: walletDiscount,
+      spin_discount_applied: spinDiscountAmount,
       advance_paid: advancePaid,
       balance_due: remainingDue,
       status: 'Placed',
@@ -361,6 +394,17 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
     } catch (rErr) {
       console.warn('Cashback award notice:', rErr);
     }
+
+    // 6. Process Referral Reward for Referrer if buyer used referral link (strictly capped at ₹30)
+    processReferralRewardOnOrder(
+      user?.id || 'guest',
+      form.name,
+      generatedId,
+      finalCartAmount
+    ).catch(() => {});
+
+    // Clear active lucky spin discount once used
+    clearActiveSpinDiscount();
 
     setOrderId(generatedId);
     clearCart();
@@ -822,6 +866,15 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
             <div className="p-4 space-y-2.5">
               <PriceRow label={`Price (${cartCount} items)`} value={formatPrice(mrpTotal)} />
               <PriceRow label="Discount" value={`- ${formatPrice(discount)}`} color="text-success-500" />
+              {spinDiscountAmount > 0 && (
+                <div className="flex justify-between items-center text-xs font-bold text-amber-900 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-200">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles size={13} className="text-amber-500 fill-amber-400 shrink-0" />
+                    <span>Spin Wheel Auto-Discount ({spinDiscount?.couponCode} • {spinDiscount?.discountPercent}% OFF)</span>
+                  </span>
+                  <span>- {formatPrice(spinDiscountAmount)}</span>
+                </div>
+              )}
               {walletDiscount > 0 && (
                 <div className="flex justify-between items-center text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
                   <span className="flex items-center gap-1">🎁 Wallet Reward Discount</span>

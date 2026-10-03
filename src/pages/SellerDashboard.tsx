@@ -109,7 +109,7 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
   });
 
   const handleSaveStoreName = (newName: string) => {
-    const cleaned = newName.trim() || 'AK Yadav Prints';
+    const cleaned = newName.trim() || 'AKSelling';
     setStoreName(cleaned);
     try {
       const existing = localStorage.getItem('akselling_active_seller');

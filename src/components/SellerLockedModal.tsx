@@ -48,12 +48,12 @@ export default function SellerLockedModal({
         <div className="flex items-center gap-3 mb-4">
           <img
             src="/ak_brand_logo.jpg"
-            alt="AK Yadav Print / AKSelling"
+            alt="AKSelling"
             className="w-12 h-12 rounded-xl object-contain bg-slate-950 border border-amber-400/50 shadow-xs shrink-0"
           />
           <div>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider">
-              <ShieldAlert size={11} /> AK Yadav Print Seller Hub
+              <ShieldAlert size={11} /> AKSelling Seller Hub
             </span>
             <h3 className="text-base font-bold text-gray-900 mt-0.5 leading-snug">
               Authorized Partner Access Only

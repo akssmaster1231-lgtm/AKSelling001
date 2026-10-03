@@ -514,7 +514,7 @@ export default function SellerRegistration({ onBack, onOpenDashboard }: SellerRe
     const sellerRecord: SellerKycRecord = {
       id: generatedId,
       seller_id: generatedId,
-      business_name: businessName.trim() || 'AK Yadav Prints & Apparel Hub',
+      business_name: businessName.trim() || 'AKSelling Apparel Hub',
       owner_name: ownerName.trim() || 'Anoj Kumar Yadav',
       registration_type: 'gst',
       gst_number: '07AAACA1234A1Z5',

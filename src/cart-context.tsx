@@ -48,10 +48,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       localStorage.setItem('akselling_cart_items', JSON.stringify(items));
+      window.dispatchEvent(new CustomEvent('akselling_cart_updated'));
     } catch {
       // ignore
     }
   }, [items]);
+
+  // Sync across windows, tabs, and focus
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const stored = localStorage.getItem('akselling_cart_items');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setItems(parsed);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('storage', handleSync);
+    window.addEventListener('focus', handleSync);
+    return () => {
+      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
+  }, []);
 
   const addToCart = useCallback((product: Product, quantity = 1, selectedSize?: string, selectedColor?: string) => {
     setItems(prev => {

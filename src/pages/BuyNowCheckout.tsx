@@ -28,7 +28,13 @@ import { useAuth } from '@/auth-context';
 import { recordPlacedOrder } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
 import { awardOrderCashback, deductWalletBalanceForOrder, getLocalWalletCache } from '@/utils/walletService';
-import { grantBonusSpin } from '@/utils/gamificationService';
+import {
+  grantBonusSpin,
+  getActiveSpinDiscount,
+  clearActiveSpinDiscount,
+  type SpinDiscountCoupon,
+} from '@/utils/gamificationService';
+import { processReferralRewardOnOrder } from '@/utils/referralService';
 import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
 import { ScratchCardModal } from '@/components/ScratchCardModal';
 import TrustBadges from '@/components/trust/TrustBadges';
@@ -117,14 +123,15 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
       try {
         const info = await lookupPincode(cleanPin);
         if (info) {
-          const areaColony = info.area || info.colony || '';
+          const areaColony = info.area || info.colony || (info.areas && info.areas[0]) || '';
           setForm((prev) => ({
             ...prev,
             city: info.city,
             state: info.state,
-            address: prev.address.trim() ? prev.address : (areaColony ? `${areaColony}` : prev.address),
+            street: prev.street.trim() ? prev.street : areaColony,
           }));
-          setPincodeSuccess(`${areaColony ? `${areaColony}, ` : ''}${info.city}, ${info.state}`);
+          const locDetails = [areaColony, info.city, info.state].filter(Boolean).join(', ');
+          setPincodeSuccess(locDetails);
         }
       } catch {
         // silent
@@ -157,11 +164,32 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     return null;
   });
 
+  // Auto-Discount from Lucky Spin Wheel (Automatically maps to checkout item prices)
+  const [spinDiscount, setSpinDiscount] = useState<SpinDiscountCoupon | null>(() => getActiveSpinDiscount());
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<SpinDiscountCoupon>;
+      setSpinDiscount(custom.detail || getActiveSpinDiscount());
+    };
+    const clearHandler = () => setSpinDiscount(null);
+    window.addEventListener('akselling_spin_discount_applied', handler);
+    window.addEventListener('akselling_spin_discount_cleared', clearHandler);
+    return () => {
+      window.removeEventListener('akselling_spin_discount_applied', handler);
+      window.removeEventListener('akselling_spin_discount_cleared', clearHandler);
+    };
+  }, []);
+
+  const spinDiscountAmount = spinDiscount && spinDiscount.discountPercent > 0
+    ? Math.round((product.price * quantity * spinDiscount.discountPercent) / 100)
+    : 0;
+
   const groupDiscount = activeGroupBuy ? Math.round((product.price * quantity * 15) / 100) : 0;
   const baseTotalAmount = product.price * quantity;
-  const totalAmount = Math.max(1, baseTotalAmount - groupDiscount);
+  const totalAmount = Math.max(1, baseTotalAmount - groupDiscount - spinDiscountAmount);
   const mrpTotal = product.mrp * quantity;
-  const discount = (mrpTotal - baseTotalAmount) + groupDiscount;
+  const discount = (mrpTotal - baseTotalAmount) + groupDiscount + spinDiscountAmount;
   const deliveryFee = totalAmount > 500 ? 0 : 49;
 
   // Wallet Rewards Balance & Redemption (Retaining ₹30+ Welcome Rewards & Earned Cashback)
@@ -320,6 +348,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         transaction_id: `upi_${utrNumber}`,
         payment_screenshot: screenshotUrl,
         wallet_discount_applied: walletDiscount,
+        spin_discount_applied: spinDiscountAmount,
         advance_paid: advancePaid,
         balance_due: remainingDue,
         status: 'Placed',
@@ -397,6 +426,17 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
       } catch (err) {
         console.debug('Active group buy cleanup notice:', err);
       }
+
+      // Process Referral Reward for Referrer if buyer used referral link (strictly capped at ₹30)
+      processReferralRewardOnOrder(
+        user?.id || 'guest',
+        form.name,
+        generatedId,
+        finalAmount
+      ).catch(() => {});
+
+      // Clear active lucky spin discount once used
+      clearActiveSpinDiscount();
 
       setOrderId(generatedId);
       setState('success');
@@ -1035,6 +1075,15 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               <div className="p-4 space-y-2.5">
                 <Row label={`${t('price')} (${quantity} item)`} value={formatPrice(mrpTotal)} />
                 <Row label={t('discount')} value={`- ${formatPrice(discount)}`} color="text-success-500" />
+                {spinDiscountAmount > 0 && (
+                  <div className="flex justify-between items-center text-xs font-bold text-amber-900 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-200">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles size={13} className="text-amber-500 fill-amber-400 shrink-0" />
+                      <span>Spin Wheel Auto-Discount ({spinDiscount?.couponCode} • {spinDiscount?.discountPercent}% OFF)</span>
+                    </span>
+                    <span>- {formatPrice(spinDiscountAmount)}</span>
+                  </div>
+                )}
                 {walletDiscount > 0 && (
                   <div className="flex justify-between items-center text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
                     <span className="flex items-center gap-1">🎁 Wallet Reward Discount</span>

@@ -72,6 +72,17 @@ if (typeof window !== 'undefined') {
   };
 }
 
+// Register Service Worker for PWA compliance and offline shell caching
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/firebase-messaging-sw.js')
+      .catch((err) => {
+        console.warn('PWA service worker registration notice:', err);
+      });
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary fallbackTitle="AKSelling Shopping">

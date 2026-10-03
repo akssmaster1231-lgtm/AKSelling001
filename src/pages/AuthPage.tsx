@@ -245,7 +245,7 @@ export default function AuthPage({ onClose, onSuccess, isStrictGate = false }: A
             <div className="w-16 h-16 rounded-2xl p-1 bg-[#0a192f] border border-amber-400/40 shadow-lg shadow-black/20 flex items-center justify-center mb-2.5">
               <img
                 src="/ak_brand_logo.jpg"
-                alt="AK Yadav Print / AKSelling"
+                alt="AKSelling"
                 className="w-full h-full object-contain rounded-xl"
               />
             </div>
@@ -253,7 +253,7 @@ export default function AuthPage({ onClose, onSuccess, isStrictGate = false }: A
               AK<span className="text-amber-500">Selling</span>
             </h2>
             <p className="text-[11px] font-bold text-amber-600 uppercase tracking-widest -mt-0.5 mb-1">
-              AK Yadav Print
+              AKSelling Official Store
             </p>
             <p className="text-xs text-gray-500 max-w-xs">
               {step === 'phone'

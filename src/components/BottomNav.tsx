@@ -1,8 +1,8 @@
-import { Home, Grid3x3, Flame, User, ShoppingCart, Clapperboard } from 'lucide-react';
+import { Home, Grid3x3, Flame, User, ShoppingCart } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { useAuth } from '@/auth-context';
 
-export type TabId = 'home' | 'reels' | 'categories' | 'deals' | 'cart' | 'account';
+export type TabId = 'home' | 'categories' | 'deals' | 'cart' | 'account';
 
 interface BottomNavProps {
   activeTab: TabId;
@@ -16,7 +16,6 @@ export default function BottomNav({ activeTab, onTabChange, cartCount }: BottomN
 
   const tabs: { id: TabId; label: string; icon: typeof Home; badge?: string }[] = [
     { id: 'home', label: t('home'), icon: Home },
-    { id: 'reels', label: 'Reels', icon: Clapperboard, badge: 'NEW' },
     { id: 'categories', label: t('categories'), icon: Grid3x3 },
     { id: 'deals', label: t('bestDeals') || 'Best Deals', icon: Flame, badge: 'HOT' },
     { id: 'cart', label: t('cart'), icon: ShoppingCart },
@@ -66,11 +65,6 @@ export default function BottomNav({ activeTab, onTabChange, cartCount }: BottomN
                 {isDeals && (
                   <span className="absolute -top-1.5 -right-3 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 text-[8px] font-black px-1 py-0.2 rounded-full uppercase tracking-tight shadow-xs ring-1 ring-white">
                     HOT
-                  </span>
-                )}
-                {tab.id === 'reels' && (
-                  <span className="absolute -top-1.5 -right-3 bg-gradient-to-r from-red-600 to-rose-600 text-white text-[8px] font-black px-1 py-0.2 rounded-full uppercase tracking-tight shadow-xs ring-1 ring-white">
-                    NEW
                   </span>
                 )}
                 {tab.id === 'cart' && cartCount > 0 && (

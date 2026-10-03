@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    __akselling_has_subscreen?: boolean;
+  }
+}
+
 export interface Product {
   id: string;
   title: string;

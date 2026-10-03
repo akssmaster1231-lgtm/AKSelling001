@@ -389,7 +389,7 @@ export default function Step2Media({
             maxLength={120}
             value={formData.title}
             onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
-            placeholder="e.g., AK Yadav Print Men's 240 GSM Heavyweight Oversized Cotton Graphic T-Shirt"
+            placeholder="e.g., AKSelling Men's 240 GSM Heavyweight Oversized Cotton Graphic T-Shirt"
             className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-flipkart-500 font-medium"
             required
           />

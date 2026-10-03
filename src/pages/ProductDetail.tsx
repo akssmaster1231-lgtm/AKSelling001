@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   ChevronLeft,
   Star,
@@ -12,6 +12,8 @@ import {
   Check,
   Ruler,
   X,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import type { Product } from '@/types';
 import { formatPrice, formatCount } from '@/data';
@@ -37,7 +39,20 @@ interface ProductDetailProps {
 }
 
 export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }: ProductDetailProps) {
-  const dynamicRating = calculateProductDynamicRating(product);
+  const [dynamicRating, setDynamicRating] = useState(() => calculateProductDynamicRating(product));
+
+  useEffect(() => {
+    setDynamicRating(calculateProductDynamicRating(product));
+    const handleReviewsUpdated = (e: Event) => {
+      const custom = e as CustomEvent<{ productId?: string }>;
+      if (!custom.detail?.productId || custom.detail.productId === product.id) {
+        setDynamicRating(calculateProductDynamicRating(product));
+      }
+    };
+    window.addEventListener('akselling_reviews_updated', handleReviewsUpdated);
+    return () => window.removeEventListener('akselling_reviews_updated', handleReviewsUpdated);
+  }, [product]);
+
   const [wishlisted, setWishlisted] = useState(false);
   const [added, setAdded] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -51,7 +66,39 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
   const [showSizeChart, setShowSizeChart] = useState(false);
   const [sizeAlert, setSizeAlert] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [isSpeakingAdvice, setIsSpeakingAdvice] = useState(false);
   const { addToCart } = useCart();
+
+  const speakProductAdvice = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    if (isSpeakingAdvice) {
+      setIsSpeakingAdvice(false);
+      return;
+    }
+    const text = `Namaste bhai! Is ${product.title} mein 100% genuine pure combed bio-wash cotton kapda use hua hai. Bilkul shrink nahi hoga aur rang fade nahi hoga. Sizing ya offer poochne ke liye Record button dabayein!`;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'hi-IN';
+    utterance.pitch = 0.82; // Deep male (mard) voice resonance
+    utterance.rate = 0.94;
+
+    const voices = window.speechSynthesis.getVoices();
+    if (voices && voices.length > 0) {
+      const maleVoice = voices.find(
+        (v) =>
+          (v.lang.includes('hi') || v.lang.includes('IN')) &&
+          !v.name.toLowerCase().includes('female') &&
+          !v.name.toLowerCase().includes('zira') &&
+          !v.name.toLowerCase().includes('kalpana')
+      );
+      if (maleVoice) utterance.voice = maleVoice;
+    }
+    utterance.onend = () => setIsSpeakingAdvice(false);
+    utterance.onerror = () => setIsSpeakingAdvice(false);
+    setIsSpeakingAdvice(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   // Generate canonical direct URL for this product
   const productShareUrl = useMemo(() => {
@@ -139,6 +186,10 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
       // safe fallback
     }
   };
+
+  if (!product || !product.id) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-[480px] sm:w-full z-[60] bg-gray-50 overflow-y-auto animate-fade-in sm:shadow-2xl sm:border-x sm:border-gray-200">
@@ -310,6 +361,52 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
           </div>
         </div>
       )}
+
+      {/* 3D AI Sales Master Guidance & Deal Closing Card (Speaker + Record / Mic) */}
+      <div className="mt-2 bg-gradient-to-r from-slate-950 via-[#1b365d] to-slate-950 p-3 mx-3 rounded-2xl shadow-md border border-amber-400/50 text-white">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="relative w-11 h-11 rounded-xl overflow-hidden border border-amber-400/80 shadow-xs shrink-0 bg-slate-900">
+              <img
+                src="/ai_sales_master_counter.jpg"
+                alt="Bhaiya ji - AI Sales Master"
+                className="w-full h-full object-cover"
+              />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-slate-950" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h4 className="text-xs font-black text-amber-300">Bhaiya ji (Sales Master)</h4>
+                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.2 rounded border border-emerald-500/30">
+                  Voice Live
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 truncate">
+                {product.fabric || '180 GSM Bio-Wash'} • Factory Direct Quality
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center shrink-0">
+            {/* Speaker Button */}
+            <button
+              type="button"
+              onClick={speakProductAdvice}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all cursor-pointer shadow-xs ${
+                isSpeakingAdvice
+                  ? 'bg-emerald-600 text-white border-emerald-400 animate-pulse'
+                  : 'bg-slate-900 hover:bg-slate-800 text-amber-300 border-amber-400/50 hover:text-white'
+              }`}
+              title={isSpeakingAdvice ? 'Stop Speaker' : 'Bhaiya ji ki aawaz sunein'}
+            >
+              {isSpeakingAdvice ? <VolumeX size={16} /> : <Volume2 size={16} className="animate-pulse" />}
+              <span className="text-xs font-bold">
+                {isSpeakingAdvice ? 'Stop' : 'Speaker'}
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Size Selection */}
       {product.sizes && product.sizes.length > 0 && (

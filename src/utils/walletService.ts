@@ -57,6 +57,11 @@ export function setLocalWalletCache(
     const current = getLocalWalletCache(userId);
     const updated = { ...current, ...data };
     localStorage.setItem(`${WALLET_LOCAL_STORAGE_PREFIX}${userId}`, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('akselling_wallet_updated', { detail: { newBalance: updated.walletBalance } })
+      );
+    }
   } catch {
     // silent
   }

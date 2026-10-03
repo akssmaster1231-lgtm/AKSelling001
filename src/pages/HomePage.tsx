@@ -1,14 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, Gift, Calendar, Trophy, Clapperboard } from 'lucide-react';
-import { products as fallbackProducts, banners as fallbackBanners, getAllCategories, fetchProducts, formatPrice, deduplicateProducts } from '@/data';
-import { fetchBanners } from '@/banner-api';
-import { subscribeProducts, subscribeBanners, getCachedProducts, subscribeCategories } from '@/firebase';
+import { ChevronRight, Gift, Calendar, Trophy } from 'lucide-react';
+import { products as fallbackProducts, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, DisplayDeduplicator } from '@/data';
+import { subscribeProducts, getCachedProducts, subscribeCategories } from '@/firebase';
 import { useI18n } from '@/i18n';
-import type { Product, Banner, Category } from '@/types';
-import BannerCarousel from '@/components/BannerCarousel';
+import type { Product, Category } from '@/types';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 import CategoryIcon from '@/components/CategoryIcon';
 import FlashDropSection from '@/components/flash-drop/FlashDropSection';
+import { SalesMasterCounterBanner } from '@/components/ai/SalesMasterCounterBanner';
 
 interface HomePageProps {
   searchQuery: string;
@@ -18,7 +17,6 @@ interface HomePageProps {
   onBecomeSeller?: () => void;
   onOpenStreak?: () => void;
   onOpenSpinWheel?: () => void;
-  onNavigateReels?: () => void;
 }
 
 export default function HomePage({
@@ -29,27 +27,9 @@ export default function HomePage({
   onBecomeSeller,
   onOpenStreak,
   onOpenSpinWheel,
-  onNavigateReels,
 }: HomePageProps) {
   const { t } = useI18n();
   const [dbProducts, setDbProducts] = useState<Product[]>(() => getCachedProducts());
-  const [dbBanners, setDbBanners] = useState<Banner[]>(() => {
-    try {
-      const raw = localStorage.getItem('akselling_master_banners');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const active = parsed.filter((b: { active?: boolean; isActive?: boolean }) => b.active !== false && b.isActive !== false);
-          if (active.length > 0) {
-            return active.sort((a: { display_order?: number }, b: { display_order?: number }) => (a.display_order || 0) - (b.display_order || 0));
-          }
-        }
-      }
-    } catch {
-      // fallback to default
-    }
-    return fallbackBanners;
-  });
   const [activeCategories, setActiveCategories] = useState<Category[]>(() => getAllCategories());
   const [loading, setLoading] = useState(() => getCachedProducts().length === 0);
 
@@ -63,23 +43,12 @@ export default function HomePage({
         setLoading(false);
       }
     });
-    fetchBanners().then(bans => {
-      if (isMounted && bans.length > 0) {
-        setDbBanners(bans);
-      }
-    });
 
     // 2. Real-time Firestore subscriptions
     const unsubProducts = subscribeProducts((remoteProducts) => {
       if (isMounted) {
         setDbProducts(remoteProducts);
         setLoading(false);
-      }
-    });
-
-    const unsubBanners = subscribeBanners((remoteBanners) => {
-      if (isMounted) {
-        setDbBanners(remoteBanners.length > 0 ? remoteBanners : fallbackBanners);
       }
     });
 
@@ -102,11 +71,9 @@ export default function HomePage({
     };
 
     const handleUpdate = () => {
-      fetchBanners().then(b => isMounted && setDbBanners(b.length > 0 ? b : fallbackBanners));
       setActiveCategories(getAllCategories());
     };
 
-    window.addEventListener('akselling_banners_updated', handleUpdate);
     window.addEventListener('akselling_products_updated', handleProductsUpdate);
     window.addEventListener('akselling_categories_updated', handleUpdate);
 
@@ -118,9 +85,7 @@ export default function HomePage({
       isMounted = false;
       clearTimeout(safetyTimer);
       unsubProducts();
-      unsubBanners();
       unsubCategories();
-      window.removeEventListener('akselling_banners_updated', handleUpdate);
       window.removeEventListener('akselling_products_updated', handleProductsUpdate);
       window.removeEventListener('akselling_categories_updated', handleUpdate);
     };
@@ -128,7 +93,6 @@ export default function HomePage({
 
   const rawProducts = dbProducts.length > 0 ? dbProducts : getCachedProducts();
   const allProducts = useMemo(() => deduplicateProducts(rawProducts.length > 0 ? rawProducts : fallbackProducts), [rawProducts]);
-  const displayBanners = dbBanners.length > 0 ? dbBanners : fallbackBanners;
 
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return allProducts;
@@ -145,45 +109,53 @@ export default function HomePage({
   }, [searchQuery, allProducts]);
 
   const {
+    freshDropsProducts,
     trendingProducts,
     categoryShelves,
+    exploreCatalogProducts,
   } = useMemo(() => {
-    // 1. Trending Products
-    const trending = [...allProducts]
-      .sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0))
-      .slice(0, 8);
+    const dedup = new DisplayDeduplicator();
 
-    // 2. Category Shelves (matching activeCategories)
+    // 1. Fresh Drops & New Arrivals (First slice of newest unique products)
+    const fresh = dedup.filterAndMark(allProducts, 6);
+
+    // 2. Trending Products (Sorted by rating/sales, strictly excluding anything already in Fresh Drops)
+    const sortedPool = [...allProducts].sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
+    const trending = dedup.filterAndMark(sortedPool, 6);
+
+    // 3. Category Shelves (Matching activeCategories, strictly distinct unshown products)
     const shelves: { category: Category; products: Product[] }[] = [];
     for (const cat of activeCategories) {
       if (cat.id === 'all') continue;
       const catRemaining = allProducts.filter(p => {
-        const pCat = (p.category || '').toLowerCase();
-        const cId = cat.id.toLowerCase();
-        const cName = cat.name.toLowerCase();
+        const pCat = (p.category || '').toLowerCase().trim();
+        const cId = cat.id.toLowerCase().trim();
+        const cName = cat.name.toLowerCase().trim();
         return (
           pCat === cId ||
           pCat === cName ||
-          (cId === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion')) ||
-          (cId === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing'))
+          (cId === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion' || pCat.includes('apparel'))) ||
+          (cId === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing' || pCat.includes('apparel')))
         );
       });
 
-      if (catRemaining.length > 0) {
+      const shelfProds = dedup.filterAndMark(catRemaining, 6);
+      if (shelfProds.length > 0) {
         shelves.push({
           category: cat,
-          products: catRemaining.slice(0, 8),
+          products: shelfProds,
         });
       }
     }
 
-    // 3. Explore Catalog (All products)
-    const exploreItems = allProducts;
+    // 4. Explore Catalog (All remaining products that haven't appeared in any previous section)
+    const remaining = allProducts.filter(p => !dedup.isDisplayed(p));
 
     return {
+      freshDropsProducts: fresh,
       trendingProducts: trending,
       categoryShelves: shelves,
-      exploreCatalogProducts: exploreItems,
+      exploreCatalogProducts: remaining,
     };
   }, [allProducts, activeCategories]);
 
@@ -194,9 +166,9 @@ export default function HomePage({
   if (loading) {
     return (
       <div className="pb-4 w-full overflow-x-hidden">
-        {/* Banner Skeleton */}
+        {/* AI Sales Master Shopkeeper Counter Skeleton */}
         <div className="px-3 pt-3">
-          <div className="w-full aspect-[21/9] sm:aspect-[3/1] bg-gray-200 rounded-xl animate-pulse" />
+          <div className="w-full aspect-[16/9] sm:aspect-[2.1/1] bg-slate-900 rounded-2xl animate-pulse border border-amber-400/20" />
         </div>
 
         {/* Categories Skeleton */}
@@ -228,53 +200,42 @@ export default function HomePage({
 
   return (
     <div className="pb-4 w-full overflow-x-hidden touch-scroll-container">
+      {/* 3D Human-like AI Sales Master Shopkeeper Counter Avatar (Prime Top Location) */}
       <div className="px-3 pt-3">
-        <BannerCarousel banners={displayBanners} />
+        <SalesMasterCounterBanner onProductClick={onProductClick} />
       </div>
 
-      {/* Gen-Z Interactive Quick Rewards & Reels Hub */}
+      {/* Interactive Quick Rewards Hub */}
       <div className="mt-2.5 px-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {/* Roz Check-In */}
           <button
             type="button"
             onClick={onOpenStreak}
-            className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/20 border border-amber-400/40 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-2xs hover:bg-amber-500/20 active:scale-95 transition-all cursor-pointer"
+            className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/20 border border-amber-400/40 rounded-xl p-2.5 flex items-center gap-2.5 shadow-2xs hover:bg-amber-500/20 active:scale-95 transition-all cursor-pointer"
           >
-            <div className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center mb-1 shadow-xs">
-              <Calendar size={15} />
+            <div className="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center shadow-xs shrink-0">
+              <Calendar size={16} />
             </div>
-            <span className="text-[11px] font-black text-slate-900 leading-tight">Roz Check-In</span>
-            <span className="text-[9px] font-bold text-amber-700 mt-0.5">₹5+ Daily Coins</span>
+            <div className="text-left min-w-0">
+              <span className="text-[11px] font-black text-slate-900 block leading-tight truncate">Roz Check-In</span>
+              <span className="text-[10px] font-bold text-amber-700">₹5+ Daily Coins</span>
+            </div>
           </button>
 
           {/* Spin & Win */}
           <button
             type="button"
             onClick={onOpenSpinWheel}
-            className="bg-gradient-to-r from-purple-500/15 via-pink-500/10 to-indigo-500/20 border border-purple-400/40 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-2xs hover:bg-purple-500/20 active:scale-95 transition-all cursor-pointer"
+            className="bg-gradient-to-r from-purple-500/15 via-pink-500/10 to-indigo-500/20 border border-purple-400/40 rounded-xl p-2.5 flex items-center gap-2.5 shadow-2xs hover:bg-purple-500/20 active:scale-95 transition-all cursor-pointer"
           >
-            <div className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center mb-1 shadow-xs">
-              <Trophy size={15} />
+            <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+              <Trophy size={16} />
             </div>
-            <span className="text-[11px] font-black text-slate-900 leading-tight">Spin & Win</span>
-            <span className="text-[9px] font-bold text-purple-700 mt-0.5">Win Up to ₹200</span>
-          </button>
-
-          {/* Video Reels Shopping */}
-          <button
-            type="button"
-            onClick={onNavigateReels}
-            className="bg-gradient-to-r from-red-500/15 via-rose-500/10 to-amber-500/20 border border-red-400/40 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-2xs hover:bg-red-500/20 active:scale-95 transition-all cursor-pointer relative"
-          >
-            <span className="absolute -top-1.5 -right-1 bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse shadow-xs">
-              LIVE
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-red-600 text-white flex items-center justify-center mb-1 shadow-xs">
-              <Clapperboard size={15} />
+            <div className="text-left min-w-0">
+              <span className="text-[11px] font-black text-slate-900 block leading-tight truncate">Spin & Win</span>
+              <span className="text-[10px] font-bold text-purple-700">Win Up to ₹200</span>
             </div>
-            <span className="text-[11px] font-black text-slate-900 leading-tight">Watch Reels</span>
-            <span className="text-[9px] font-bold text-red-700 mt-0.5">Shop by Video</span>
           </button>
         </div>
       </div>
@@ -380,8 +341,8 @@ export default function HomePage({
         </div>
       ) : (
         <>
-          {/* Fresh Drops & New Arrivals (Latest Uploaded Products from AK Yadav Print) */}
-          {allProducts.length > 0 && (
+          {/* Fresh Drops & New Arrivals (Latest Uploaded Products from AKSelling) */}
+          {freshDropsProducts.length > 0 && (
             <section className="mt-4 px-3" id="home-fresh-drops">
               <div className="bg-white rounded-xl shadow-card overflow-hidden border border-slate-200/80">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent">
@@ -398,7 +359,7 @@ export default function HomePage({
                           NEW
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-500 font-medium">Direct factory prints & fresh stock ({allProducts.length} items)</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Direct factory prints & fresh stock ({freshDropsProducts.length} items)</p>
                     </div>
                   </div>
                   <button
@@ -410,7 +371,7 @@ export default function HomePage({
                   </button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
-                  {allProducts.slice(0, 10).map(p => (
+                  {freshDropsProducts.map(p => (
                     <div key={`new-drop-${p.id}`} className="shrink-0 w-36 sm:w-44">
                       <ProductCard product={p} onClick={() => onProductClick(p)} />
                     </div>
@@ -484,7 +445,7 @@ export default function HomePage({
                 </div>
 
                 <div className="flex gap-3 overflow-x-auto no-scrollbar horizontal-shelf-row p-3">
-                  {shelf.products.slice(0, 8).map(p => (
+                  {shelf.products.map(p => (
                     <div key={`shelf-${shelf.category.id}-${p.id}`} className="shrink-0 w-36 sm:w-44">
                       <ProductCard product={p} onClick={() => onProductClick(p)} />
                     </div>
@@ -494,8 +455,8 @@ export default function HomePage({
             </section>
           ))}
 
-          {/* Full Catalog / Best of AKSelling - Full Responsive Grid */}
-          {allProducts.length > 0 && (
+          {/* Full Catalog / Best of AKSelling - Remaining Unshown Products */}
+          {exploreCatalogProducts.length > 0 && (
             <section className="mt-4 px-3" id="home-explore-all">
               <div className="bg-white rounded-xl shadow-card overflow-hidden border border-slate-200/80">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/60">
@@ -509,10 +470,10 @@ export default function HomePage({
                           {t('bestOf')} AKSelling
                         </h2>
                         <span className="bg-[#1b365d]/10 text-[#1b365d] text-[10px] font-black px-1.5 py-0.5 rounded border border-[#1b365d]/20">
-                          ALL PRODUCTS
+                          CATALOG PICKS
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-500 font-medium">Browse complete verified factory catalog ({allProducts.length} items)</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Browse verified catalog ({exploreCatalogProducts.length} items)</p>
                     </div>
                   </div>
                   <button
@@ -524,7 +485,7 @@ export default function HomePage({
                   </button>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3 p-3">
-                  {allProducts.map(p => (
+                  {exploreCatalogProducts.map(p => (
                     <ProductCard key={`all-grid-${p.id}`} product={p} onClick={() => onProductClick(p)} />
                   ))}
                 </div>

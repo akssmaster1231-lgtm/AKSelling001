@@ -1,15 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Sparkles,
   Trophy,
   ArrowRight,
+  Clock,
 } from 'lucide-react';
 import { fireConfetti } from '@/utils/confetti';
 import {
-  getStreakData,
+  canSpinToday,
+  getRemainingDailySpins,
   deductSpinChance,
-  grantBonusSpin,
+  setActiveSpinDiscount,
 } from '@/utils/gamificationService';
 import { setLocalWalletCache, getLocalWalletCache } from '@/utils/walletService';
 import { useAuth } from '@/auth-context';
@@ -33,24 +35,33 @@ interface WheelSegment {
 }
 
 const WHEEL_SEGMENTS: WheelSegment[] = [
-  { id: 'seg_1', label: '₹25 Cash', subLabel: 'Wallet', color: '#F59E0B', textColor: '#1E293B', rewardType: 'cash', amount: 25 },
+  { id: 'seg_1', label: '10% OFF', subLabel: 'Sitewide', color: '#8B5CF6', textColor: '#FFFFFF', rewardType: 'discount', amount: 10, couponCode: 'SPIN10' },
   { id: 'seg_2', label: '15% OFF', subLabel: 'Coupon', color: '#10B981', textColor: '#FFFFFF', rewardType: 'discount', amount: 15, couponCode: 'SPIN15' },
-  { id: 'seg_3', label: '₹50 Voucher', subLabel: 'Orders', color: '#3B82F6', textColor: '#FFFFFF', rewardType: 'voucher', amount: 50, couponCode: 'FLAT50' },
-  { id: 'seg_4', label: '10% OFF', subLabel: 'Sitewide', color: '#8B5CF6', textColor: '#FFFFFF', rewardType: 'discount', amount: 10, couponCode: 'SPIN10' },
+  { id: 'seg_3', label: '₹25 Cash', subLabel: 'Wallet', color: '#F59E0B', textColor: '#1E293B', rewardType: 'cash', amount: 25 },
+  { id: 'seg_4', label: '20% OFF', subLabel: 'Checkout', color: '#06B6D4', textColor: '#FFFFFF', rewardType: 'discount', amount: 20, couponCode: 'SPIN20' },
   { id: 'seg_5', label: '₹30 Cash', subLabel: 'Wallet', color: '#EC4899', textColor: '#FFFFFF', rewardType: 'cash', amount: 30 },
-  { id: 'seg_6', label: 'Free Shipping', subLabel: 'Delivery', color: '#14B8A6', textColor: '#FFFFFF', rewardType: 'voucher', amount: 49, couponCode: 'FREEDEL' },
-  { id: 'seg_7', label: '₹100 OFF', subLabel: 'On ₹499+', color: '#EF4444', textColor: '#FFFFFF', rewardType: 'voucher', amount: 100, couponCode: 'LUCKY100' },
-  { id: 'seg_8', label: '₹200 JACKPOT', subLabel: 'Mega Prize', color: '#FBBF24', textColor: '#0F172A', rewardType: 'cash', amount: 200 },
+  { id: 'seg_6', label: '25% OFF', subLabel: 'Super Deal', color: '#6366F1', textColor: '#FFFFFF', rewardType: 'discount', amount: 25, couponCode: 'SPIN25' },
+  { id: 'seg_7', label: '₹50 Voucher', subLabel: 'On Orders', color: '#EF4444', textColor: '#FFFFFF', rewardType: 'voucher', amount: 50, couponCode: 'FLAT50' },
+  { id: 'seg_8', label: '30% JACKPOT', subLabel: 'Max Save', color: '#FBBF24', textColor: '#0F172A', rewardType: 'discount', amount: 30, couponCode: 'SPIN30' },
 ];
 
-export default function SpinWheelModal({ isOpen, onClose, onUseCoupon }: SpinWheelModalProps) {
+export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCoupon }: SpinWheelModalProps) {
   const { user } = useAuth();
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [winningSegment, setWinningSegment] = useState<WheelSegment | null>(null);
-  const [spinsLeft, setSpinsLeft] = useState(() => getStreakData().spinsAvailable);
+  const [spinsLeft, setSpinsLeft] = useState(() => getRemainingDailySpins());
+  const [isEligibleToday, setIsEligibleToday] = useState(() => canSpinToday());
 
   const wheelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSpinsLeft(getRemainingDailySpins());
+      setIsEligibleToday(canSpinToday());
+      setWinningSegment(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -59,23 +70,23 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon }: SpinWhe
   const handleSpin = () => {
     if (isSpinning) return;
 
-    if (spinsLeft <= 0) {
-      // Auto-grant 1 extra spin for entertainment & user joy
-      grantBonusSpin();
-      setSpinsLeft(1);
+    if (!canSpinToday()) {
+      return; // Strictly restricted to 1 spin per user per day
     }
 
-    deductSpinChance();
+    const success = deductSpinChance(user?.id || 'guest');
+    if (!success) return;
+
     setSpinsLeft((prev) => Math.max(0, prev - 1));
+    setIsEligibleToday(false);
     setIsSpinning(true);
     setWinningSegment(null);
 
-    // Pick winning index (weighted slightly towards positive rewards)
+    // Pick winning index
     const winningIdx = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
     const targetSegment = WHEEL_SEGMENTS[winningIdx];
 
-    // Calculate total rotation (min 5 full rotations + exact segment center)
-    // Wheel pointer is at the TOP (270 degrees in canvas / 0 deg top)
+    // Calculate total rotation
     const fullSpins = 5 + Math.floor(Math.random() * 3);
     const targetAngle = 360 - winningIdx * segmentAngle - segmentAngle / 2;
     const finalRotation = rotation + fullSpins * 360 + (targetAngle - (rotation % 360));
@@ -88,14 +99,29 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon }: SpinWhe
 
       // Trigger Confetti
       try {
-        fireConfetti({
-          particleCount: 90,
-        });
+        fireConfetti({ particleCount: 90 });
       } catch {
         // ignore
       }
 
-      // If reward is cash, add to wallet
+      // If reward is discount percentage or voucher, automatically store & apply to checkout
+      if (targetSegment.rewardType === 'discount' || targetSegment.rewardType === 'voucher') {
+        const couponCode = targetSegment.couponCode || `SPIN${targetSegment.amount}`;
+        const discountObj = {
+          couponCode,
+          discountPercent: targetSegment.amount,
+          rewardType: targetSegment.rewardType,
+          label: targetSegment.label,
+          wonAt: Date.now(),
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+        };
+        setActiveSpinDiscount(discountObj);
+        if (onUseCoupon) {
+          onUseCoupon(couponCode, targetSegment.amount);
+        }
+      }
+
+      // If reward is cash, add to Cash Wallet balance
       if (targetSegment.rewardType === 'cash') {
         const uid = user?.id || 'guest';
         const wallet = getLocalWalletCache(uid);
@@ -124,13 +150,16 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon }: SpinWhe
 
           <div className="inline-flex items-center gap-1.5 bg-amber-400/20 text-amber-300 border border-amber-400/40 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-2">
             <Trophy size={14} className="text-amber-400" />
-            <span>Spin & Win • Lucky Wheel</span>
+            <span>Strict Daily Spin Wheel • 1 Spin / Day</span>
           </div>
 
-          <h3 className="text-xl font-black text-white">Win Instant Cash & Coupons</h3>
+          <h3 className="text-xl font-black text-white">Win Instant Discounts & Cash</h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Spins remaining:{' '}
-            <span className="font-bold text-amber-400">{spinsLeft} free spins</span>
+            {isEligibleToday ? (
+              <span className="font-bold text-emerald-400">{spinsLeft} Free Daily Spin Available Today!</span>
+            ) : (
+              <span className="font-medium text-amber-400">Today&apos;s spin used. Next free spin tomorrow!</span>
+            )}
           </p>
         </div>
 
@@ -201,12 +230,16 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon }: SpinWhe
             <button
               type="button"
               onClick={handleSpin}
-              disabled={isSpinning}
-              className={`absolute z-20 w-16 h-16 rounded-full bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 text-slate-950 font-black text-xs uppercase shadow-xl flex items-center justify-center border-4 border-slate-900 active:scale-95 transition-transform ${
-                isSpinning ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+              disabled={isSpinning || !isEligibleToday}
+              className={`absolute z-20 w-16 h-16 rounded-full font-black text-xs uppercase shadow-xl flex items-center justify-center border-4 border-slate-900 transition-all ${
+                !isEligibleToday
+                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-80'
+                  : isSpinning
+                  ? 'bg-amber-500 text-slate-950 opacity-90 cursor-not-allowed'
+                  : 'bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 text-slate-950 hover:scale-105 active:scale-95 cursor-pointer'
               }`}
             >
-              {isSpinning ? '...' : 'SPIN'}
+              {isSpinning ? '...' : isEligibleToday ? 'SPIN' : 'LOCK'}
             </button>
           </div>
 
@@ -222,38 +255,52 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon }: SpinWhe
               </h4>
               <p className="text-xs text-amber-200 mt-0.5">
                 {winningSegment.rewardType === 'cash'
-                  ? `₹${winningSegment.amount} has been added to your AKSelling Wallet!`
-                  : `Coupon ${winningSegment.couponCode} unlocked for checkout!`}
+                  ? `₹${winningSegment.amount} has been added directly to your Cash Wallet!`
+                  : `🎉 ${winningSegment.amount}% OFF has been automatically applied to your checkout!`}
               </p>
 
-              {winningSegment.couponCode && onUseCoupon && (
+              <div className="mt-3 flex gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    onUseCoupon(winningSegment.couponCode!, winningSegment.amount);
+                    if (onShopCoupon) onShopCoupon();
                     onClose();
                   }}
-                  className="mt-2.5 inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shadow-md cursor-pointer hover:opacity-95 active:scale-95 transition-all"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs px-3 py-2 rounded-xl shadow-md cursor-pointer hover:opacity-95 active:scale-95 transition-all"
                 >
-                  <span>Apply at Checkout</span>
+                  <span>Auto-Applied! Go to Cart</span>
                   <ArrowRight size={14} />
                 </button>
-              )}
+              </div>
             </div>
           )}
 
-          {/* Spin Trigger Button */}
+          {/* Daily Spin Status / Trigger Button */}
           {!winningSegment && (
-            <button
-              type="button"
-              onClick={handleSpin}
-              disabled={isSpinning}
-              className="w-full mt-4 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:opacity-95 active:scale-[0.99] text-slate-950 font-black text-sm py-3 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer"
-              id="spin-wheel-btn"
-            >
-              <Sparkles size={16} className="fill-slate-950" />
-              <span>{isSpinning ? 'Spinning Lucky Wheel...' : 'Spin the Wheel Now!'}</span>
-            </button>
+            <div className="w-full mt-4">
+              {isEligibleToday ? (
+                <button
+                  type="button"
+                  onClick={handleSpin}
+                  disabled={isSpinning}
+                  className="w-full bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:opacity-95 active:scale-[0.99] text-slate-950 font-black text-sm py-3 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  id="spin-wheel-btn"
+                >
+                  <Sparkles size={16} className="fill-slate-950" />
+                  <span>{isSpinning ? 'Spinning Lucky Wheel...' : 'Spin 1x Free Daily Wheel'}</span>
+                </button>
+              ) : (
+                <div className="bg-slate-800/80 border border-slate-700 text-slate-300 p-3 rounded-xl text-center space-y-1">
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-400">
+                    <Clock size={14} />
+                    <span>Daily Limit Reached (1 Spin / Day)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    You have completed today&apos;s lucky spin! Come back tomorrow at 12:00 AM for your next spin.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -294,7 +294,7 @@ export default function SupplierHomeTab({
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white mt-1">
-              Welcome, {storeName || 'AK Yadav Prints'}!
+              Welcome, {storeName || 'AKSelling'}!
             </h1>
             <p className="text-blue-100 text-xs sm:text-sm font-medium">
               AKSelling Seller Hub • Manage live orders, catalog and dispatch

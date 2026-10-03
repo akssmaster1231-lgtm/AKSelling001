@@ -61,7 +61,7 @@ export default function AddEditCatalogModal({
         shippingCharge: product.shippingCharge ?? 0,
         deliveryEstimate: 'Free delivery in 2-3 days',
         pickupAddress: {
-          businessName: product.pickupAddress?.businessName || 'AK Yadav Print Dispatch Hub',
+          businessName: product.pickupAddress?.businessName || 'AKSelling Dispatch Hub',
           street: product.pickupAddress?.street || 'Shop 14, Ground Floor, Textile Market, Ring Road',
           city: product.pickupAddress?.city || 'Indore',
           state: product.pickupAddress?.state || 'Madhya Pradesh',
@@ -72,7 +72,7 @@ export default function AddEditCatalogModal({
         sleeveType: product.sleeveType || 'Half Sleeve',
         neckType: product.neckType || 'Round Neck / Crew Neck',
         fitType: product.fitType || 'Oversized Fit / Drop Shoulder',
-        brand: product.brand || 'AK Yadav Print',
+        brand: product.brand || 'AKSelling',
         variants: (product.variants || []).map(v => ({
           id: v.id || `${v.color}-${v.size}`,
           color: v.color,
@@ -110,7 +110,7 @@ export default function AddEditCatalogModal({
       shippingCharge: 0,
       deliveryEstimate: 'Free delivery in 2-3 days',
       pickupAddress: {
-        businessName: 'AK Yadav Print Dispatch Hub',
+        businessName: 'AKSelling Dispatch Hub',
         street: 'Shop 14, Ground Floor, Textile Market, Ring Road',
         city: 'Indore',
         state: 'Madhya Pradesh',
@@ -121,7 +121,7 @@ export default function AddEditCatalogModal({
       sleeveType: 'Half Sleeve',
       neckType: 'Round Neck / Crew Neck',
       fitType: 'Oversized Fit / Drop Shoulder',
-      brand: 'AK Yadav Print',
+      brand: 'AKSelling',
       variants: [],
       storefrontPlacement: {
         homepage: true,

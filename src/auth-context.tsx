@@ -150,6 +150,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             notificationEnabled: true,
             addresses: [],
             savedCards: [],
+            walletBalance: SIGNUP_BONUS_FLAT,
+            totalCashbackEarned: SIGNUP_BONUS_FLAT,
+            signupBonusClaimed: true,
+            successfulOrdersCount: 0,
             devices: [
               {
                 id: 'd_' + Date.now(),
@@ -185,6 +189,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           notificationEnabled: prev?.notificationEnabled ?? true,
           addresses: prev?.addresses || [],
           savedCards: prev?.savedCards || [],
+          walletBalance: typeof prev?.walletBalance === 'number' ? prev.walletBalance : SIGNUP_BONUS_FLAT,
+          totalCashbackEarned: typeof prev?.totalCashbackEarned === 'number' ? prev.totalCashbackEarned : SIGNUP_BONUS_FLAT,
+          signupBonusClaimed: true,
+          successfulOrdersCount: typeof prev?.successfulOrdersCount === 'number' ? prev.successfulOrdersCount : 0,
           devices: prev?.devices || [
             { id: 'd1', name: typeof navigator !== 'undefined' && navigator.userAgent.includes('Mobile') ? 'Mobile Browser' : 'Desktop Browser', lastActive: 'Active now' }
           ],
@@ -193,11 +201,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(resolvedProfile);
         saveLocalUser(resolvedProfile);
 
-        // Initialize Firestore wallet with guaranteed ₹20 signup bonus
+        // Initialize Firestore wallet with guaranteed ₹30 signup bonus
         initializeUserWallet(resolvedProfile.id, {
           name: resolvedProfile.name,
           phone: resolvedProfile.phone,
           email: resolvedProfile.email,
+        }).then((walletRes) => {
+          if (isMounted) {
+            setUser((curr) => {
+              if (!curr) return curr;
+              const updated = {
+                ...curr,
+                walletBalance: walletRes.walletBalance,
+                successfulOrdersCount: walletRes.successfulOrdersCount,
+              };
+              saveLocalUser(updated);
+              return updated;
+            });
+          }
         }).catch((wErr) => console.warn('Wallet init notice:', wErr));
       } else {
         // Only clear if user explicitly logged out or if there was no active profile

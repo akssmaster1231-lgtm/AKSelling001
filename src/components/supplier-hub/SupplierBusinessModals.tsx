@@ -549,12 +549,12 @@ export function SupplierSettingsModal({
       const raw = localStorage.getItem('akselling_active_seller');
       if (raw && raw.startsWith('{')) {
         const parsed = JSON.parse(raw);
-        return parsed.business_name || parsed.businessName || storeName || 'AK Yadav Prints';
+        return parsed.business_name || parsed.businessName || storeName || 'AKSelling';
       }
     } catch {
       // ignore
     }
-    return storeName || 'AK Yadav Prints';
+    return storeName || 'AKSelling';
   });
 
   const [gstin, setGstin] = useState(() => {
@@ -1189,7 +1189,7 @@ export function SupplierSettingsModal({
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="e.g. AK Yadav Prints & Textiles"
+                placeholder="e.g. AKSelling Textiles & Prints"
                 className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl font-bold text-gray-900 text-sm focus:ring-1 focus:ring-[#2874f0]"
                 required
               />

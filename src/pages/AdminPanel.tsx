@@ -156,7 +156,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
     tags: '',
     sizes: ['S', 'M', 'L', 'XL'] as string[],
     customSizeInput: '',
-    pickupBusinessName: 'AK Yadav Print Hub',
+    pickupBusinessName: 'AKSelling Hub',
     pickupStreet: 'Plot 14, Phase 2, Industrial Area',
     pickupCity: 'Gurugram',
     pickupState: 'Haryana',
@@ -420,7 +420,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
           <div className="w-20 h-20 rounded-2xl p-1 bg-[#0a192f] border border-amber-400/40 shadow-xl shadow-black/40 flex items-center justify-center mx-auto">
             <img
               src="/ak_brand_logo.jpg"
-              alt="AK Yadav Print / AKSelling"
+              alt="AKSelling"
               className="w-full h-full object-contain rounded-xl"
             />
           </div>
@@ -432,7 +432,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                 Owner Protected Area
               </span>
             </div>
-            <h2 className="text-xl font-black text-white">AK Yadav Print • AKSelling Admin</h2>
+            <h2 className="text-xl font-black text-white">AKSelling Admin Master Panel</h2>
             <p className="text-xs text-gray-300 mt-1 max-w-xs mx-auto">
               Authorized Owner: <span className="text-white font-bold">{OWNER_ADMIN_EMAIL}</span>. Enter the permanent Admin Master Passcode to unlock Category, Banner, and Admin controls.
             </p>
@@ -630,7 +630,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
   const handleFillDefaultLogistics = () => {
     setProductForm(prev => ({
       ...prev,
-      pickupBusinessName: 'AK Yadav Print Hub',
+      pickupBusinessName: 'AKSelling Direct Hub',
       pickupStreet: 'Plot 14, Phase 2, Industrial Area',
       pickupCity: 'Gurugram',
       pickupState: 'Haryana',
@@ -646,10 +646,12 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       try {
         const info = await lookupPincode(pin);
         if (info && info.city && info.state) {
+          const areaColony = info.area || info.colony || (info.areas && info.areas[0]) || '';
           setProductForm(prev => ({
             ...prev,
             pickupCity: info.city,
             pickupState: info.state,
+            pickupStreet: prev.pickupStreet.trim() ? prev.pickupStreet : (areaColony || prev.pickupStreet),
           }));
         }
       } catch {
@@ -678,7 +680,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       tags: '',
       sizes: ['S', 'M', 'L', 'XL'],
       customSizeInput: '',
-      pickupBusinessName: 'AK Yadav Print Hub',
+      pickupBusinessName: 'AKSelling Direct Hub',
       pickupStreet: 'Plot 14, Phase 2, Industrial Area',
       pickupCity: 'Gurugram',
       pickupState: 'Haryana',
@@ -711,7 +713,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       tags: Array.isArray(prod.tags) ? prod.tags.join(', ') : '',
       sizes: Array.isArray(prod.sizes) && prod.sizes.length > 0 ? prod.sizes : ['S', 'M', 'L', 'XL'],
       customSizeInput: '',
-      pickupBusinessName: prod.pickupAddress?.businessName || 'AK Yadav Print Hub',
+      pickupBusinessName: prod.pickupAddress?.businessName || 'AKSelling Direct Hub',
       pickupStreet: prod.pickupAddress?.street || 'Plot 14, Phase 2, Industrial Area',
       pickupCity: prod.pickupAddress?.city || prod.pickupLocation || 'Gurugram',
       pickupState: prod.pickupAddress?.state || 'Haryana',
@@ -767,7 +769,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         sizes: productForm.sizes.length > 0 ? productForm.sizes : ['S', 'M', 'L', 'XL'],
         pickupLocation: productForm.pickupCity.trim() || 'Gurugram Hub',
         pickupAddress: {
-          businessName: productForm.pickupBusinessName.trim() || 'AK Yadav Print Hub',
+          businessName: productForm.pickupBusinessName.trim() || 'AKSelling Direct Hub',
           street: productForm.pickupStreet.trim() || 'Plot 14, Phase 2, Industrial Area',
           city: productForm.pickupCity.trim() || 'Gurugram',
           state: productForm.pickupState.trim() || 'Haryana',
@@ -776,7 +778,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
           sellerGstin: '07AAACK1234F1Z5',
         },
         sellerId: 'owner',
-        sellerName: productForm.pickupBusinessName.trim() || 'AK Yadav Print',
+        sellerName: productForm.pickupBusinessName.trim() || 'AKSelling',
         sellerPhone: productForm.pickupPhone.trim() || '7290894907',
         delivery: productForm.delivery.trim() || 'Free delivery by tomorrow',
         description: productForm.description.trim() || `Verified authentic product from ${productForm.brand.trim() || 'AKSelling'}.`,
@@ -785,6 +787,13 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       };
 
       await saveProductToFirestore(prodToSave);
+      setProductsList(prev => {
+        const exists = prev.some(p => p.id === prodToSave.id);
+        if (exists) {
+          return prev.map(p => (p.id === prodToSave.id ? prodToSave : p));
+        }
+        return [prodToSave, ...prev];
+      });
       setSavedMsg(editingProductId ? 'Product and all images permanently saved in Firestore!' : 'New product published live in store!');
       setTimeout(() => setSavedMsg(''), 3000);
 
@@ -822,12 +831,12 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
           </button>
           <img
             src="/ak_brand_logo.jpg"
-            alt="AK Yadav Print"
+            alt="AKSelling"
             className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-amber-400/50 shadow-xs shrink-0"
           />
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="text-sm sm:text-base font-black text-gray-900">AK Yadav Print Admin</h1>
+              <h1 className="text-sm sm:text-base font-black text-gray-900">AKSelling Admin</h1>
               <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.2 rounded flex items-center gap-0.5">
                 <ShieldCheck size={10} /> OWNER
               </span>
@@ -2138,9 +2147,11 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                         <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Pincode</label>
                         <input
                           type="text"
+                          maxLength={6}
                           value={productForm.pickupPincode}
-                          onChange={e => setProductForm(prev => ({ ...prev, pickupPincode: e.target.value }))}
-                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 font-mono font-medium"
+                          onChange={e => handlePickupPincodeChange(e.target.value)}
+                          placeholder="e.g. 122016"
+                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 font-mono font-medium focus:outline-none focus:border-amber-500"
                         />
                       </div>
                     </div>

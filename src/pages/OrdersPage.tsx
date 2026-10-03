@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft,
   Package,
@@ -12,6 +12,9 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  Star,
+  Camera,
+  X,
 } from 'lucide-react';
 import { formatPrice } from '@/data';
 import { useI18n } from '@/i18n';
@@ -19,13 +22,14 @@ import {
   subscribeOrders,
   updateOrderStatusInFirestore,
   saveOrderToFirestore,
+  submitProductReview,
+  uploadMediaToPermanentStorage,
   type FirestoreOrder,
 } from '@/firebase';
 import { useAuth } from '@/auth-context';
 import OrderStatusStepper from '@/components/OrderStatusStepper';
 import { getStepIndexFromStatus } from '@/utils/orderTracking';
 import OrderTrackingModal from '@/components/OrderTrackingModal';
-import OrderActivityDashboard from '@/components/OrderActivityDashboard';
 
 interface OrdersPageProps {
   onBack: () => void;
@@ -42,6 +46,71 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
   const [returnRequested, setReturnRequested] = useState<string | null>(null);
   const [trackingModalOrder, setTrackingModalOrder] = useState<OrderRow | null>(null);
   const [copiedAwb, setCopiedAwb] = useState<string | null>(null);
+
+  // Verified Customer Review Modal State
+  const [reviewModalItem, setReviewModalItem] = useState<{
+    productId: string;
+    productTitle: string;
+    productImage?: string;
+    size?: string;
+  } | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewPhotos, setReviewPhotos] = useState<string[]>([]);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewSuccessToast, setReviewSuccessToast] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploadingPhoto(true);
+    try {
+      const newUrls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const permUrl = await uploadMediaToPermanentStorage(file, 'reviews', `rev_${Date.now()}_${i}`);
+        if (permUrl) newUrls.push(permUrl);
+      }
+      setReviewPhotos((prev) => [...prev, ...newUrls]);
+    } catch (err) {
+      console.warn('Photo upload notice:', err);
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmitOrderReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewModalItem || !reviewComment.trim()) return;
+    setIsSubmittingReview(true);
+    try {
+      await submitProductReview({
+        productId: reviewModalItem.productId,
+        userName: user?.name || user?.email?.split('@')[0] || 'Verified Buyer',
+        rating: reviewRating,
+        title: reviewTitle.trim() || 'Verified Order Review',
+        comment: reviewComment.trim(),
+        photos: reviewPhotos,
+        verifiedPurchase: true,
+        helpfulCount: 0,
+        sizePurchased: reviewModalItem.size || 'Standard',
+      });
+      setReviewModalItem(null);
+      setReviewTitle('');
+      setReviewComment('');
+      setReviewPhotos([]);
+      setReviewSuccessToast('Thank you! Your verified review and rating are live across the store.');
+      setTimeout(() => setReviewSuccessToast(null), 3500);
+    } catch (err) {
+      console.warn('Submit review notice:', err);
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   // Synchronize orders in real-time from Firestore and local cache
   useEffect(() => {
@@ -255,12 +324,12 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
           </button>
           <img
             src="/ak_brand_logo.jpg"
-            alt="AK Yadav Print"
+            alt="AKSelling"
             className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-amber-400/50 shadow-xs shrink-0"
           />
           <div>
             <h1 className="text-base font-bold text-slate-900 tracking-tight">{t('myOrders')}</h1>
-            <p className="text-[10px] text-slate-500 font-medium">AK Yadav Print • Real-time delivery tracking</p>
+            <p className="text-[10px] text-slate-500 font-medium">AKSelling • Real-time delivery tracking</p>
           </div>
         </div>
 
@@ -274,9 +343,28 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
         </div>
       </div>
 
-      <div className="px-3.5 py-4 pb-16 space-y-4">
-        {/* Order Activity & Monthly Volume Trends Dashboard */}
-        <OrderActivityDashboard orders={orders} />
+      <div className="px-3 sm:px-4 py-3.5 pb-20 space-y-3.5 max-w-2xl mx-auto w-full">
+        {/* Clean Mobile Orders Summary (Zero Graphs / Charts) */}
+        {orders.length > 0 && (
+          <div className="grid grid-cols-3 gap-2 bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs">
+            <div className="text-center p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Total</span>
+              <span className="text-base sm:text-lg font-black text-slate-900">{orders.length}</span>
+            </div>
+            <div className="text-center p-2 rounded-xl bg-amber-50/80 border border-amber-100">
+              <span className="text-[10px] uppercase font-bold text-amber-700 block tracking-wider">In Transit</span>
+              <span className="text-base sm:text-lg font-black text-amber-800">
+                {orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').length}
+              </span>
+            </div>
+            <div className="text-center p-2 rounded-xl bg-emerald-50/80 border border-emerald-100">
+              <span className="text-[10px] uppercase font-bold text-emerald-700 block tracking-wider">Delivered</span>
+              <span className="text-base sm:text-lg font-black text-emerald-800">
+                {orders.filter(o => o.status === 'Delivered').length}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Empty State */}
         {orders.length === 0 ? (
@@ -434,24 +522,48 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                             {orderItems.map((item, idx) => (
                               <div
                                 key={idx}
-                                className="flex gap-2.5 items-center p-2 rounded-xl bg-slate-50 border border-slate-200/70"
+                                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-2"
                               >
-                                <img
-                                  src={item.product_image}
-                                  alt=""
-                                  className="w-11 h-11 rounded-lg object-cover bg-white"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-bold text-slate-800 line-clamp-1">
-                                    {item.product_title}
-                                  </p>
-                                  <p className="text-[11px] text-slate-500">
-                                    Qty: {item.quantity} • {formatPrice(item.price)}
-                                    {item.size ? ` • Size: ${item.size}` : ''}
-                                    {item.color ? ` • Color: ${item.color}` : ''}
-                                    {item.design ? ` • Design: ${item.design}` : ''}
-                                    {item.fabric ? ` • Fabric: ${item.fabric}` : ''}
-                                  </p>
+                                <div className="flex gap-2.5 items-center">
+                                  <img
+                                    src={item.product_image}
+                                    alt=""
+                                    className="w-12 h-12 rounded-lg object-cover bg-white border border-slate-200"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-slate-800 line-clamp-1">
+                                      {item.product_title}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500">
+                                      Qty: {item.quantity} • {formatPrice(item.price)}
+                                      {item.size ? ` • Size: ${item.size}` : ''}
+                                      {item.color ? ` • Color: ${item.color}` : ''}
+                                      {item.design ? ` • Design: ${item.design}` : ''}
+                                      {item.fabric ? ` • Fabric: ${item.fabric}` : ''}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Item Verified Review Action */}
+                                <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                                    <CheckCircle2 size={11} /> Verified Order Item
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setReviewModalItem({
+                                        productId: item.product_id,
+                                        productTitle: item.product_title,
+                                        productImage: item.product_image,
+                                        size: item.size,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                                  >
+                                    <Star size={11} className="fill-amber-400 text-amber-500" />
+                                    <span>Rate & Review</span>
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -523,6 +635,165 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
           onClose={() => setTrackingModalOrder(null)}
           onUpdateStatus={(orderId, newStatus) => handleUpdateOrderStatus(orderId, newStatus)}
         />
+      )}
+
+      {/* Verified Order Review Submission Modal */}
+      {reviewModalItem && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-amber-500" />
+                <h3 className="font-bold text-slate-900 text-sm">Rate & Review Product</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewModalItem(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitOrderReview} className="space-y-3 mt-3">
+              <div className="flex items-center gap-2.5 p-2 bg-slate-50 rounded-xl border border-slate-200">
+                {reviewModalItem.productImage && (
+                  <img
+                    src={reviewModalItem.productImage}
+                    alt=""
+                    className="w-10 h-10 rounded-lg object-cover bg-white"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-900 line-clamp-1">
+                    {reviewModalItem.productTitle}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Verified Purchase {reviewModalItem.size ? `• Size: ${reviewModalItem.size}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Star Rating Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Overall Rating *</label>
+                <div className="flex items-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setReviewRating(s)}
+                      className="p-1 cursor-pointer transition-transform hover:scale-110 active:scale-95"
+                    >
+                      <Star
+                        size={26}
+                        className={s <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}
+                      />
+                    </button>
+                  ))}
+                  <span className="text-xs font-bold text-amber-600 ml-1.5">
+                    {reviewRating === 5 ? 'Superb! 5★' : reviewRating === 4 ? 'Good 4★' : reviewRating === 3 ? 'Fair 3★' : 'Needs improvement'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Review Title */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Headline</label>
+                <input
+                  type="text"
+                  value={reviewTitle}
+                  onChange={(e) => setReviewTitle(e.target.value)}
+                  placeholder="e.g. Excellent fit and heavy cotton fabric"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:border-blue-600"
+                />
+              </div>
+
+              {/* Review Text */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Detailed Review *</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="How was the product quality, fabric feel, fitting, and delivery? Share your honest feedback..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:border-blue-600"
+                />
+              </div>
+
+              {/* Photo Upload */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-700">Add Photos ({reviewPhotos.length})</label>
+                  <span className="text-[10px] text-emerald-600 font-bold">Permanent Cloud Storage</span>
+                </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handlePhotoUpload}
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                />
+                <div className="flex flex-wrap gap-2 items-center">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingPhoto}
+                    className="px-3 py-2 border-2 border-dashed border-slate-300 hover:border-blue-600 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer bg-slate-50"
+                  >
+                    {isUploadingPhoto ? (
+                      <Loader2 size={13} className="animate-spin text-blue-600" />
+                    ) : (
+                      <Camera size={13} className="text-blue-600" />
+                    )}
+                    <span>{isUploadingPhoto ? 'Compressing...' : '+ Upload Photos'}</span>
+                  </button>
+
+                  {reviewPhotos.map((url, idx) => (
+                    <div key={idx} className="relative w-11 h-11 rounded-lg overflow-hidden border border-slate-200 group">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setReviewPhotos((prev) => prev.filter((_, i) => i !== idx))}
+                        className="absolute inset-0 bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setReviewModalItem(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReview || !reviewComment.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {isSubmittingReview ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                  <span>{isSubmittingReview ? 'Submitting...' : 'Submit Review'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Review Success Toast */}
+      {reviewSuccessToast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[99] bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-full shadow-2xl border border-emerald-500/50 flex items-center gap-2 animate-bounce">
+          <CheckCircle2 size={14} className="text-emerald-400" />
+          <span>{reviewSuccessToast}</span>
+        </div>
       )}
     </div>
   );

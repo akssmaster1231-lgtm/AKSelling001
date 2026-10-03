@@ -14,7 +14,7 @@ export interface OwnerPaymentSettings {
 
 export const DEFAULT_OWNER_PAYMENT: OwnerPaymentSettings = {
   beneficiaryName: 'ANOJKUMAR',
-  businessName: 'AK YADAV PRINTS (ANOJKUMAR)',
+  businessName: 'AKSELLING (ANOJKUMAR)',
   upiId: '7290894907@ybl',
   accountNumber: '7290894907',
   ifscCode: 'AIRP0000001',
