@@ -44,11 +44,12 @@ interface CartPageProps {
   onProductClick: (product: Product) => void;
   onContinueShopping: () => void;
   onBuyNow?: (product: Product, size?: string, color?: string) => void;
+  onRequireLogin?: () => void;
 }
 
 type CheckoutState = 'cart' | 'checkout' | 'processing' | 'success';
 
-export default function CartPage({ onProductClick, onContinueShopping, onBuyNow }: CartPageProps) {
+export default function CartPage({ onProductClick, onContinueShopping, onBuyNow, onRequireLogin }: CartPageProps) {
   const { items, removeFromCart, updateQuantity, saveForLater, moveToCart, cartCount, savedItems, clearCart } = useCart();
   const { user, addAddress } = useAuth();
   const [checkoutState, setCheckoutState] = useState<CheckoutState>('cart');
@@ -1115,13 +1116,17 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
                     <button
                       type="button"
                       onClick={() => {
+                        if (!user && onRequireLogin) {
+                          onRequireLogin();
+                          return;
+                        }
                         if (onBuyNow) {
                           onBuyNow(item.product, item.selectedSize, item.selectedColor);
                         } else {
                           onProductClick(item.product);
                         }
                       }}
-                      className="flex items-center gap-1 text-xs font-bold text-flipkart-600 bg-flipkart-50 hover:bg-flipkart-100 px-3 py-1.5 rounded-lg transition-colors ml-auto border border-flipkart-200"
+                      className="flex items-center gap-1 text-xs font-bold text-flipkart-600 bg-flipkart-50 hover:bg-flipkart-100 px-3 py-1.5 rounded-lg transition-colors ml-auto border border-flipkart-200 cursor-pointer"
                     >
                       <Zap size={14} /> Buy this now
                     </button>
@@ -1132,8 +1137,14 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow 
 
             <div className="p-3 border-t border-gray-100">
               <button
-                onClick={() => setCheckoutState('checkout')}
-                className="w-full bg-accent-400 text-white font-bold text-base py-3.5 rounded-xl hover:bg-accent-600 transition-colors"
+                onClick={() => {
+                  if (!user && onRequireLogin) {
+                    onRequireLogin();
+                    return;
+                  }
+                  setCheckoutState('checkout');
+                }}
+                className="w-full bg-accent-400 text-white font-bold text-base py-3.5 rounded-xl hover:bg-accent-600 transition-colors cursor-pointer"
               >
                 Place Order
               </button>

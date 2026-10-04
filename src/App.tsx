@@ -33,7 +33,7 @@ import DailyStreakModal from '@/components/gamification/DailyStreakModal';
 import SpinWheelModal from '@/components/gamification/SpinWheelModal';
 import EdgeSwipeBackContainer from '@/components/navigation/EdgeSwipeBackContainer';
 import { PWAInstallBanner } from '@/components/pwa/PWAInstallBanner';
-import { GlobalVoiceSalesMaster } from '@/components/ai/GlobalVoiceSalesMaster';
+import { WhatsAppFloatingButton } from '@/components/support/WhatsAppFloatingButton';
 
 function AppContent() {
   const { user, authInitialized } = useAuth();
@@ -66,9 +66,22 @@ function AppContent() {
   const [buyNowProduct, setBuyNowProduct] = useState<Product | null>(null);
   const [buyNowSize, setBuyNowSize] = useState<string | undefined>(undefined);
   const [buyNowColor, setBuyNowColor] = useState<string | undefined>(undefined);
+  const [pendingBuyNow, setPendingBuyNow] = useState<{ prod: Product; size?: string; color?: string } | null>(null);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showSpinWheelModal, setShowSpinWheelModal] = useState(false);
   const { cartCount } = useCart();
+
+  const handleInitiateBuyNow = (prod: Product, size?: string, color?: string) => {
+    if (!user) {
+      setPendingBuyNow({ prod, size, color });
+      setShowAuth(true);
+      return;
+    }
+    setBuyNowProduct(prod);
+    setBuyNowSize(size);
+    setBuyNowColor(color);
+    setSelectedProduct(null);
+  };
 
   const handleOpenProductById = async (productId: string) => {
     try {
@@ -501,7 +514,8 @@ function AppContent() {
             <CartPage
               onProductClick={handleProductClick}
               onContinueShopping={() => setActiveTab('home')}
-              onBuyNow={(prod) => setBuyNowProduct(prod)}
+              onBuyNow={(prod, size, color) => handleInitiateBuyNow(prod, size, color)}
+              onRequireLogin={() => setShowAuth(true)}
             />
           </ErrorBoundary>
         )}
@@ -538,10 +552,7 @@ function AppContent() {
             product={selectedProduct}
             onBack={() => setSelectedProduct(null)}
             onBuyNow={(prod, size, color) => {
-              setBuyNowProduct(prod);
-              setBuyNowSize(size);
-              setBuyNowColor(color);
-              setSelectedProduct(null);
+              handleInitiateBuyNow(prod, size, color);
             }}
             onGoToCart={() => {
               setSelectedProduct(null);
@@ -582,10 +593,21 @@ function AppContent() {
 
       {showAuth && (
         <AuthPage
-          onClose={() => setShowAuth(false)}
+          onClose={() => {
+            setShowAuth(false);
+            setPendingBuyNow(null);
+          }}
           onSuccess={() => {
             setShowAuth(false);
-            setActiveTab('home');
+            if (pendingBuyNow) {
+              setBuyNowProduct(pendingBuyNow.prod);
+              setBuyNowSize(pendingBuyNow.size);
+              setBuyNowColor(pendingBuyNow.color);
+              setSelectedProduct(null);
+              setPendingBuyNow(null);
+            } else {
+              setActiveTab('home');
+            }
           }}
         />
       )}
@@ -660,8 +682,8 @@ function AppContent() {
         }}
       />
 
-      {/* Revolutionary Global 3D Voice Sales Master (Native Mic Auto-Prompt & Male Voice Greeting) */}
-      <GlobalVoiceSalesMaster onSelectProduct={handleProductClick} />
+      {/* Official WhatsApp Floating Support Button */}
+      <WhatsAppFloatingButton />
       </div>
     </div>
     </EdgeSwipeBackContainer>

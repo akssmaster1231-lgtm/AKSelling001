@@ -329,19 +329,27 @@ export function getAllCategories(): Category[] {
 export const banners: Banner[] = [
   {
     id: 'b1',
-    title: 'Welcome to AKSelling',
-    subtitle: 'India’s trusted direct fashion & apparel manufacturing marketplace',
-    cta: 'Explore Collections',
-    image: 'https://images.pexels.com/photos/5625013/pexels-photo-5625013.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    gradient: 'from-flipkart-600 to-flipkart-800',
+    title: 'AKSelling Factory Direct',
+    subtitle: '100% Pure Combed 180 GSM Bio-Wash Cotton & Heavy Streetwear Oversized Tees • From ₹499',
+    cta: 'Shop Collections',
+    image: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=1200&q=80',
+    gradient: 'from-slate-950 via-[#1b365d] to-slate-900',
   },
   {
     id: 'b2',
-    title: 'Sell with Confidence',
-    subtitle: 'Instant GST & Bank verified seller onboarding',
-    cta: 'Start Selling',
-    image: 'https://images.pexels.com/photos/8743972/pexels-photo-8743972.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    gradient: 'from-pink-600 to-rose-700',
+    title: 'Mega Factory Sale • Up to 60% Off',
+    subtitle: 'Cash on Delivery Available • Instant ₹30 Welcome Wallet Bonus • 7-Day Doorstep Replacement',
+    cta: 'Explore Deals',
+    image: 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=1200&q=80',
+    gradient: 'from-amber-600 via-orange-600 to-rose-700',
+  },
+  {
+    id: 'b3',
+    title: 'Custom HD Apparel & DTF Printing',
+    subtitle: 'Direct manufacturing from Indore Hub • High definition screen & DTF prints with 50+ wash durability',
+    cta: 'Custom Prints',
+    image: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1200&q=80',
+    gradient: 'from-indigo-900 via-purple-900 to-slate-950',
   },
 ];
 

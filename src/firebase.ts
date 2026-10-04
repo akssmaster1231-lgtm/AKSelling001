@@ -108,9 +108,18 @@ export async function uploadMediaToPermanentStorage(
 
   let finalBase64 = '';
   if (typeof dataUrlOrFile !== 'string') {
-    finalBase64 = await compressImageFile(dataUrlOrFile, { maxWidth: 1200, maxHeight: 1200, quality: 0.82 });
+    finalBase64 = await compressImageFile(dataUrlOrFile, { maxWidth: 800, maxHeight: 800, quality: 0.76 });
   } else {
-    finalBase64 = dataUrlOrFile;
+    // If it's a massive raw base64 string, compress it before upload
+    if (dataUrlOrFile.startsWith('data:image/') && dataUrlOrFile.length > 200000) {
+      try {
+        finalBase64 = await compressImageFile(dataUrlOrFile, { maxWidth: 800, maxHeight: 800, quality: 0.76 });
+      } catch {
+        finalBase64 = dataUrlOrFile;
+      }
+    } else {
+      finalBase64 = dataUrlOrFile;
+    }
   }
 
   if (!finalBase64 || !finalBase64.startsWith('data:')) {

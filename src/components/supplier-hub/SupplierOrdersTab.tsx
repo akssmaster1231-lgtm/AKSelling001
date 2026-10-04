@@ -481,8 +481,8 @@ Logistics Provider: ${providerName}`;
                           </span>
                         )}
                         {item.size && (
-                          <span>
-                            Size: <strong className="text-gray-700">{item.size}</strong>
+                          <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black px-2 py-0.5 rounded text-[11px]">
+                            Size: {item.size}
                           </span>
                         )}
                         {item.color && (
@@ -523,14 +523,32 @@ Logistics Provider: ${providerName}`;
                     <div>
                       <span className="font-bold text-gray-900 text-xs sm:text-sm">{order.customerName}</span>
                       {order.customerPhone && (
-                        <span className="text-gray-500 text-[11px] ml-2 font-mono">
-                          +91 {order.customerPhone.replace(/\D/g, '').slice(-10)}
-                        </span>
+                        <a
+                          href={`tel:${order.customerPhone}`}
+                          className="text-blue-700 hover:underline text-[11px] ml-2 font-mono font-bold"
+                          title="Call Customer"
+                        >
+                          📞 +91 {order.customerPhone.replace(/\D/g, '').slice(-10)}
+                        </a>
+                      )}
+                      {order.customerPhone && (
+                        <a
+                          href={`https://wa.me/91${order.customerPhone.replace(/\D/g, '').slice(-10)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold px-1.5 py-0.5 rounded ml-1.5 hover:bg-emerald-200"
+                          title="Chat on WhatsApp"
+                        >
+                          WhatsApp
+                        </a>
                       )}
                       {order.customerEmail && (
-                        <span className="text-blue-700 font-medium text-[11px] ml-2">
-                          ({order.customerEmail})
-                        </span>
+                        <a
+                          href={`mailto:${order.customerEmail}`}
+                          className="text-slate-600 hover:text-slate-900 text-[11px] ml-2"
+                        >
+                          ✉️ {order.customerEmail}
+                        </a>
                       )}
                     </div>
                   </div>

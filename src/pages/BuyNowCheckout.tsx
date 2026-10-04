@@ -208,6 +208,10 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
 
   const handleAddressNext = () => {
     setError('');
+    if (!user) {
+      setError('Login required to complete purchase. Please sign in to your AKSelling account.');
+      return;
+    }
     if (!form.name.trim() || !form.phone.trim() || (!form.houseNo.trim() && !form.street.trim()) || !form.pincode.trim() || !form.city.trim()) {
       setError('Please fill in your complete delivery address (Name, Phone, House/Street, City, Pincode).');
       return;
@@ -229,6 +233,10 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
 
   const handleConfirm = () => {
     setError('');
+    if (!user) {
+      setError('Login required to confirm order payment.');
+      return;
+    }
     const genId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
     setPendingOrderId(genId);
     setIsDirectUpiModalOpen(true);

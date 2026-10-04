@@ -5,6 +5,7 @@ import {
   Trophy,
   ArrowRight,
   Clock,
+  Lock,
 } from 'lucide-react';
 import { fireConfetti } from '@/utils/confetti';
 import {
@@ -12,6 +13,7 @@ import {
   getRemainingDailySpins,
   deductSpinChance,
   setActiveSpinDiscount,
+  getTimeUntilNextSpin,
 } from '@/utils/gamificationService';
 import { setLocalWalletCache, getLocalWalletCache } from '@/utils/walletService';
 import { useAuth } from '@/auth-context';
@@ -52,8 +54,26 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
   const [winningSegment, setWinningSegment] = useState<WheelSegment | null>(null);
   const [spinsLeft, setSpinsLeft] = useState(() => getRemainingDailySpins());
   const [isEligibleToday, setIsEligibleToday] = useState(() => canSpinToday());
+  const [timeLeftMs, setTimeLeftMs] = useState<number>(() => getTimeUntilNextSpin());
 
   const wheelRef = useRef<HTMLDivElement>(null);
+
+  // 24-Hour Countdown Interval
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const updateTimer = () => {
+      const ms = getTimeUntilNextSpin();
+      setTimeLeftMs(ms);
+      const eligible = canSpinToday();
+      setIsEligibleToday(eligible);
+      setSpinsLeft(getRemainingDailySpins());
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -67,11 +87,18 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
 
   const segmentAngle = 360 / WHEEL_SEGMENTS.length; // 45 degrees
 
+  // Format 24-hour countdown display
+  const hours = Math.floor(timeLeftMs / (1000 * 60 * 60));
+  const minutes = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((timeLeftMs % (1000 * 60)) / 1000);
+
+  const formattedTimer = `${String(hours).padStart(2, '0')}h : ${String(minutes).padStart(2, '0')}m : ${String(seconds).padStart(2, '0')}s`;
+
   const handleSpin = () => {
     if (isSpinning) return;
 
     if (!canSpinToday()) {
-      return; // Strictly restricted to 1 spin per user per day
+      return; // Strictly restricted to 1 spin per user per 24 hours
     }
 
     const success = deductSpinChance(user?.id || 'guest');
@@ -81,6 +108,7 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
     setIsEligibleToday(false);
     setIsSpinning(true);
     setWinningSegment(null);
+    setTimeLeftMs(24 * 60 * 60 * 1000);
 
     // Pick winning index
     const winningIdx = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
@@ -121,7 +149,7 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
         }
       }
 
-      // If reward is cash, add to Cash Wallet balance
+      // If reward is cash, add to Cash Wallet balance with connected transaction record
       if (targetSegment.rewardType === 'cash') {
         const uid = user?.id || 'guest';
         const wallet = getLocalWalletCache(uid);
@@ -143,24 +171,30 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
           >
             <X size={18} />
           </button>
 
           <div className="inline-flex items-center gap-1.5 bg-amber-400/20 text-amber-300 border border-amber-400/40 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-2">
             <Trophy size={14} className="text-amber-400" />
-            <span>Strict Daily Spin Wheel • 1 Spin / Day</span>
+            <span>24-Hour Daily Spin • 1 Chance / Day</span>
           </div>
 
           <h3 className="text-xl font-black text-white">Win Instant Discounts & Cash</h3>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <div className="mt-1">
             {isEligibleToday ? (
-              <span className="font-bold text-emerald-400">{spinsLeft} Free Daily Spin Available Today!</span>
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-500/40">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                {spinsLeft} Free Daily Spin Available Now!
+              </span>
             ) : (
-              <span className="font-medium text-amber-400">Today&apos;s spin used. Next free spin tomorrow!</span>
+              <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-300 bg-amber-950/40 px-2.5 py-0.5 rounded-full border border-amber-400/30">
+                <Clock size={13} className="text-amber-400 animate-pulse" />
+                <span>Next Spin in: {formattedTimer}</span>
+              </div>
             )}
-          </p>
+          </div>
         </div>
 
         {/* Wheel Container */}
@@ -239,7 +273,7 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
                   : 'bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 text-slate-950 hover:scale-105 active:scale-95 cursor-pointer'
               }`}
             >
-              {isSpinning ? '...' : isEligibleToday ? 'SPIN' : 'LOCK'}
+              {isSpinning ? '...' : isEligibleToday ? 'SPIN' : <Lock size={18} />}
             </button>
           </div>
 
@@ -255,8 +289,8 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
               </h4>
               <p className="text-xs text-amber-200 mt-0.5">
                 {winningSegment.rewardType === 'cash'
-                  ? `₹${winningSegment.amount} has been added directly to your Cash Wallet!`
-                  : `🎉 ${winningSegment.amount}% OFF has been automatically applied to your checkout!`}
+                  ? `₹${winningSegment.amount} Cash directly added to your Wallet!`
+                  : `🎉 ${winningSegment.amount}% OFF coupon automatically active at checkout!`}
               </p>
 
               <div className="mt-3 flex gap-2">
@@ -275,7 +309,7 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
             </div>
           )}
 
-          {/* Daily Spin Status / Trigger Button */}
+          {/* Daily Spin Status / 24-Hour Countdown Clock */}
           {!winningSegment && (
             <div className="w-full mt-4">
               {isEligibleToday ? (
@@ -290,13 +324,29 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
                   <span>{isSpinning ? 'Spinning Lucky Wheel...' : 'Spin 1x Free Daily Wheel'}</span>
                 </button>
               ) : (
-                <div className="bg-slate-800/80 border border-slate-700 text-slate-300 p-3 rounded-xl text-center space-y-1">
-                  <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-400">
-                    <Clock size={14} />
-                    <span>Daily Limit Reached (1 Spin / Day)</span>
+                <div className="bg-gradient-to-b from-slate-800 to-slate-900 border border-amber-400/30 text-slate-200 p-3.5 rounded-2xl text-center space-y-2.5 shadow-md">
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-black text-amber-400 uppercase tracking-wide">
+                    <Clock size={15} className="text-amber-400 animate-pulse" />
+                    <span>24 Ghante Ka Timer Active Hai</span>
                   </div>
-                  <p className="text-[11px] text-slate-400">
-                    You have completed today&apos;s lucky spin! Come back tomorrow at 12:00 AM for your next spin.
+
+                  {/* High-visibility Digital Countdown Display */}
+                  <div className="flex items-center justify-center gap-2 font-mono text-xl sm:text-2xl font-black text-amber-400 select-none">
+                    <span className="bg-slate-950 px-2.5 py-1 rounded-xl border border-amber-400/40 shadow-inner">
+                      {String(hours).padStart(2, '0')}h
+                    </span>
+                    <span className="text-amber-300/60">:</span>
+                    <span className="bg-slate-950 px-2.5 py-1 rounded-xl border border-amber-400/40 shadow-inner">
+                      {String(minutes).padStart(2, '0')}m
+                    </span>
+                    <span className="text-amber-300/60">:</span>
+                    <span className="bg-slate-950 px-2.5 py-1 rounded-xl border border-amber-400/40 shadow-inner text-amber-300">
+                      {String(seconds).padStart(2, '0')}s
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-300">
+                    Aapne aaj ka spin complete kar liya hai. Agla spin 24 ghante baad automatically unlock hoga!
                   </p>
                 </div>
               )}

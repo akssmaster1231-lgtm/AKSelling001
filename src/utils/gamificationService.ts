@@ -8,6 +8,7 @@ export interface DailyStreakState {
   coinsBalance: number;    // Shopping Coins Balance (100 Coins = ₹5 INR)
   totalCoinsEarned: number;
   lastSpinDate: string;    // YYYY-MM-DD for strictly 1 spin per day
+  lastSpinTimestamp?: number; // Exact timestamp in ms of last spin for 24-hour countdown
   spinsAvailable: number;  // Bonus spins earned via Day 5 streak
 }
 
@@ -59,6 +60,7 @@ export function getStreakData(): DailyStreakState {
         coinsBalance: typeof parsed.coinsBalance === 'number' ? parsed.coinsBalance : (Number(parsed.totalCoinsEarned) || 0),
         totalCoinsEarned: Number(parsed.totalCoinsEarned) || 0,
         lastSpinDate: parsed.lastSpinDate || '',
+        lastSpinTimestamp: typeof parsed.lastSpinTimestamp === 'number' ? parsed.lastSpinTimestamp : undefined,
         spinsAvailable: typeof parsed.spinsAvailable === 'number' ? parsed.spinsAvailable : 0,
       };
     }
@@ -71,8 +73,24 @@ export function getStreakData(): DailyStreakState {
     coinsBalance: 0,
     totalCoinsEarned: 0,
     lastSpinDate: '',
+    lastSpinTimestamp: undefined,
     spinsAvailable: 0,
   };
+}
+
+export const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+export function getTimeUntilNextSpin(state?: DailyStreakState): number {
+  const current = state || getStreakData();
+  const lastTs = current.lastSpinTimestamp || 0;
+  if (!lastTs) {
+    if (current.lastSpinDate === getTodayDateString()) {
+      return 12 * 60 * 60 * 1000;
+    }
+    return 0;
+  }
+  const elapsed = Date.now() - lastTs;
+  return Math.max(0, TWENTY_FOUR_HOURS_MS - elapsed);
 }
 
 export function saveStreakData(data: DailyStreakState, userId = 'guest'): void {
@@ -89,6 +107,7 @@ export function saveStreakData(data: DailyStreakState, userId = 'guest'): void {
         coinsBalance: data.coinsBalance,
         totalCoinsEarned: data.totalCoinsEarned,
         lastSpinDate: data.lastSpinDate,
+        lastSpinTimestamp: data.lastSpinTimestamp || Date.now(),
         updatedAt: new Date().toISOString(),
       }).catch(() => {
         setDoc(userRef, {
@@ -97,6 +116,7 @@ export function saveStreakData(data: DailyStreakState, userId = 'guest'): void {
           coinsBalance: data.coinsBalance,
           totalCoinsEarned: data.totalCoinsEarned,
           lastSpinDate: data.lastSpinDate,
+          lastSpinTimestamp: data.lastSpinTimestamp || Date.now(),
           updatedAt: new Date().toISOString(),
         }, { merge: true }).catch(() => {});
       });
@@ -113,23 +133,20 @@ export function canCheckInToday(): boolean {
 }
 
 /**
- * Strictly enforce 1 spin per user per day.
- * User can spin IF they haven't spun today OR if they have bonus spins available.
+ * Strictly enforce 1 spin per user per 24 hours.
+ * User can spin IF 24 hours have elapsed OR if they have earned bonus spins.
  */
 export function canSpinToday(): boolean {
   const current = getStreakData();
-  const today = getTodayDateString();
-  
-  if (current.lastSpinDate !== today) {
-    return true; // Free daily spin available!
-  }
-  return current.spinsAvailable > 0; // Earned bonus spin available
+  const msLeft = getTimeUntilNextSpin(current);
+  if (msLeft === 0) return true;
+  return (current.spinsAvailable || 0) > 0;
 }
 
 export function getRemainingDailySpins(): number {
   const current = getStreakData();
-  const today = getTodayDateString();
-  const freeDailyLeft = current.lastSpinDate !== today ? 1 : 0;
+  const msLeft = getTimeUntilNextSpin(current);
+  const freeDailyLeft = msLeft === 0 ? 1 : 0;
   return freeDailyLeft + (current.spinsAvailable || 0);
 }
 
@@ -224,17 +241,20 @@ export function claimTodayStreakReward(userId = 'guest'): {
 export function deductSpinChance(userId = 'guest'): boolean {
   const current = getStreakData();
   const today = getTodayDateString();
+  const now = Date.now();
 
   if (!canSpinToday()) return false;
 
-  let newBonusSpins = current.spinsAvailable;
-  if (current.lastSpinDate === today && current.spinsAvailable > 0) {
+  let newBonusSpins = current.spinsAvailable || 0;
+  const msLeft = getTimeUntilNextSpin(current);
+  if (msLeft > 0 && newBonusSpins > 0) {
     newBonusSpins -= 1;
   }
 
   const updated: DailyStreakState = {
     ...current,
     lastSpinDate: today,
+    lastSpinTimestamp: now,
     spinsAvailable: newBonusSpins,
   };
 

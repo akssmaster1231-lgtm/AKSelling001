@@ -381,7 +381,17 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
       const nextList = exists
         ? prev.map(p => (p.id === prod.id ? prod : p))
         : [prod, ...prev];
-      safeLocalStorageSetItem('akselling_seller_products', JSON.stringify(nextList));
+      try {
+        // Strip heavy base64 strings when caching in localStorage to guarantee zero storage quota errors
+        const safeForStorage = nextList.map(p => ({
+          ...p,
+          images: Array.isArray(p.images) ? p.images.map(img => (typeof img === 'string' && img.startsWith('data:') ? img.slice(0, 120) : img)) : [],
+          image: typeof p.image === 'string' && p.image.startsWith('data:') ? p.image.slice(0, 120) : p.image,
+        }));
+        safeLocalStorageSetItem('akselling_seller_products', JSON.stringify(safeForStorage));
+      } catch {
+        // ignore quota errors
+      }
       try {
         window.dispatchEvent(new CustomEvent('akselling_products_updated'));
       } catch {

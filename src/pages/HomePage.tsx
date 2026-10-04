@@ -1,13 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ChevronRight, Gift, Calendar, Trophy } from 'lucide-react';
-import { products as fallbackProducts, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, DisplayDeduplicator } from '@/data';
+import { products as fallbackProducts, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, DisplayDeduplicator, banners as defaultBanners } from '@/data';
 import { subscribeProducts, getCachedProducts, subscribeCategories } from '@/firebase';
+import { fetchBanners } from '@/banner-api';
 import { useI18n } from '@/i18n';
-import type { Product, Category } from '@/types';
+import type { Product, Category, Banner } from '@/types';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 import CategoryIcon from '@/components/CategoryIcon';
 import FlashDropSection from '@/components/flash-drop/FlashDropSection';
-import { SalesMasterCounterBanner } from '@/components/ai/SalesMasterCounterBanner';
+import FeaturedShowcaseBoxes from '@/components/FeaturedShowcaseBoxes';
+import BannerCarousel from '@/components/BannerCarousel';
 
 interface HomePageProps {
   searchQuery: string;
@@ -32,9 +34,21 @@ export default function HomePage({
   const [dbProducts, setDbProducts] = useState<Product[]>(() => getCachedProducts());
   const [activeCategories, setActiveCategories] = useState<Category[]>(() => getAllCategories());
   const [loading, setLoading] = useState(() => getCachedProducts().length === 0);
+  const [bannersList, setBannersList] = useState<Banner[]>(() => defaultBanners);
 
   useEffect(() => {
     let isMounted = true;
+
+    // 0. Fetch high-quality promotional banners & posters
+    fetchBanners().then((res) => {
+      if (isMounted && res.length > 0) setBannersList(res);
+    });
+    const handleBannersUpdate = () => {
+      fetchBanners().then((res) => {
+        if (isMounted && res.length > 0) setBannersList(res);
+      });
+    };
+    window.addEventListener('akselling_banners_updated', handleBannersUpdate);
 
     // 1. Initial async fetch
     fetchProducts().then(prods => {
@@ -88,6 +102,7 @@ export default function HomePage({
       unsubCategories();
       window.removeEventListener('akselling_products_updated', handleProductsUpdate);
       window.removeEventListener('akselling_categories_updated', handleUpdate);
+      window.removeEventListener('akselling_banners_updated', handleBannersUpdate);
     };
   }, []);
 
@@ -200,9 +215,9 @@ export default function HomePage({
 
   return (
     <div className="pb-4 w-full overflow-x-hidden touch-scroll-container">
-      {/* 3D Human-like AI Sales Master Shopkeeper Counter Avatar (Prime Top Location) */}
+      {/* High-Quality Promotional Banners & Posters (Official AKSelling Carousel) */}
       <div className="px-3 pt-3">
-        <SalesMasterCounterBanner onProductClick={onProductClick} />
+        <BannerCarousel banners={bannersList} />
       </div>
 
       {/* Interactive Quick Rewards Hub */}
@@ -271,11 +286,19 @@ export default function HomePage({
 
       {/* Limited Midnight 1-Hour Flash Drop Shelf */}
       {!searchQuery.trim() && allProducts.length > 0 && (
-        <FlashDropSection
-          products={allProducts}
-          onProductClick={onProductClick}
-          onNavigateDeals={onNavigateDeals || (() => onCategoryClick('all'))}
-        />
+        <>
+          <FlashDropSection
+            products={allProducts}
+            onProductClick={onProductClick}
+            onNavigateDeals={onNavigateDeals || (() => onCategoryClick('all'))}
+          />
+
+          {/* Premium Non-Timer Featured Showcase Boxes (180 GSM Bio-Wash, 240+ GSM Streetwear, Custom HD Prints) */}
+          <FeaturedShowcaseBoxes
+            products={allProducts}
+            onProductClick={onProductClick}
+          />
+        </>
       )}
 
       {searchQuery.trim() ? (

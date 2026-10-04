@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { compressImageFile } from '@/utils/imageCompressor';
+import { uploadMediaToPermanentStorage } from '@/firebase';
 import type { WizardStepProps } from './types';
 
 const ANGLE_LABELS = [
@@ -102,14 +103,22 @@ export default function Step2Media({
       const filesToProcess = Array.from(files);
 
       const processedUrls: string[] = [];
-      for (const file of filesToProcess) {
+      for (let idx = 0; idx < filesToProcess.length; idx++) {
+        const file = filesToProcess[idx];
         if (!file.type.startsWith('image/')) continue;
+        // Fast crisp compression: 800x800 @ 0.78 quality keeps file ~30KB with vivid colors
         const compressedBase64 = await compressImageFile(file, {
-          maxWidth: 1600,
-          maxHeight: 1600,
-          quality: 0.92,
+          maxWidth: 800,
+          maxHeight: 800,
+          quality: 0.78,
         });
-        processedUrls.push(compressedBase64);
+        // Immediately upload to permanent server/cloud storage for ultra-fast light URL
+        const permUrl = await uploadMediaToPermanentStorage(
+          compressedBase64,
+          'products',
+          `seller_step2_${Date.now()}_${idx}`
+        );
+        processedUrls.push(permUrl || compressedBase64);
       }
 
       if (processedUrls.length > 0) {
