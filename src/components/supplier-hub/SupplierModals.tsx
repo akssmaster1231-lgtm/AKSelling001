@@ -278,13 +278,13 @@ export function SPFClaimModal({
       id: `SPF-${Math.floor(10000 + Math.random() * 90000)}`,
       returnId: returnItem?.id || `ret_${Date.now()}`,
       orderNumber: returnItem?.orderNumber || 'OD3948572910',
-      productTitle: returnItem?.productTitle || 'Dennis Lingo Men Slim Fit Cotton Shirt',
-      productImage: returnItem?.productImage || 'https://images.pexels.com/photos/297933/pexels-photo-297933.jpeg',
+      productTitle: returnItem?.productTitle || 'Heavy Duty Oversized Black T-Shirt | Built For The Long Run',
+      productImage: returnItem?.productImage || '/uploads/prod_AKY-01_0.jpg',
       claimReason: reason,
-      claimedAmount: parseInt(amount) || 649,
+      claimedAmount: parseInt(amount) || 499,
       status: 'pending',
       submittedDate: 'Today, Just now',
-      proofImages: ['https://images.pexels.com/photos/297933/pexels-photo-297933.jpeg'],
+      proofImages: ['/uploads/prod_AKY-01_0.jpg'],
       remarks: 'Under review by Supplier Protection Fund Team. Decision within 48h.',
     };
 
@@ -393,7 +393,7 @@ export function PricingToolModal({
 
           <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-gray-900">Roadster Pure Cotton T-Shirt</span>
+              <span className="font-bold text-gray-900">AKY Trust The Process 180 GSM Cotton T-Shirt</span>
               <span className="text-emerald-700 bg-emerald-100 font-bold px-1.5 py-0.2 rounded text-[10px]">
                 +3.2x Orders
               </span>
@@ -404,7 +404,7 @@ export function PricingToolModal({
             </div>
             <button
               onClick={() => {
-                onApplyPrice('sp_5', 369);
+                onApplyPrice('AKY-TTP-WHT-05', 369);
                 alert('Price updated to ₹369! Your catalog is now marked Best Price.');
                 onClose();
               }}

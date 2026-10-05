@@ -552,17 +552,21 @@ Logistics Provider: ${providerName}`;
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        (order.paymentStatus || '').toLowerCase().includes('paid') && !(order.paymentStatus || '').toLowerCase().includes('partially')
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        (order.paymentStatus || '').toLowerCase().includes('cod') || (order.paymentStatus || '').includes('10%')
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : (order.paymentStatus || '').toLowerCase().includes('paid') && !(order.paymentStatus || '').toLowerCase().includes('partially')
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                           : (order.paymentStatus || '').toLowerCase().includes('partially') || (order.paymentMethod || '').toLowerCase().includes('cod')
                           ? 'bg-amber-100 text-amber-800 border border-amber-300'
                           : 'bg-blue-100 text-blue-800 border border-blue-300'
                       }`}
                     >
-                      {order.paymentStatus || order.paymentMethod || 'Prepaid (Paid)'}
+                      {(order.paymentStatus || '').toLowerCase().includes('cod') || (order.paymentStatus || '').includes('10%')
+                        ? 'COD (10% Paid)'
+                        : order.paymentStatus || order.paymentMethod || 'Prepaid (Paid)'}
                     </span>
                     <span className="font-black text-gray-900 text-xs sm:text-sm">
                       Total: ₹{order.totalAmount.toLocaleString('en-IN')}

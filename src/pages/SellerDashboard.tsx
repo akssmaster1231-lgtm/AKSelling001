@@ -72,15 +72,15 @@ const SAMPLE_TEST_ORDER: SellerOrder = {
   customerPhone: '+91 98112 34567',
   items: [
     {
-      title: 'Dennis Lingo Men Slim Fit Cotton Shirt',
+      title: 'Heavy Duty Oversized Black T-Shirt | Built For The Long Run',
       quantity: 1,
-      price: 649,
-      image: 'https://images.pexels.com/photos/297933/pexels-photo-297933.jpeg',
-      sku: 'AK-DENNIS-OLIVE',
+      price: 499,
+      image: '/uploads/prod_AKY-01_0.jpg',
+      sku: 'AK-AKY-01-BLK',
       size: 'L',
     },
   ],
-  totalAmount: 649,
+  totalAmount: 499,
   paymentMethod: 'Prepaid (Razorpay UPI)',
   paymentStatus: 'Paid',
   transactionId: `pay_${Math.random().toString(36).substring(2, 12)}`,
@@ -136,6 +136,10 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
           return parsed.filter(
             (p: SellerProduct) =>
               !p.id?.startsWith('sp_') &&
+              p.id !== 'prod_1789471043550' &&
+              p.id !== 'prod_1789377443939' &&
+              p.id !== 'PRD-261462' &&
+              p.id !== 'demo_tshirt' &&
               p.catalogId !== 'CAT-98421' &&
               p.catalogId !== 'CAT-89302' &&
               p.catalogId !== 'CAT-74910' &&
@@ -287,7 +291,7 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
               })),
               totalAmount: ro.total_amount,
               paymentMethod: ro.payment_method || 'Prepaid',
-              paymentStatus: ro.payment_status || (isCod ? 'Partially Paid' : 'Paid'),
+              paymentStatus: isCod ? 'COD (10% Paid)' : (ro.payment_status || 'Paid'),
               razorpayOrderId: ro.razorpay_order_id,
               razorpayPaymentId: ro.razorpay_payment_id,
               transactionId: ro.razorpay_payment_id || ro.razorpay_order_id || (ro as unknown as Record<string, unknown>).transaction_id as string,
@@ -438,10 +442,14 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
     );
   };
 
-  const handleDeleteProduct = (productId: string) => {
-    if (window.confirm('Are you sure you want to delete this catalog?')) {
-      setProducts(prev => prev.filter(p => p.id !== productId));
-      deleteProductFromFirestore(productId).catch(() => {});
+  const handleDeleteProduct = async (productId: string) => {
+    if (window.confirm('Are you sure you want to permanently delete this product? It will be removed from your catalog and the live store.')) {
+      setProducts(prev => {
+        const nextList = prev.filter(p => p.id !== productId);
+        safeLocalStorageSetItem('akselling_seller_products', JSON.stringify(nextList));
+        return nextList;
+      });
+      await deleteProductFromFirestore(productId);
     }
   };
 

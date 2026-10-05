@@ -15,13 +15,13 @@ import {
   Star,
   Camera,
   X,
+  FileText,
 } from 'lucide-react';
 import { formatPrice } from '@/data';
 import { useI18n } from '@/i18n';
 import {
   subscribeOrders,
   updateOrderStatusInFirestore,
-  saveOrderToFirestore,
   submitProductReview,
   uploadMediaToPermanentStorage,
   type FirestoreOrder,
@@ -30,6 +30,7 @@ import { useAuth } from '@/auth-context';
 import OrderStatusStepper from '@/components/OrderStatusStepper';
 import { getStepIndexFromStatus } from '@/utils/orderTracking';
 import OrderTrackingModal from '@/components/OrderTrackingModal';
+import OrderInvoiceModal from '@/components/orders/OrderInvoiceModal';
 
 interface OrdersPageProps {
   onBack: () => void;
@@ -46,6 +47,7 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
   const [returnRequested, setReturnRequested] = useState<string | null>(null);
   const [trackingModalOrder, setTrackingModalOrder] = useState<OrderRow | null>(null);
   const [copiedAwb, setCopiedAwb] = useState<string | null>(null);
+  const [invoiceModalOrder, setInvoiceModalOrder] = useState<OrderRow | null>(null);
 
   // Verified Customer Review Modal State
   const [reviewModalItem, setReviewModalItem] = useState<{
@@ -221,52 +223,6 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
     window.dispatchEvent(new CustomEvent('akselling_orders_updated'));
   };
 
-  // Helper to generate a sample order for demonstration/testing if empty
-  const handleCreateSampleOrder = async () => {
-    const sampleId = `ORD-SAMPLE-${Math.floor(10000 + Math.random() * 90000)}`;
-    const sampleOrder: OrderRow = {
-      id: sampleId,
-      customer_name: user?.name || 'Verified Customer',
-      customer_phone: user?.phone || '9876543210',
-      customer_address: 'Flat 402, Green Avenue, Connaught Place, New Delhi - 110001',
-      items: [
-        {
-          product_id: 'sample_1',
-          product_title: 'Dennis Lingo Men Slim Fit Cotton Casual Shirt',
-          product_image: 'https://images.pexels.com/photos/297933/pexels-photo-297933.jpeg',
-          quantity: 1,
-          price: 699,
-          size: 'L',
-          color: 'Olive Green',
-        },
-      ],
-      total_amount: 699,
-      payment_method: 'Prepaid (UPI / Card)',
-      payment_status: 'Paid',
-      status: 'Order Placed',
-      created_at: new Date().toISOString(),
-      awb_code: `SFX${Math.floor(10000000 + Math.random() * 90000000)}`,
-      courier_name: 'Shadowfax Express Surface',
-    };
-
-    setOrders(prev => [sampleOrder, ...prev]);
-
-    try {
-      const existing = JSON.parse(localStorage.getItem('akselling_local_orders') || '[]');
-      localStorage.setItem('akselling_local_orders', JSON.stringify([sampleOrder, ...existing]));
-    } catch {
-      // ignore
-    }
-
-    try {
-      await saveOrderToFirestore(sampleOrder);
-    } catch {
-      // ignore
-    }
-
-    window.dispatchEvent(new CustomEvent('akselling_orders_updated'));
-  };
-
   const handleReturn = (order: OrderRow) => {
     const firstItem = order.items[0];
     if (!firstItem) return;
@@ -379,11 +335,11 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
 
             <button
               type="button"
-              onClick={handleCreateSampleOrder}
-              className="mt-6 bg-[#1b365d] hover:bg-slate-900 text-amber-300 font-bold text-xs py-3 px-5 rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer border border-amber-400/40"
+              onClick={onBack}
+              className="mt-6 bg-[#1b365d] hover:bg-slate-900 text-white font-bold text-xs py-3 px-6 rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
             >
-              <Sparkles size={15} className="text-amber-400" />
-              <span>Simulate Sample Order to View Live Stepper</span>
+              <Package size={15} className="text-amber-400" />
+              <span>Explore Store Apparel</span>
             </button>
           </div>
         ) : (
@@ -585,6 +541,15 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
 
                         {/* Action buttons */}
                         <div className="pt-1 flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setInvoiceModalOrder(order)}
+                            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2.5 rounded-xl border border-slate-300/80 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                          >
+                            <FileText size={14} className="text-[#1b365d]" />
+                            <span>Download Tax Invoice (GST / Print PDF)</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => setTrackingModalOrder(order)}
@@ -794,6 +759,15 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
           <CheckCircle2 size={14} className="text-emerald-400" />
           <span>{reviewSuccessToast}</span>
         </div>
+      )}
+
+      {/* Tax Invoice Modal */}
+      {invoiceModalOrder && (
+        <OrderInvoiceModal
+          order={invoiceModalOrder}
+          isOpen={true}
+          onClose={() => setInvoiceModalOrder(null)}
+        />
       )}
     </div>
   );

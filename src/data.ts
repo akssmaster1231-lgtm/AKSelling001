@@ -192,7 +192,17 @@ export async function fetchProductsByCategory(category: string): Promise<Product
   return matched;
 }
 
-const LEGACY_DUMMY_IDS = new Set(['sp_1', 'sp_2', 'sp_3', 'sp_4', 'sp_5', 'demo_tshirt']);
+const LEGACY_DUMMY_IDS = new Set([
+  'sp_1',
+  'sp_2',
+  'sp_3',
+  'sp_4',
+  'sp_5',
+  'demo_tshirt',
+  'prod_1789471043550',
+  'prod_1789377443939',
+  'PRD-261462',
+]);
 
 function getLocalSellerProducts(): Product[] {
   try {

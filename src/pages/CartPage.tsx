@@ -319,7 +319,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
       items: orderItems,
       total_amount: finalCartAmount,
       payment_method: isPrepaid ? 'Direct Personal UPI & QR (Owner Bank)' : 'Cash on Delivery (10% Direct UPI Advance Paid)',
-      payment_status: isPrepaid ? `Paid via Direct UPI (UTR: ${utrNumber})` : `Partially Paid (10% ₹${advancePaid} Advance Paid via UPI UTR: ${utrNumber}, ₹${remainingDue} Due on Delivery)`,
+      payment_status: isPrepaid ? `Paid via Direct UPI (UTR: ${utrNumber})` : `COD (10% Paid) • ₹${advancePaid} Advance Paid (UTR: ${utrNumber})`,
       upi_utr: utrNumber,
       upi_id: getOwnerPaymentSettings().upiId || '7290894907@ybl',
       transaction_id: `upi_${utrNumber}`,
@@ -802,8 +802,8 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
                 label="Cash on Delivery"
                 value="cod"
                 selected={form.paymentMethod === 'cod'}
-                badge={`10% (₹${codAdvanceAmount}) Direct UPI Advance`}
-                sub={`Pay ₹${codAdvanceAmount} advance via Direct UPI QR, pay ₹${codRemainingAmount} in cash upon delivery`}
+                badge={`COD Rule: 10% Advance (₹${codAdvanceAmount}) Mandatory`}
+                sub={`COD orders ke liye 10% advance payment zaroori hai. Abhi ₹${codAdvanceAmount} UPI se pay karein, baki ₹${codRemainingAmount} delivery par cash dein.`}
                 onSelect={() => setForm({ ...form, paymentMethod: 'cod' })}
               />
               <PaymentOption
@@ -891,13 +891,16 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
                 <PriceRow label="Total Amount" value={formatPrice(finalCartAmount)} bold />
               </div>
               {form.paymentMethod === 'cod' && (
-                <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-3 space-y-1 mt-2">
-                  <div className="flex justify-between text-xs font-bold text-amber-900">
-                    <span>Direct UPI Token Advance (10%):</span>
-                    <span>₹{codAdvanceAmount} (Pay to Owner Bank)</span>
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 space-y-1.5 mt-2">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                    <span>⚠️ Mandatory Rule: COD orders ke liye 10% advance payment zaroori hai.</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-bold text-amber-900 pt-1 border-t border-amber-200/80">
+                    <span>10% Advance Token (Online UPI):</span>
+                    <span>₹{codAdvanceAmount} (Instant Verification)</span>
                   </div>
                   <div className="flex justify-between text-xs text-amber-800">
-                    <span>Balance Due on Cash Delivery:</span>
+                    <span>Remaining 90% (Cash on Delivery):</span>
                     <span>₹{codRemainingAmount} (To Courier Rider)</span>
                   </div>
                 </div>

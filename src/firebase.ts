@@ -349,7 +349,17 @@ const PRODUCTS_CACHE_KEY = 'akselling_firestore_products_cache';
 
 export const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;
 
-const DUMMY_PRODUCT_IDS = new Set(['sp_1', 'sp_2', 'sp_3', 'sp_4', 'sp_5', 'demo_tshirt']);
+const DUMMY_PRODUCT_IDS = new Set([
+  'sp_1',
+  'sp_2',
+  'sp_3',
+  'sp_4',
+  'sp_5',
+  'demo_tshirt',
+  'prod_1789471043550',
+  'prod_1789377443939',
+  'PRD-261462',
+]);
 
 export function getCachedProducts(): Product[] {
   try {
@@ -712,28 +722,46 @@ export async function deleteProductFromFirestore(productId: string): Promise<voi
   const current = getCachedProducts();
   const updated = current.filter(p => p.id !== productId);
   setCachedProducts(updated);
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('akselling_products_updated', { detail: { products: updated } }));
-  }
 
-  // 2. Delete from server backend
+  // 2. Remove from local seller products cache
   try {
-    fetch(`/api/products/${productId}`, { method: 'DELETE' }).catch(() => {});
+    const rawSeller = localStorage.getItem('akselling_seller_products');
+    if (rawSeller) {
+      const parsed = JSON.parse(rawSeller);
+      if (Array.isArray(parsed)) {
+        const filteredSeller = parsed.filter((p: Record<string, unknown>) => p.id !== productId);
+        localStorage.setItem('akselling_seller_products', JSON.stringify(filteredSeller));
+      }
+    }
   } catch {
     // ignore
   }
 
-  // 3. Lifetime Data Permanence: Mark inactive/archived in Firestore rather than destroying data
+  // 3. Immediately broadcast to UI for 0ms reflection
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('akselling_products_updated', { detail: { products: updated } }));
+  }
+
+  // 4. Delete from server backend API
+  try {
+    await fetch(`/api/products/${productId}`, { method: 'DELETE' });
+  } catch {
+    // ignore
+  }
+
+  // 5. Permanently delete from Firebase Firestore
   try {
     const docRef = doc(db, 'products', productId);
-    await updateDoc(docRef, {
-      inStock: false,
-      isArchived: true,
-      status: 'archived',
-      archivedAt: new Date().toISOString(),
+    await deleteDoc(docRef).catch(async () => {
+      await updateDoc(docRef, {
+        inStock: false,
+        isArchived: true,
+        status: 'archived',
+        archivedAt: new Date().toISOString(),
+      });
     });
   } catch (err) {
-    console.warn('Firestore product archival notice (data preserved):', err);
+    console.warn('Firestore product deletion notice:', err);
   }
 }
 

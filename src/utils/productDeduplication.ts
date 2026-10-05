@@ -16,10 +16,23 @@ export function getProductDesignKey(product: Product): string {
   return `prod_${String(product.id).trim()}`;
 }
 
+const PERMANENT_DUMMY_IDS = new Set([
+  'sp_1',
+  'sp_2',
+  'sp_3',
+  'sp_4',
+  'sp_5',
+  'demo_tshirt',
+  'prod_1789471043550',
+  'prod_1789377443939',
+  'PRD-261462',
+]);
+
 /**
  * Deduplicates a list of products so that:
  * 1. Each unique product ID appears exactly once.
  * 2. Newly uploaded products are never filtered out or discarded.
+ * 3. Any legacy or dummy product IDs are permanently excluded.
  */
 export function deduplicateProducts(products: Product[]): Product[] {
   if (!Array.isArray(products) || products.length === 0) return [];
@@ -32,7 +45,10 @@ export function deduplicateProducts(products: Product[]): Product[] {
     const rawId = String(product.id || '').trim();
     if (!rawId) continue;
 
-    // Check ID
+    // Filter out dummy/test products permanently
+    if (PERMANENT_DUMMY_IDS.has(rawId) || rawId.startsWith('sp_')) continue;
+
+    // Check duplicate ID
     if (seenIds.has(rawId)) continue;
     seenIds.add(rawId);
     uniqueProducts.push(product);

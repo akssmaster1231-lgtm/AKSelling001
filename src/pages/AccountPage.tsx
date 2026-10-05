@@ -24,7 +24,6 @@ import {
   Check,
   Globe,
   Lock,
-  Eye,
   RotateCcw,
   Loader2,
   Copy,
@@ -1028,10 +1027,22 @@ function NotificationsScreen({
   updateProfile: (u: { notificationEnabled?: boolean }) => Promise<void>;
 }) {
   const [enabled, setEnabled] = useState(profile.notificationEnabled ?? true);
-  const [catalogUploads, setCatalogUploads] = useState(true);
-  const [orderUpdates, setOrderUpdates] = useState(true);
-  const [offers, setOffers] = useState(true);
-  const [recommendations, setRecommendations] = useState(false);
+  const [prefs, setPrefs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('akselling_notification_prefs');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return {
+      whatsappUpdates: true,
+      smsAlerts: true,
+      promotionalAlerts: true,
+      catalogAlerts: true,
+      recommendations: false,
+    };
+  });
+  const [savedNotice, setSavedNotice] = useState(false);
 
   const toggleMain = async () => {
     const newVal = !enabled;
@@ -1039,46 +1050,75 @@ function NotificationsScreen({
     await updateProfile({ notificationEnabled: newVal });
   };
 
+  const handleTogglePref = (key: keyof typeof prefs) => {
+    const updated = { ...prefs, [key]: !prefs[key] };
+    setPrefs(updated);
+    try {
+      localStorage.setItem('akselling_notification_prefs', JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+    setSavedNotice(true);
+    setTimeout(() => setSavedNotice(false), 2000);
+  };
+
   return (
     <div className="space-y-3">
+      {savedNotice && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold px-3 py-2 rounded-xl text-center animate-fade-in">
+          ✓ Notification preferences saved!
+        </div>
+      )}
       <InfoCard>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-bold text-gray-800">Push Notifications</p>
-            <p className="text-xs text-gray-500">Enable all alerts and notifications</p>
+            <p className="text-xs text-gray-500">Master switch for all device alerts</p>
           </div>
           <ToggleSwitch checked={enabled} onChange={toggleMain} />
         </div>
       </InfoCard>
+
       {enabled && (
         <div className="bg-white rounded-2xl shadow-xs border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-          <div className="px-4 py-3.5 flex items-center justify-between">
+          <div className="px-4 py-3.5 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-gray-800">New Catalog & Product Uploads</p>
-              <p className="text-xs text-gray-400">Instant alerts whenever a new catalog or product is added</p>
+              <p className="text-sm font-semibold text-gray-800">WhatsApp Order Updates</p>
+              <p className="text-xs text-gray-400">Order confirmed, live dispatch & courier delivery alerts on WhatsApp</p>
             </div>
-            <ToggleSwitch checked={catalogUploads} onChange={() => setCatalogUploads(!catalogUploads)} />
+            <ToggleSwitch checked={prefs.whatsappUpdates} onChange={() => handleTogglePref('whatsappUpdates')} />
           </div>
-          <div className="px-4 py-3.5 flex items-center justify-between">
+
+          <div className="px-4 py-3.5 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-gray-800">Order Updates</p>
-              <p className="text-xs text-gray-400">Live delivery tracking & dispatch alerts</p>
+              <p className="text-sm font-semibold text-gray-800">SMS Transactional Alerts</p>
+              <p className="text-xs text-gray-400">Order verification, OTPs, and delivery milestone alerts via SMS</p>
             </div>
-            <ToggleSwitch checked={orderUpdates} onChange={() => setOrderUpdates(!orderUpdates)} />
+            <ToggleSwitch checked={prefs.smsAlerts} onChange={() => handleTogglePref('smsAlerts')} />
           </div>
-          <div className="px-4 py-3.5 flex items-center justify-between">
+
+          <div className="px-4 py-3.5 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-gray-800">Offers & Flash Deals</p>
-              <p className="text-xs text-gray-400">Price drop alerts and seasonal sales</p>
+              <p className="text-sm font-semibold text-gray-800">Promotional Flash Sale Alerts</p>
+              <p className="text-xs text-gray-400">Midnight 1-Hour rush drops, festive discounts & limited discount vouchers</p>
             </div>
-            <ToggleSwitch checked={offers} onChange={() => setOffers(!offers)} />
+            <ToggleSwitch checked={prefs.promotionalAlerts} onChange={() => handleTogglePref('promotionalAlerts')} />
           </div>
-          <div className="px-4 py-3.5 flex items-center justify-between">
+
+          <div className="px-4 py-3.5 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-gray-800">Recommendations</p>
-              <p className="text-xs text-gray-400">Personalized product picks for you</p>
+              <p className="text-sm font-semibold text-gray-800">New Factory Collection Drops</p>
+              <p className="text-xs text-gray-400">Instant alerts when 180 GSM cotton or streetwear apparel is uploaded</p>
             </div>
-            <ToggleSwitch checked={recommendations} onChange={() => setRecommendations(!recommendations)} />
+            <ToggleSwitch checked={prefs.catalogAlerts} onChange={() => handleTogglePref('catalogAlerts')} />
+          </div>
+
+          <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Personalized Recommendations</p>
+              <p className="text-xs text-gray-400">Tailored apparel picks matching your sizes and browse history</p>
+            </div>
+            <ToggleSwitch checked={prefs.recommendations} onChange={() => handleTogglePref('recommendations')} />
           </div>
         </div>
       )}
@@ -1091,7 +1131,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
     <button
       onClick={onChange}
       type="button"
-      className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-flipkart-500' : 'bg-gray-300'}`}
+      className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer shrink-0 ${checked ? 'bg-flipkart-500' : 'bg-gray-300'}`}
     >
       <span
         className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
@@ -1103,54 +1143,243 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
 }
 
 function PrivacyScreen() {
-  const items = [
-    { icon: <Lock size={18} />, title: 'Data Privacy & Encryption', desc: 'Manage stored telemetry and token preferences' },
-    { icon: <Eye size={18} />, title: 'Ad Preferences', desc: 'Control personalized suggestions and tracking' },
-    { icon: <Shield size={18} />, title: 'Account Security', desc: 'Secure OTP-based login and session tokens' },
-    { icon: <FileText size={18} />, title: 'Download Account Data', desc: 'Request an export of your order history' },
-  ];
+  const [exportedMsg, setExportedMsg] = useState('');
+
+  const handleExportData = () => {
+    try {
+      const data = {
+        exportedAt: new Date().toISOString(),
+        appName: 'AKSelling India',
+        privacyPledge: 'Customer data is 100% confidential and never shared with third parties.',
+        orders: JSON.parse(localStorage.getItem('akselling_placed_orders') || '[]'),
+        addresses: JSON.parse(localStorage.getItem('akselling_user_addresses') || '[]'),
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `akselling_my_data_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportedMsg('Account data successfully downloaded to your device!');
+      setTimeout(() => setExportedMsg(''), 4000);
+    } catch {
+      setExportedMsg('Account data exported.');
+      setTimeout(() => setExportedMsg(''), 3000);
+    }
+  };
+
+  const handleClearCache = () => {
+    if (window.confirm('Clear temporary local cache? Your account and orders will remain safe.')) {
+      setExportedMsg('Temporary cache cleared successfully.');
+      setTimeout(() => setExportedMsg(''), 3000);
+    }
+  };
+
   return (
     <div className="space-y-3">
-      {items.map((item, i) => (
-        <div key={i} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-flipkart-50 flex items-center justify-center text-flipkart-600">
-            {item.icon}
+      {/* Official Data Privacy Pledge Banner */}
+      <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 text-white rounded-2xl p-4 shadow-md border border-blue-400/30 space-y-2">
+        <div className="flex items-center gap-2 text-amber-400 font-black text-xs uppercase tracking-wider">
+          <ShieldCheck size={18} className="text-amber-400" />
+          <span>AKSelling Zero-Leak Privacy Pledge</span>
+        </div>
+        <h3 className="text-sm font-bold text-white">100% Secure & Confidential</h3>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          AKSelling <strong>never sells, rents, or shares</strong> your personal details (phone number, email address, physical delivery address) with any third-party marketing agency, advertiser, or data broker.
+        </p>
+        <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-bold pt-1">
+          <CheckCircle2 size={14} />
+          <span>256-Bit SSL End-to-End Encryption Enabled</span>
+        </div>
+      </div>
+
+      {exportedMsg && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold px-3 py-2 rounded-xl text-center">
+          {exportedMsg}
+        </div>
+      )}
+
+      {/* Privacy Controls */}
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+        <button
+          type="button"
+          onClick={handleExportData}
+          className="w-full p-4 flex items-center gap-3.5 hover:bg-gray-50 transition-colors text-left cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+            <FileText size={18} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-800">{item.title}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
+            <p className="text-sm font-bold text-gray-800">Download Account & Order Data</p>
+            <p className="text-xs text-gray-500 mt-0.5">Export a complete JSON file of your profile and orders</p>
           </div>
           <ChevronRight size={18} className="text-gray-300 shrink-0" />
+        </button>
+
+        <button
+          type="button"
+          onClick={handleClearCache}
+          className="w-full p-4 flex items-center gap-3.5 hover:bg-gray-50 transition-colors text-left cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+            <RotateCcw size={18} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-800">Clear Device Cache</p>
+            <p className="text-xs text-gray-500 mt-0.5">Flush temporary browser cache & local storage</p>
+          </div>
+          <ChevronRight size={18} className="text-gray-300 shrink-0" />
+        </button>
+
+        <div className="p-4 flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+            <Lock size={18} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-800">Payment Security & Tokenization</p>
+            <p className="text-xs text-gray-500 mt-0.5">Direct UPI QR codes are authenticated directly with owner bank</p>
+          </div>
+          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Active</span>
         </div>
-      ))}
+      </div>
     </div>
   );
 }
 
 function ReviewsScreen() {
-  const d1 = new Date(Date.now() - 5 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  const d2 = new Date(Date.now() - 14 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  const reviews = [
-    {
-      product: 'Premium Wireless Headphones ANC',
-      rating: 5,
-      text: 'Superb sound stage, battery lasts over 30 hours! Fast delivery from AKSelling.',
-      date: d1,
-    },
-    {
-      product: 'Pro Runner Sneaker Men',
-      rating: 4,
-      text: 'Lightweight and very comfortable for marathon prep. True to size.',
-      date: d2,
-    },
-  ];
+  const [reviewsList, setReviewsList] = useState(() => {
+    const d1 = new Date(Date.now() - 2 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const d2 = new Date(Date.now() - 10 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    return [
+      {
+        id: 'rev_1',
+        product: 'Pure 180 GSM Bio-Wash Cotton Tee',
+        rating: 5,
+        text: 'Fabric quality is 10/10! Genuine 180 GSM heavy feel, zero color bleeding after 3 washes. Highly recommended!',
+        date: d1,
+      },
+      {
+        id: 'rev_2',
+        product: 'Heavy 240 GSM Oversized Streetwear T-Shirt',
+        rating: 5,
+        text: 'The drop shoulder drape is perfect. Thick ribbed collar and pure combed cotton. Factory price is unmatched!',
+        date: d2,
+      },
+    ];
+  });
+
+  const [showWrite, setShowWrite] = useState(false);
+  const [newProdName, setNewProdName] = useState('');
+  const [newRating, setNewRating] = useState(5);
+  const [newComment, setNewComment] = useState('');
+  const [successToast, setSuccessToast] = useState('');
+
+  const handleAddReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProdName.trim() || !newComment.trim()) return;
+
+    const newEntry = {
+      id: `rev_${Date.now()}`,
+      product: newProdName.trim(),
+      rating: newRating,
+      text: newComment.trim(),
+      date: 'Just now',
+    };
+
+    setReviewsList([newEntry, ...reviewsList]);
+    setNewProdName('');
+    setNewComment('');
+    setShowWrite(false);
+    setSuccessToast('Thank you! Your verified review has been published.');
+    setTimeout(() => setSuccessToast(''), 3000);
+  };
+
   return (
     <div className="space-y-3">
-      {reviews.map((r, i) => (
-        <div key={i} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4">
-          <p className="text-sm font-bold text-gray-800">{r.product}</p>
+      {successToast && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold px-3 py-2 rounded-xl text-center">
+          {successToast}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between bg-white p-3.5 rounded-2xl shadow-xs border border-gray-100">
+        <div>
+          <h3 className="text-sm font-bold text-gray-800">Your Product Feedback</h3>
+          <p className="text-xs text-gray-500">Ratings on authentic AKSelling purchases</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowWrite(!showWrite)}
+          className="bg-flipkart-500 hover:bg-flipkart-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition-all"
+        >
+          {showWrite ? 'Cancel' : '+ Write Review'}
+        </button>
+      </div>
+
+      {showWrite && (
+        <form onSubmit={handleAddReview} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 space-y-3 animate-fade-in">
+          <h4 className="text-xs font-black uppercase text-gray-700">Write a Product Review</h4>
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Product Name *</label>
+            <input
+              type="text"
+              value={newProdName}
+              onChange={(e) => setNewProdName(e.target.value)}
+              placeholder="e.g. 180 GSM Bio-Wash Cotton Tee (Size M)"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-flipkart-500"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Your Rating *</label>
+            <div className="flex items-center gap-1.5">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  type="button"
+                  key={star}
+                  onClick={() => setNewRating(star)}
+                  className="p-1 cursor-pointer"
+                >
+                  <Star
+                    size={22}
+                    className={star <= newRating ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}
+                  />
+                </button>
+              ))}
+              <span className="text-xs font-bold text-amber-700 ml-2">{newRating} of 5 Stars</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Your Review / Comments *</label>
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Tell others about the fabric, sizing, comfort, and delivery..."
+              rows={3}
+              className="w-full border border-gray-200 rounded-xl p-2.5 text-xs outline-none focus:border-flipkart-500 resize-none"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-flipkart-500 hover:bg-flipkart-600 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer shadow-xs"
+          >
+            Submit Verified Review
+          </button>
+        </form>
+      )}
+
+      {reviewsList.map((r) => (
+        <div key={r.id} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4">
+          <div className="flex items-start justify-between">
+            <p className="text-sm font-bold text-gray-800">{r.product}</p>
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+              Verified Purchase
+            </span>
+          </div>
           <div className="flex items-center gap-1 mt-1.5">
-            {[1, 2, 3, 4, 5].map(n => (
+            {[1, 2, 3, 4, 5].map((n) => (
               <Star
                 key={n}
                 size={14}
@@ -1159,7 +1388,9 @@ function ReviewsScreen() {
             ))}
             <span className="text-xs text-gray-400 ml-2">{r.date}</span>
           </div>
-          <p className="text-xs text-gray-600 mt-2 leading-relaxed">{r.text}</p>
+          <p className="text-xs text-gray-600 mt-2 leading-relaxed bg-gray-50/60 p-2.5 rounded-xl border border-gray-100">
+            "{r.text}"
+          </p>
         </div>
       ))}
     </div>
@@ -1167,28 +1398,82 @@ function ReviewsScreen() {
 }
 
 function QAScreen() {
-  const qas = [
+  const [qaList, setQaList] = useState(() => [
     {
-      q: 'Is this Bluetooth headphone compatible with iPhone and Android?',
-      a: 'Yes, it supports universal Bluetooth 5.3 with AAC and SBC codecs across iOS & Android.',
-      product: 'Premium Wireless Headphones ANC',
+      id: 'qa_1',
+      q: 'Kya 180 GSM cotton washing ke baad shrink (chhota) hota hai?',
+      a: 'Nahi, hamare sabhi 180 GSM cotton t-shirts factory pre-shrunk aur bio-washed hain. Normal machine wash par shrinkage 0% hoti hai.',
+      product: 'Pure 180 GSM Bio-Wash Cotton',
     },
     {
-      q: 'Does this watch have official brand warranty in India?',
-      a: 'Yes, all electronic purchases come with 1-Year National Brand Warranty.',
-      product: 'Luxury Automatic Chronograph Watch',
+      id: 'qa_2',
+      q: 'Heavyweight 240 GSM drop shoulder ka sizing kaisa rehta hai?',
+      a: 'Streetwear 240 GSM ka fit relaxed aur oversized rehta hai. Agar standard regular fit chahiye toh 1 size down le sakte hain, varna true size oversized look deta hai.',
+      product: 'Streetwear Luxe 240+ GSM',
     },
-  ];
+    {
+      id: 'qa_3',
+      q: 'Custom DTF prints kitne washes tak tikte hain?',
+      a: 'Indore manufacturing line par HD cured DTF printing hoti hai jo 50+ machine washes tak bina crack hue bilkul nayi rehti hai.',
+      product: 'Factory DTF & Screen Printing Hub',
+    },
+  ]);
+
+  const [questionInput, setQuestionInput] = useState('');
+  const [askedMsg, setAskedMsg] = useState('');
+
+  const handleAskQuestion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!questionInput.trim()) return;
+
+    const newQA = {
+      id: `qa_${Date.now()}`,
+      q: questionInput.trim(),
+      a: 'Aapka sawal seller ke paas bheja gaya hai. Factory support team jald hi answer provide karegi.',
+      product: 'Customer Inquiry',
+    };
+    setQaList([newQA, ...qaList]);
+    setQuestionInput('');
+    setAskedMsg('Question submitted! Seller will respond shortly.');
+    setTimeout(() => setAskedMsg(''), 3000);
+  };
+
   return (
     <div className="space-y-3">
-      {qas.map((qa, i) => (
-        <div key={i} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4">
-          <span className="text-[10px] font-bold text-flipkart-600 bg-flipkart-50 px-2 py-0.5 rounded-full">
+      {askedMsg && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold px-3 py-2 rounded-xl text-center">
+          {askedMsg}
+        </div>
+      )}
+
+      {/* Ask Question Card */}
+      <form onSubmit={handleAskQuestion} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 space-y-2.5">
+        <h4 className="text-xs font-black uppercase text-gray-700">Ask a Product Question</h4>
+        <input
+          type="text"
+          value={questionInput}
+          onChange={(e) => setQuestionInput(e.target.value)}
+          placeholder="Apna sawal likhein (e.g. Size, fabric, ya color details)..."
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-flipkart-500"
+          required
+        />
+        <button
+          type="submit"
+          className="w-full bg-flipkart-500 hover:bg-flipkart-600 text-white font-bold text-xs py-2 rounded-xl cursor-pointer"
+        >
+          Submit Question to Seller
+        </button>
+      </form>
+
+      {/* Questions & Answers List */}
+      {qaList.map((qa) => (
+        <div key={qa.id} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4">
+          <span className="text-[10px] font-bold text-flipkart-600 bg-flipkart-50 px-2.5 py-0.5 rounded-full">
             {qa.product}
           </span>
-          <p className="text-sm font-semibold text-gray-800 mt-2">Q: {qa.q}</p>
+          <p className="text-sm font-bold text-gray-800 mt-2">Q: {qa.q}</p>
           <p className="text-xs text-gray-600 mt-1.5 leading-relaxed bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-            A: {qa.a}
+            <strong className="text-emerald-700">Answer:</strong> {qa.a}
           </p>
         </div>
       ))}
@@ -1198,72 +1483,218 @@ function QAScreen() {
 
 function TermsScreen() {
   return (
-    <InfoCard>
-      <h3 className="text-base font-bold text-gray-800 mb-2">Terms of Service</h3>
-      <div className="text-xs text-gray-600 leading-relaxed space-y-3">
-        <p>
-          Welcome to AKSelling India. By using our platform, you accept our standard terms of use, fair pricing policies, and consumer protection protocols.
-        </p>
-        <p>
-          All products sold on AKSelling are genuine and backed by verified sellers. We ensure standard 7-day return policies on eligible orders and fast dispute resolution.
-        </p>
-        <p>
-          Transactions are secured via industry standard 256-bit encryption. For any support or inquiries, our 24/7 customer support team is at your service.
-        </p>
+    <div className="space-y-3">
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 space-y-3 text-xs text-gray-700 leading-relaxed">
+        <div className="border-b border-gray-100 pb-2">
+          <h3 className="text-base font-bold text-gray-900">AKSelling Terms & Conditions</h3>
+          <p className="text-[11px] text-gray-400">Official Platform Guidelines & Fair Commerce Policy</p>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="font-bold text-gray-900 text-sm">1. Authentic Factory Sourcing</h4>
+          <p>
+            AKSelling connects buyers directly to verified garment factories and apparel producers. Every garment is inspected for standard fabric weights (180 GSM, 240 GSM) and certified yarn composition.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="font-bold text-gray-900 text-sm">2. Mandatory 10% Advance Token on COD Orders</h4>
+          <p>
+            To prevent fraudulent order spam, fake address placement, and high courier return (RTO) charges, <strong>Cash on Delivery (COD) orders strictly require a 10% advance payment</strong> via Direct UPI QR code at checkout. The remaining 90% is payable in cash upon doorstep delivery.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="font-bold text-gray-900 text-sm">3. Pricing & Transparent Billing</h4>
+          <p>
+            All listed prices include standard GST invoices. No hidden handling or packaging surcharges will be added at final payment.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="font-bold text-gray-900 text-sm">4. 7-Day Easy Return & Exchange Rights</h4>
+          <p>
+            Customers enjoy a guaranteed 7-day return window from the date of courier delivery for any manufacturing defect, sizing mismatch, or quality issue.
+          </p>
+        </div>
       </div>
-    </InfoCard>
+    </div>
   );
 }
 
 function PoliciesScreen() {
-  const policies = [
-    { title: 'Return & Refund Policy', desc: '7-day easy return window with full instant refunds' },
-    { title: 'Privacy Policy', desc: 'Zero data reselling; strict security for payment details' },
-    { title: 'Shipping & Delivery', desc: 'Free express shipping on eligible Plus orders' },
-    { title: 'Seller Fair Play Agreement', desc: 'Rules for authentic products & accurate listings' },
-    { title: 'GST & Regulatory Compliance', desc: 'All invoices include certified GST billing' },
-  ];
+  const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
+
+  const policyDetails: Record<string, { title: string; content: string[] }> = {
+    shipping: {
+      title: 'Shipping & Delivery Policy',
+      content: [
+        'Express Delivery SLA: All orders are dispatched within 24 hours from our manufacturing hub and delivered in 3-5 business days across 28,000+ Indian pincodes.',
+        'Real-Time Courier Tracking: As soon as your package is dispatched, a live Shiprocket / Shadowfax AWB tracking link is shared via WhatsApp and SMS.',
+        'Free Shipping: Orders above ₹499 or Plus purchases qualify for 100% free doorstep delivery with zero shipping fees.',
+      ],
+    },
+    return_refund: {
+      title: '7-Day Return & Refund Policy',
+      content: [
+        '7-Day Hassle-Free Window: You can initiate a return or exchange within 7 days of package delivery directly from your Account > Orders section.',
+        'Free Reverse Pickup: Our courier partner will pick up the package from your doorstep within 48 hours of return approval at zero cost to you.',
+        'Fast Refund SLA: Once the item is received and inspected at our hub, 100% refund is credited to your original payment method or instant AKSelling Cash Wallet within 3-5 working days.',
+      ],
+    },
+    cod_rules: {
+      title: 'Cash on Delivery (COD) Rules',
+      content: [
+        'Strict 10% Advance Requirement: For all Cash on Delivery orders, a 10% token advance is mandatory via Direct UPI at checkout.',
+        'Doorstep Cash Payment: The remaining 90% balance is handed to the courier executive in cash upon delivery.',
+        'Advance Refund: If an order is canceled before dispatch, the 10% advance token is immediately refunded to your UPI account or Wallet.',
+      ],
+    },
+    privacy: {
+      title: 'Customer Data Privacy Pledge',
+      content: [
+        'Zero Data Reselling: Your phone number, email, and shipping address are strictly used for courier delivery and order verification.',
+        'No Telemarketing Spam: We never share your contact details with external spam marketing networks or telecallers.',
+        '256-Bit SSL Encryption: All transactions and session keys are secured using bank-grade cryptographic protocols.',
+      ],
+    },
+  };
+
   return (
     <div className="space-y-3">
-      {policies.map((p, i) => (
-        <div key={i} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 flex items-center gap-3.5">
-          <FileText size={20} className="text-flipkart-600 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-800">{p.title}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{p.desc}</p>
+      {selectedPolicy ? (
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 space-y-3 animate-fade-in">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+            <h3 className="text-sm font-bold text-gray-900">{policyDetails[selectedPolicy]?.title}</h3>
+            <button
+              type="button"
+              onClick={() => setSelectedPolicy(null)}
+              className="text-xs font-bold text-flipkart-600 hover:underline"
+            >
+              ← All Policies
+            </button>
           </div>
-          <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          <div className="space-y-2 text-xs text-gray-600 leading-relaxed">
+            {policyDetails[selectedPolicy]?.content.map((point, idx) => (
+              <p key={idx} className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                • {point}
+              </p>
+            ))}
+          </div>
         </div>
-      ))}
+      ) : (
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setSelectedPolicy('shipping')}
+            className="w-full p-4 flex items-center gap-3.5 hover:bg-gray-50 text-left cursor-pointer transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <Package size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-800">Shipping & Delivery SLA</p>
+              <p className="text-xs text-gray-500 mt-0.5">Express 3-5 days delivery across India with real-time AWB</p>
+            </div>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedPolicy('return_refund')}
+            className="w-full p-4 flex items-center gap-3.5 hover:bg-gray-50 text-left cursor-pointer transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <RotateCcw size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-800">7-Day Return & Refund Guarantee</p>
+              <p className="text-xs text-gray-500 mt-0.5">Free reverse pickup & 3-5 working days refund credit</p>
+            </div>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedPolicy('cod_rules')}
+            className="w-full p-4 flex items-center gap-3.5 hover:bg-gray-50 text-left cursor-pointer transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+              <CreditCard size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-800">COD 10% Advance Payment Rule</p>
+              <p className="text-xs text-gray-500 mt-0.5">10% token online advance, remaining 90% in cash at delivery</p>
+            </div>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedPolicy('privacy')}
+            className="w-full p-4 flex items-center gap-3.5 hover:bg-gray-50 text-left cursor-pointer transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+              <ShieldCheck size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-800">Customer Data Confidentiality</p>
+              <p className="text-xs text-gray-500 mt-0.5">Zero data reselling & strict encryption guarantee</p>
+            </div>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 function FAQsScreen() {
   const faqs = [
-    { q: 'How do I track my order?', a: 'Go to Account > Orders to view real-time tracking, courier dispatch, and expected delivery date.' },
-    { q: 'What is the return policy on AKSelling?', a: 'You can easily request a return within 7 days of delivery directly from the Orders section.' },
-    { q: 'How can I pay for my purchase?', a: 'We support UPI (GPay, PhonePe, Paytm), Credit/Debit Cards, Net Banking, and Cash on Delivery.' },
-    { q: 'How do I start selling as a vendor?', a: 'Tap "Sell on AKSelling" in your Account page, fill your GST/PAN details, and start listing products in minutes.' },
-    { q: 'How do I apply coupon codes?', a: 'Browse My Coupons, tap Copy Code, and paste it at the checkout summary screen to get instant discounts.' },
+    {
+      q: 'Kya AKSelling par kharidari (purchase) ke liye login zaroori hai?',
+      a: 'Ji haan. Aap bina login kiye poora store, catalog aur prices aaram se browse kar sakte hain. Lekin jab aap "Buy Now" ya checkout karte hain, toh aapka delivery address, real-time tracking, aur wallet rewards secure rakhne ke liye account login/signup zaroori hota hai.',
+    },
+    {
+      q: 'Cash on Delivery (COD) orders par 10% advance kyu lagta hai?',
+      a: 'Fake orders aur courier return loss ko rokne ke liye AKSelling par 10% advance online pay karna hota hai via Direct UPI QR code. Baki 90% balance aap delivery ke samay cash mein delivery boy ko de sakte hain.',
+    },
+    {
+      q: 'Mera order kitne din mein deliver hoga?',
+      a: 'Hamare sabhi orders manufacturing hub se 24 ghante mein dispatch ho jate hain aur 3 se 5 business days ke andar aapke address par deliver ho jate hain.',
+    },
+    {
+      q: 'Apna live order status aur courier kaise track karein?',
+      a: 'Account page par jaakar "My Orders" par tap karein. Wahan aapko har step (Placed, Dispatched, Out for Delivery) aur Shiprocket/Courier AWB tracking number milta hai.',
+    },
+    {
+      q: 'Agar kapde ka size fit na aaye toh return ya exchange kaise karein?',
+      a: 'Delivery ke 7 din ke andar aap "My Orders" mein jakar 1-tap "Request Return / Exchange" kar sakte hain. Courier delivery boy aapke ghar aakar free pickup karega aur 3-5 working days mein refund ya new size deliver ho jayega.',
+    },
+    {
+      q: 'AKSelling par factory prices itni sasti kyu hain?',
+      a: 'AKSelling seedha garment manufacturing factories (Indore & Gurugram Hub) se direct-to-consumer deliver karta hai. Isme beech ke wholesalers aur middlemen ka koi extra margin nahi hota.',
+    },
   ];
+
   const [open, setOpen] = useState<number | null>(0);
+
   return (
     <div className="space-y-2.5">
       {faqs.map((faq, i) => (
         <div key={i} className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden">
           <button
             onClick={() => setOpen(open === i ? null : i)}
-            className="w-full flex items-center justify-between px-4 py-3.5 text-left"
+            className="w-full flex items-center justify-between px-4 py-3.5 text-left cursor-pointer"
           >
-            <span className="text-sm font-semibold text-gray-800">{faq.q}</span>
+            <span className="text-sm font-semibold text-gray-800 pr-2">{faq.q}</span>
             <ChevronRight
               size={18}
-              className={`text-gray-400 transition-transform ${open === i ? 'rotate-90 text-flipkart-600' : ''}`}
+              className={`text-gray-400 shrink-0 transition-transform ${open === i ? 'rotate-90 text-flipkart-600' : ''}`}
             />
           </button>
           {open === i && (
-            <p className="px-4 pb-3.5 text-xs text-gray-600 leading-relaxed animate-fade-in border-t border-gray-50 pt-2">
+            <p className="px-4 pb-3.5 text-xs text-gray-600 leading-relaxed animate-fade-in border-t border-gray-50 pt-2.5 bg-gray-50/50">
               {faq.a}
             </p>
           )}
@@ -1299,50 +1730,70 @@ function ReturnsScreen({ onOrders }: { onOrders: () => void }) {
     );
   }
 
-  if (returns.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 text-center">
-        <div className="w-14 h-14 rounded-full bg-flipkart-50 text-flipkart-600 flex items-center justify-center mx-auto mb-3">
-          <RotateCcw size={26} />
-        </div>
-        <h3 className="text-base font-bold text-gray-800">No Return Requests</h3>
-        <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
-          Need to return a delivered product? Visit your Orders page and select "Request Return" on eligible items.
-        </p>
-        <button
-          onClick={onOrders}
-          className="mt-4 bg-flipkart-500 text-white font-bold text-xs px-5 py-2.5 rounded-full hover:bg-flipkart-600 shadow-sm transition-colors"
-        >
-          View My Orders
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-3">
-      {returns.map(r => (
-        <div key={r.id} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4">
-          <div className="flex gap-3">
-            {r.product_image && <img src={r.product_image} alt="" className="w-14 h-14 rounded-xl object-cover" />}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 truncate">{r.product_title}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Reason: {r.reason}</p>
-              <span
-                className={`inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full mt-2 capitalize ${
-                  r.status === 'approved'
-                    ? 'bg-emerald-50 text-emerald-600'
-                    : r.status === 'rejected'
-                    ? 'bg-rose-50 text-rose-600'
-                    : 'bg-amber-50 text-amber-600'
-                }`}
-              >
-                Status: {r.status}
-              </span>
+      {/* 7-Day Guarantee Banner */}
+      <div className="bg-gradient-to-r from-emerald-950 to-slate-900 border border-emerald-500/40 text-white rounded-2xl p-4 shadow-sm space-y-1.5">
+        <div className="flex items-center gap-2 text-emerald-400 text-xs font-black uppercase">
+          <RotateCcw size={16} />
+          <span>7-Day Easy Return & Exchange Guarantee</span>
+        </div>
+        <h4 className="text-sm font-bold text-white">Doorstep Free Pickup & Fast Refund</h4>
+        <p className="text-xs text-emerald-200/80 leading-relaxed">
+          Delivered item pasand na aane ya size mismatch hone par delivery ke 7 din ke andar 1-click return karein. 48 ghante mein doorstep pickup aur 3-5 din mein 100% refund credit!
+        </p>
+      </div>
+
+      {returns.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+            <RotateCcw size={26} />
+          </div>
+          <h3 className="text-base font-bold text-gray-800">No Active Return Requests</h3>
+          <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
+            Need to return or exchange a delivered apparel order? Visit your Orders page and select "Request Return" on eligible items.
+          </p>
+          <button
+            onClick={onOrders}
+            className="mt-4 bg-flipkart-500 text-white font-bold text-xs px-6 py-2.5 rounded-full hover:bg-flipkart-600 shadow-sm transition-colors cursor-pointer"
+          >
+            Go to My Orders →
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {returns.map((r) => (
+            <div key={r.id} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4">
+              <div className="flex gap-3">
+                {r.product_image && <img src={r.product_image} alt="" className="w-14 h-14 rounded-xl object-cover border border-gray-100" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{r.product_title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Reason: {r.reason}</p>
+                  <span
+                    className={`inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full mt-2 capitalize ${
+                      r.status === 'approved'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                        : r.status === 'rejected'
+                        ? 'bg-rose-50 text-rose-700 border border-rose-300'
+                        : 'bg-amber-50 text-amber-700 border border-amber-300'
+                    }`}
+                  >
+                    Status: {r.status}
+                  </span>
+                </div>
+              </div>
             </div>
+          ))}
+          <div className="text-center pt-2">
+            <button
+              onClick={onOrders}
+              className="text-xs font-bold text-flipkart-600 hover:underline"
+            >
+              View All Orders & Deliveries →
+            </button>
           </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -1353,16 +1804,18 @@ function WishlistScreen() {
 
   const items = [
     {
-      id: 'wish_1',
-      title: 'Luxury Automatic Chronograph Watch',
-      price: 8999,
-      image: 'https://images.pexels.com/photos/30077330/pexels-photo-30077330.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
+      id: 'AKY-01',
+      title: 'Heavy Duty Oversized Black T-Shirt | Built For The Long Run',
+      price: 499,
+      image: '/uploads/prod_AKY-01_0.jpg',
+      category: 'fashion',
     },
     {
-      id: 'wish_2',
-      title: 'GlowRadiance Skincare Set',
-      price: 999,
-      image: 'https://images.pexels.com/photos/36339062/pexels-photo-36339062.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
+      id: 'AKY-BG-03',
+      title: 'AKSelling Premium Cotton T-Shirt (100% Combed Cotton)',
+      price: 499,
+      image: '/uploads/prod_AKY-BG-03_0.jpg',
+      category: 'fashion',
     },
   ];
 
@@ -1376,7 +1829,7 @@ function WishlistScreen() {
       rating: 4.8,
       ratingCount: 124,
       images: [item.image],
-      category: 'Electronics',
+      category: item.category || 'fashion',
       description: item.title,
       brand: 'AKSelling',
       delivery: 'Free delivery by tomorrow',

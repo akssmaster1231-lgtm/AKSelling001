@@ -80,7 +80,9 @@ export function recordPlacedOrder(order: CustomerPlacedOrder): void {
       })),
       totalAmount: order.total_amount,
       paymentMethod: order.payment_method || 'Direct Personal UPI & QR',
-      paymentStatus: order.payment_status || (order.payment_method?.toLowerCase().includes('cod') ? 'Partially Paid' : 'Paid'),
+      paymentStatus: (order.payment_method?.toLowerCase().includes('cod') || order.payment_status?.toLowerCase().includes('cod'))
+        ? 'COD (10% Paid)'
+        : (order.payment_status || 'Paid'),
       upiUtr: order.upi_utr,
       upiId: order.upi_id || '7290894907@ybl',
       paymentScreenshot: order.payment_screenshot,

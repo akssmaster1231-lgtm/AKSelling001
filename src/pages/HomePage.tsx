@@ -8,7 +8,7 @@ import type { Product, Category, Banner } from '@/types';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 import CategoryIcon from '@/components/CategoryIcon';
 import FlashDropSection from '@/components/flash-drop/FlashDropSection';
-import FeaturedShowcaseBoxes from '@/components/FeaturedShowcaseBoxes';
+import { CottonShowcaseBox, StreetwearShowcaseBox, PrintingShowcaseBox } from '@/components/FeaturedShowcaseBoxes';
 import BannerCarousel from '@/components/BannerCarousel';
 
 interface HomePageProps {
@@ -293,11 +293,13 @@ export default function HomePage({
             onNavigateDeals={onNavigateDeals || (() => onCategoryClick('all'))}
           />
 
-          {/* Premium Non-Timer Featured Showcase Boxes (180 GSM Bio-Wash, 240+ GSM Streetwear, Custom HD Prints) */}
-          <FeaturedShowcaseBoxes
-            products={allProducts}
-            onProductClick={onProductClick}
-          />
+          {/* TOP SECTION: Pure 180 GSM Bio-Wash Cotton Collection */}
+          <div className="mt-4 px-3">
+            <CottonShowcaseBox
+              products={allProducts}
+              onProductClick={onProductClick}
+            />
+          </div>
         </>
       )}
 
@@ -434,6 +436,14 @@ export default function HomePage({
             </section>
           )}
 
+          {/* MIDDLE SECTION: Streetwear Luxe • Heavy 240+ GSM Drop Shoulder */}
+          <div className="mt-4 px-3">
+            <StreetwearShowcaseBox
+              products={allProducts}
+              onProductClick={onProductClick}
+            />
+          </div>
+
           {/* Dynamic Category & Catalogue Shelves (Smooth Horizontal Feeds) */}
           {categoryShelves.map(shelf => (
             <section key={`shelf-${shelf.category.id}`} className="mt-4 px-3" id={`home-shelf-${shelf.category.id}`}>
@@ -477,6 +487,14 @@ export default function HomePage({
               </div>
             </section>
           ))}
+
+          {/* BOTTOM SECTION: Factory DTF & Screen Printing Hub */}
+          <div className="mt-4 px-3">
+            <PrintingShowcaseBox
+              products={allProducts}
+              onProductClick={onProductClick}
+            />
+          </div>
 
           {/* Full Catalog / Best of AKSelling - Remaining Unshown Products */}
           {exploreCatalogProducts.length > 0 && (
