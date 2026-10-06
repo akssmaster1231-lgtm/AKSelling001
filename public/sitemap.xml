@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Public Home Page -->
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Public Category & Deals Pages -->
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/?tab=categories</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/?tab=deals</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Authentic Factory Direct Products (Public Indexing Only) -->
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/?productId=AKY-01</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/?productId=AKY-BG-03</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/?productId=AKY-CZX-BLK-03</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/?productId=AKY-FF-NVY-01</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/?productId=AKY-FYP-BLK-08</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/?productId=AKY-TTP-WHT-05</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+</urlset>

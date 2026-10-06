@@ -1,0 +1,45 @@
+# AKSelling E-Commerce Robots.txt
+# Strict separation of public product catalog vs private customer & admin portals
+
+User-agent: *
+Allow: /
+Allow: /uploads/
+Allow: /favicon.png
+Allow: /ak_brand_logo.jpg
+Allow: /manifest.json
+Allow: /sitemap.xml
+
+# STRICTLY DISALLOW PRIVATE CUSTOMER, ORDER & ADMIN PORTALS (ZERO INDEXING)
+Disallow: /checkout
+Disallow: /checkout/*
+Disallow: /cart
+Disallow: /cart/*
+Disallow: /account
+Disallow: /account/*
+Disallow: /orders
+Disallow: /orders/*
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /seller
+Disallow: /seller/*
+Disallow: /api/orders
+Disallow: /api/orders/*
+Disallow: /api/admin
+Disallow: /api/admin/*
+Disallow: /api/seller
+Disallow: /api/seller/*
+Disallow: /api/notifications
+Disallow: /api/notifications/*
+Disallow: /*?*token=
+Disallow: /*?*sessionId=
+Disallow: /*?*auth=
+Disallow: /*?*tab=account*
+Disallow: /*?*tab=cart*
+Disallow: /*?*orders=*
+Disallow: /*?*admin=*
+Disallow: /*?*checkout=*
+Disallow: /*?*seller=*
+Disallow: /*?*subScreen=*
+
+# Sitemap Declaration
+Sitemap: https://ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app/sitemap.xml

@@ -34,6 +34,7 @@ import SpinWheelModal from '@/components/gamification/SpinWheelModal';
 import EdgeSwipeBackContainer from '@/components/navigation/EdgeSwipeBackContainer';
 import { PWAInstallBanner } from '@/components/pwa/PWAInstallBanner';
 import { WhatsAppFloatingButton } from '@/components/support/WhatsAppFloatingButton';
+import SeoHeadManager from '@/components/seo/SeoHeadManager';
 
 function AppContent() {
   const { user, authInitialized } = useAuth();
@@ -448,21 +449,50 @@ function AppContent() {
 
   if (appMode === 'selling') {
     return (
-      <EdgeSwipeBackContainer canGoBack={canGoBack} onBack={handleBackGesture}>
-        <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
-          <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 overflow-x-hidden">
-            <SellerDashboard onBack={() => handleSwitchMode('buying')} />
+      <>
+        <SeoHeadManager
+          appMode={appMode}
+          activeTab={activeTab}
+          selectedProduct={selectedProduct}
+          buyNowProduct={buyNowProduct}
+          showOrders={showOrders}
+          showAdmin={showAdmin}
+          showSellerReg={showSellerReg}
+          showAuth={showAuth}
+          searchQuery={searchQuery}
+          showNotifications={showNotifications}
+          hasSubScreen={hasSubScreen}
+        />
+        <EdgeSwipeBackContainer canGoBack={canGoBack} onBack={handleBackGesture}>
+          <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
+            <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 overflow-x-hidden">
+              <SellerDashboard onBack={() => handleSwitchMode('buying')} />
+            </div>
           </div>
-        </div>
-      </EdgeSwipeBackContainer>
+        </EdgeSwipeBackContainer>
+      </>
     );
   }
 
   return (
-    <EdgeSwipeBackContainer canGoBack={canGoBack} onBack={handleBackGesture}>
-      <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
-        <div className="min-h-screen bg-slate-50 max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 flex flex-col overflow-x-hidden">
-          <Header
+    <>
+      <SeoHeadManager
+        appMode={appMode}
+        activeTab={activeTab}
+        selectedProduct={selectedProduct}
+        buyNowProduct={buyNowProduct}
+        showOrders={showOrders}
+        showAdmin={showAdmin}
+        showSellerReg={showSellerReg}
+        showAuth={showAuth}
+        searchQuery={searchQuery}
+        showNotifications={showNotifications}
+        hasSubScreen={hasSubScreen}
+      />
+      <EdgeSwipeBackContainer canGoBack={canGoBack} onBack={handleBackGesture}>
+        <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
+          <div className="min-h-screen bg-slate-50 max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 flex flex-col overflow-x-hidden">
+            <Header
             onSearch={handleSearch}
             onCartClick={() => setActiveTab('cart')}
             onAccountClick={() => setActiveTab('account')}
@@ -687,6 +717,7 @@ function AppContent() {
       </div>
     </div>
     </EdgeSwipeBackContainer>
+    </>
   );
 }
 

@@ -239,6 +239,87 @@ async function startServer() {
     }
   });
 
+  // -------------------------------------------------------------
+  // SECURE SEO PIPELINE (ROBOTS.TXT & SITEMAP.XML)
+  // -------------------------------------------------------------
+  app.get('/robots.txt', (_req, res) => {
+    res.type('text/plain');
+    const robotsPath = path.join(process.cwd(), 'public', 'robots.txt');
+    if (fs.existsSync(robotsPath)) {
+      return res.sendFile(robotsPath);
+    }
+    const defaultRobots = [
+      'User-agent: *',
+      'Allow: /',
+      'Allow: /uploads/',
+      'Allow: /sitemap.xml',
+      'Disallow: /checkout',
+      'Disallow: /checkout/*',
+      'Disallow: /cart',
+      'Disallow: /cart/*',
+      'Disallow: /account',
+      'Disallow: /account/*',
+      'Disallow: /orders',
+      'Disallow: /orders/*',
+      'Disallow: /admin',
+      'Disallow: /admin/*',
+      'Disallow: /seller',
+      'Disallow: /seller/*',
+      'Disallow: /api/orders',
+      'Disallow: /api/orders/*',
+      'Disallow: /api/admin',
+      'Disallow: /api/admin/*',
+      'Disallow: /api/seller',
+      'Disallow: /api/seller/*',
+      'Disallow: /api/notifications',
+      'Disallow: /api/notifications/*',
+      'Disallow: /*?*token=',
+      'Disallow: /*?*sessionId=',
+      'Disallow: /*?*auth=',
+      'Disallow: /*?*tab=account*',
+      'Disallow: /*?*tab=cart*',
+      'Disallow: /*?*orders=*',
+      'Disallow: /*?*admin=*',
+      'Disallow: /*?*checkout=*',
+      'Disallow: /*?*seller=*',
+      'Disallow: /*?*subScreen=*',
+    ].join('\n');
+    res.send(defaultRobots);
+  });
+
+  app.get('/sitemap.xml', (req, res) => {
+    res.type('application/xml');
+    try {
+      const host = req.get('host') || 'ais-pre-nemsmp62x4c3oyigdoknyn-775253588820.asia-east1.run.app';
+      const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const baseUrl = `${protocol}://${host}`;
+      const products = readDataFile<StoredProduct[]>(PRODUCTS_FILE, []);
+
+      const urls = [
+        `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+        `  <url>\n    <loc>${baseUrl}/?tab=categories</loc>\n    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>`,
+        `  <url>\n    <loc>${baseUrl}/?tab=deals</loc>\n    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>`,
+      ];
+
+      // Only add public authentic products (private pages are strictly omitted)
+      products.forEach((p) => {
+        if (!p || !p.id) return;
+        urls.push(
+          `  <url>\n    <loc>${baseUrl}/?productId=${encodeURIComponent(p.id)}</loc>\n    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n  </url>`
+        );
+      });
+
+      const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`;
+      res.send(sitemapXml);
+    } catch {
+      const fallbackPath = path.join(process.cwd(), 'public', 'sitemap.xml');
+      if (fs.existsSync(fallbackPath)) {
+        return res.sendFile(fallbackPath);
+      }
+      res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+    }
+  });
+
   // GET /api/products
   app.get('/api/products', (_req, res) => {
     const products = readDataFile<StoredProduct[]>(PRODUCTS_FILE, []);
