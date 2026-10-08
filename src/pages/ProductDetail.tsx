@@ -142,12 +142,9 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
       e.stopPropagation();
     }
     try {
-      if (product.sizes && product.sizes.length > 0 && !selectedSize) {
-        setSizeAlert(true);
-        setTimeout(() => setSizeAlert(false), 2500);
-        return;
-      }
-      onBuyNow(product, selectedSize, selectedColor);
+      const sizeToUse = selectedSize || (product.sizes && product.sizes.length > 0 ? product.sizes[0] : 'Standard');
+      const colorToUse = selectedColor || (product.colors && product.colors.length > 0 ? product.colors[0] : 'Default');
+      onBuyNow(product, sizeToUse, colorToUse);
     } catch {
       // safe fallback
     }

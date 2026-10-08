@@ -1,18 +1,78 @@
 import type { SellerOrder } from '@/types/supplier';
+import type { Product } from '@/types';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem } from './storageHelper';
 
 export interface CustomerOrderItem {
   product_id: string;
   product_title: string;
   product_image: string;
+  design_image?: string;
   quantity: number;
   price: number;
   sku?: string;
+  sku_id?: string;
   size?: string;
   color?: string;
   design?: string;
   fabric?: string;
   brand?: string;
+  category?: string;
+  description?: string;
+}
+
+/**
+ * Resolves the specific SKU ID configured for the selected size or variant.
+ * If the seller inputted a size-level SKU in variants/sizeStock/product.sku, returns it.
+ * Otherwise, generates a clean, deterministic SKU (e.g. SKU-AKY-01-L).
+ */
+export function getProductSizeSku(product: Product, size?: string, color?: string): string {
+  if (!product) return 'SKU-GEN-STD';
+  const targetSize = (size || '').trim().toLowerCase();
+  const targetColor = (color || '').trim().toLowerCase();
+
+  // 1. Check variants array
+  if (Array.isArray(product.variants) && product.variants.length > 0) {
+    if (targetSize && targetColor) {
+      const matchBoth = product.variants.find(
+        v => v.size?.trim().toLowerCase() === targetSize && v.color?.trim().toLowerCase() === targetColor && v.sku
+      );
+      if (matchBoth?.sku) return matchBoth.sku.trim();
+    }
+    if (targetSize) {
+      const matchSize = product.variants.find(
+        v => v.size?.trim().toLowerCase() === targetSize && v.sku
+      );
+      if (matchSize?.sku) return matchSize.sku.trim();
+    }
+    const anySku = product.variants.find(v => v.sku)?.sku;
+    if (anySku) return anySku.trim();
+  }
+
+  // 2. Check sizeStock array
+  const sizeStock = (product as unknown as { sizeStock?: Array<{ size: string; sku?: string }> }).sizeStock;
+  if (Array.isArray(sizeStock) && targetSize) {
+    const matchSizeStock = sizeStock.find(s => s.size?.trim().toLowerCase() === targetSize && s.sku);
+    if (matchSizeStock?.sku) return matchSizeStock.sku.trim();
+  }
+
+  // 3. Direct product SKU if present
+  const directSku = (product as unknown as { sku?: string }).sku;
+  if (directSku && directSku.trim()) {
+    return directSku.trim();
+  }
+
+  // 4. Deterministic fallback SKU combining product ID and selected size
+  const cleanId = (product.id || 'PROD').replace(/^prod_/, '').slice(0, 8).toUpperCase();
+  const sizeSuffix = (size || 'STD').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return `SKU-${cleanId}-${sizeSuffix || 'STD'}`;
+}
+
+/**
+ * Resolves the primary design image or mockup image for the product.
+ */
+export function getProductDesignImage(product: Product): string {
+  if (!product) return '';
+  return product.images?.[0] || product.image || product.imageUrl || '';
 }
 
 export interface CustomerPlacedOrder {
@@ -67,16 +127,23 @@ export function recordPlacedOrder(order: CustomerPlacedOrder): void {
       customerPhone: order.customer_phone,
       customerPincode: order.customer_address?.match(/\b\d{6}\b/)?.[0] || '110001',
       items: order.items.map(item => ({
+        productId: item.product_id,
+        product_id: item.product_id,
         title: item.product_title,
         quantity: item.quantity,
         price: item.price,
         image: item.product_image,
-        sku: item.sku || `AK-${item.product_id.slice(0, 8).toUpperCase()}`,
+        designImage: item.design_image || item.product_image,
+        design_image: item.design_image || item.product_image,
+        sku: item.sku || item.sku_id || `AK-${(item.product_id || 'prod').slice(0, 8).toUpperCase()}`,
+        skuId: item.sku || item.sku_id || `AK-${(item.product_id || 'prod').slice(0, 8).toUpperCase()}`,
         size: item.size,
         color: item.color,
         design: item.design,
         fabric: item.fabric,
         brand: item.brand,
+        category: item.category,
+        description: item.description,
       })),
       totalAmount: order.total_amount,
       paymentMethod: order.payment_method || 'Direct Personal UPI & QR',

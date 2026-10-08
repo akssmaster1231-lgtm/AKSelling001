@@ -73,11 +73,6 @@ function AppContent() {
   const { cartCount } = useCart();
 
   const handleInitiateBuyNow = (prod: Product, size?: string, color?: string) => {
-    if (!user) {
-      setPendingBuyNow({ prod, size, color });
-      setShowAuth(true);
-      return;
-    }
     setBuyNowProduct(prod);
     setBuyNowSize(size);
     setBuyNowColor(color);

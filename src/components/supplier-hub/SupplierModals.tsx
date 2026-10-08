@@ -90,8 +90,9 @@ export function ShippingLabelModal({
               <div className="text-right">
                 <p className="font-bold uppercase text-gray-600">Item Details:</p>
                 <p className="font-bold truncate">{item?.title || 'Catalog Product'}</p>
-                <p>Qty: {item?.quantity || 1} • SKU: {item?.sku || 'AK-TSHIRT'}</p>
-                <p>Order: {order.orderNumber}</p>
+                <p className="font-mono">PID: {item?.productId || item?.product_id || 'PROD'} • SKU: {item?.sku || item?.skuId || 'AK-TSHIRT'}</p>
+                <p>Size: {item?.size || 'Standard'} • Color: {item?.color || 'Default'} • Qty: {item?.quantity || 1}</p>
+                <p className="font-bold">Order: {order.orderNumber}</p>
               </div>
             </div>
           </div>

@@ -16,16 +16,15 @@ import {
   Globe,
   Mail,
   Sparkles,
-  QrCode,
+  ShieldCheck,
 } from 'lucide-react';
 import { formatPrice } from '@/data';
-import DirectUpiPaymentModal, { DirectUpiPaymentResult } from '@/components/payment/DirectUpiPaymentModal';
-import { getOwnerPaymentSettings } from '@/config/ownerPaymentConfig';
+import { openRazorpayCheckout } from '@/utils/razorpayClient';
 import { saveOrderToFirestore, deductProductInventory, savePaymentTransactionToFirestore, type FirestoreOrder } from '@/firebase';
 import { INDIAN_STATES_AND_UTS } from '@/shiprocket-api';
 import { useI18n } from '@/i18n';
 import { useAuth } from '@/auth-context';
-import { recordPlacedOrder } from '@/utils/orderSync';
+import { recordPlacedOrder, getProductSizeSku, getProductDesignImage } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
 import { awardOrderCashback, deductWalletBalanceForOrder, getLocalWalletCache } from '@/utils/walletService';
 import {
@@ -89,7 +88,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     country: 'India',
     pincode: '',
     addressType: 'Home' as 'Home' | 'Work' | 'Other',
-    paymentMethod: 'cod',
+    paymentMethod: 'razorpay' as 'razorpay' | 'cod',
   });
 
   // Pre-fill primary address if available from user profile
@@ -143,7 +142,6 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     }
   };
 
-  const ownerPayment = getOwnerPaymentSettings();
   const [activeGroupBuy] = useState<{
     productId?: string;
     discountPercent?: number;
@@ -203,15 +201,8 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
   const codAdvanceAmount = Math.max(1, Math.round(finalAmount * 0.10));
   const codRemainingAmount = finalAmount - codAdvanceAmount;
 
-  const [isDirectUpiModalOpen, setIsDirectUpiModalOpen] = useState(false);
-  const [pendingOrderId, setPendingOrderId] = useState('');
-
   const handleAddressNext = () => {
     setError('');
-    if (!user) {
-      setError('Login required to complete purchase. Please sign in to your AKSelling account.');
-      return;
-    }
     if (!form.name.trim() || !form.phone.trim() || (!form.houseNo.trim() && !form.street.trim()) || !form.pincode.trim() || !form.city.trim()) {
       setError('Please fill in your complete delivery address (Name, Phone, House/Street, City, Pincode).');
       return;
@@ -231,77 +222,86 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     setStep('review');
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     setError('');
-    if (!user) {
-      setError('Login required to confirm order payment.');
-      return;
-    }
     const genId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
-    setPendingOrderId(genId);
-    setIsDirectUpiModalOpen(true);
-  };
+    setOrderId(genId);
 
-  const handleDirectUpiPaymentConfirm = async (result: DirectUpiPaymentResult) => {
+    const isCod = form.paymentMethod === 'cod';
+    const amountToCharge = isCod ? codAdvanceAmount : finalAmount;
+
     setIsPaymentAuthorizing(true);
-    setError('');
     try {
-      // 1. Verify and record direct UPI transaction on server
-      const verifyResp = await fetch('/api/orders/direct-upi-verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: pendingOrderId,
-          utrNumber: result.utrNumber,
-          amount: result.amountPaid,
-          customerName: form.name,
-          customerPhone: form.phone,
-          paymentMode: result.paymentMode,
-          screenshotUrl: result.screenshotUrl,
-        }),
+      const customerEmailToUse = form.email.trim() || user?.email || 'customer@akselling.com';
+      const rzpResult = await openRazorpayCheckout({
+        amount: amountToCharge,
+        orderId: genId,
+        customerName: form.name,
+        customerEmail: customerEmailToUse,
+        customerPhone: form.phone,
+        description: isCod
+          ? `10% COD Advance Token #${genId}`
+          : `${product.title} - Factory Direct Purchase`,
+        isCodAdvance: isCod,
       });
-
-      if (!verifyResp.ok) {
-        const errJson = await verifyResp.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Server could not record UPI transaction reference.');
-      }
 
       // Record in Firebase Payment Ledger in real-time
       savePaymentTransactionToFirestore({
-        id: `tx_${Date.now()}_${result.utrNumber.slice(-4)}`,
-        orderId: pendingOrderId,
-        utrNumber: result.utrNumber,
-        amount: result.amountPaid,
+        id: `tx_${Date.now()}_${rzpResult.razorpay_payment_id.slice(-6)}`,
+        orderId: genId,
+        utrNumber: rzpResult.razorpay_payment_id,
+        amount: amountToCharge,
         currency: 'INR',
         customerName: form.name,
         customerPhone: form.phone,
-        paymentMethod: result.paymentMode === 'card' ? 'Debit/Credit Card' : 'Direct UPI',
-        paymentMode: result.paymentMode,
+        customerEmail: customerEmailToUse,
+        paymentMethod: isCod
+          ? 'Razorpay (10% COD Advance Token)'
+          : 'Razorpay Online Gateway (Full Prepaid)',
+        paymentMode: 'razorpay_gateway',
         status: 'verified',
-        screenshotUrl: result.screenshotUrl,
         createdAt: new Date().toISOString(),
+        verifiedAt: new Date().toISOString(),
       }).catch(() => {});
 
-      // 2. Deduct wallet balance if redeemed
+      // Record in Server Disk Ledger for instant Seller Hub sync
+      fetch('/api/payments/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `tx_${Date.now()}_${rzpResult.razorpay_payment_id.slice(-6)}`,
+          orderId: genId,
+          paymentId: rzpResult.razorpay_payment_id,
+          utrNumber: rzpResult.razorpay_payment_id,
+          amount: amountToCharge,
+          customerName: form.name,
+          customerPhone: form.phone,
+          customerEmail: customerEmailToUse,
+          paymentMethod: isCod
+            ? 'Razorpay (10% COD Advance Token)'
+            : 'Razorpay Online Gateway (Full Prepaid)',
+          paymentMode: 'razorpay_gateway',
+          status: 'verified',
+          createdAt: new Date().toISOString(),
+          verifiedAt: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+
       if (walletDiscount > 0 && user?.id) {
-        await deductWalletBalanceForOrder(user.id, pendingOrderId, walletDiscount);
+        await deductWalletBalanceForOrder(user.id, genId, walletDiscount).catch(() => {});
       }
 
-      // 3. Place order
-      const isCod = form.paymentMethod === 'cod';
       await placeOrder(
-        pendingOrderId,
-        result.utrNumber,
-        result.screenshotUrl,
-        isCod ? codAdvanceAmount : finalAmount,
+        genId,
+        rzpResult.razorpay_payment_id,
+        undefined,
+        amountToCharge,
         isCod ? codRemainingAmount : 0
       );
-      setIsDirectUpiModalOpen(false);
     } catch (err: unknown) {
       setIsPaymentAuthorizing(false);
-      const errMsg = err instanceof Error ? err.message : 'Payment confirmation failed';
+      const errMsg = err instanceof Error ? err.message : 'Razorpay payment was cancelled.';
       setError(errMsg);
-      throw err;
     }
   };
 
@@ -314,17 +314,28 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
   ) => {
     setState('processing');
     try {
+      const resolvedSize = selectedSize || product.sizes?.[0] || 'Standard';
+      const resolvedColor = selectedColor || product.colors?.[0] || 'Default';
+      const sizeSku = getProductSizeSku(product, resolvedSize, resolvedColor);
+      const designImg = getProductDesignImage(product);
+
       const orderItems = [{
         product_id: product.id,
         product_title: product.title,
-        product_image: product.images[0],
+        product_image: designImg,
+        design_image: designImg,
+        designImage: designImg,
         quantity,
         price: product.price,
-        size: selectedSize || product.sizes?.[0] || 'Standard',
-        color: selectedColor || product.colors?.[0] || 'Default',
+        sku: sizeSku,
+        sku_id: sizeSku,
+        size: resolvedSize,
+        color: resolvedColor,
         design: product.printDesign || product.pattern || 'Original Design',
         fabric: product.fabric || 'Premium Cotton',
         brand: product.brand || 'AKSelling Fashion',
+        category: product.category || 'fashion',
+        description: product.description || '',
       }];
 
       const parts = [
@@ -339,7 +350,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
 
       const generatedId = orderIdToUse;
       const customerEmailToUse = form.email.trim() || user?.email || undefined;
-      const isPrepaid = form.paymentMethod !== 'cod';
+      const isCod = form.paymentMethod === 'cod';
       const orderPayload: FirestoreOrder = {
         id: generatedId,
         customer_name: form.name,
@@ -349,11 +360,16 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         user_id: user?.id,
         items: orderItems,
         total_amount: finalAmount,
-        payment_method: isPrepaid ? 'Direct Personal UPI & QR (Owner Bank)' : 'Cash on Delivery (10% Direct UPI Advance Paid)',
-        payment_status: isPrepaid ? `Paid via Direct UPI (UTR: ${utrNumber})` : `COD (10% Paid) • ₹${advancePaid} Advance Paid (UTR: ${utrNumber})`,
+        payment_method: isCod
+          ? 'Cash on Delivery (10% Razorpay Token Paid)'
+          : 'Razorpay Secure Online Gateway',
+        payment_status: isCod
+          ? `COD (10% Paid via Razorpay) • ₹${advancePaid} Advance Paid (ID: ${utrNumber})`
+          : `Paid in Full via Razorpay (ID: ${utrNumber})`,
         upi_utr: utrNumber,
-        upi_id: getOwnerPaymentSettings().upiId || '7290894907@ybl',
-        transaction_id: `upi_${utrNumber}`,
+        razorpay_payment_id: utrNumber,
+        upi_id: 'razorpay@gateway',
+        transaction_id: utrNumber,
         payment_screenshot: screenshotUrl,
         wallet_discount_applied: walletDiscount,
         spin_discount_applied: spinDiscountAmount,
@@ -379,14 +395,26 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
         }
       }
 
-      // 1. Record in Firebase Firestore in real-time
-      await saveOrderToFirestore(orderPayload);
+      // 1. Record in Firebase Firestore in real-time (safe non-blocking)
+      try {
+        await saveOrderToFirestore(orderPayload);
+      } catch (fErr) {
+        console.warn('saveOrderToFirestore notice:', fErr);
+      }
 
-      // 2. Automatically deduct inventory in catalog
-      await deductProductInventory([{ product_id: product.id, quantity }]);
+      // 2. Automatically deduct inventory in catalog (safe non-blocking)
+      try {
+        await deductProductInventory([{ product_id: product.id, quantity }]);
+      } catch (dErr) {
+        console.warn('deductProductInventory notice:', dErr);
+      }
 
-      // 3. Record in customer local history AND dispatch to Seller Dashboard Orders Tab
-      recordPlacedOrder(orderPayload);
+      // 3. Record in customer local history AND dispatch to Seller Dashboard Orders Tab (guaranteed)
+      try {
+        recordPlacedOrder(orderPayload);
+      } catch (recErr) {
+        console.warn('recordPlacedOrder notice:', recErr);
+      }
 
       // 4. Trigger automated instant email notifications (Seller alert to anojkumaryadav7290@gmail.com + Customer confirmation)
       fetch('/api/notifications/send-order-email', {
@@ -932,68 +960,151 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
 
         {/* Step 2: Payment */}
         {step === 'payment' && (
-          <div className="bg-white rounded-xl shadow-card p-4 space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <CreditCard size={18} className="text-flipkart-500" />
-              <h2 className="text-sm font-bold text-gray-800">{t('step2Payment')}</h2>
+          <div className="bg-white rounded-xl shadow-card p-4 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+              <div className="flex items-center gap-2">
+                <CreditCard size={18} className="text-blue-600" />
+                <h2 className="text-sm font-bold text-gray-900">{t('step2Payment')}</h2>
+              </div>
+              <div className="flex items-center gap-1.5 bg-blue-50 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                <ShieldCheck size={12} className="text-blue-600" />
+                <span>Razorpay Verified</span>
+              </div>
             </div>
-            {[
-              {
-                label: 'Direct Personal UPI & QR Code',
-                value: 'upi',
-                icon: '📱',
-                badge: '0% Fees • Pay Direct to Owner Bank',
-                sub: 'Scan QR or Pay via Google Pay, PhonePe, Paytm, BHIM with 0% gateway commission',
-              },
-              {
-                label: t('cashOnDelivery'),
-                value: 'cod',
-                icon: '💵',
-                badge: `COD Rule: 10% Advance (₹${codAdvanceAmount}) Mandatory`,
-                sub: `COD orders ke liye 10% advance payment zaroori hai. Abhi ₹${codAdvanceAmount} UPI se pay karein, baki ₹${codRemainingAmount} delivery par cash dein.`,
-              },
-              {
-                label: 'Direct Bank Transfer (IMPS / NEFT)',
-                value: 'card',
-                icon: '🏦',
-                badge: `Direct to ${ownerPayment.bankName || 'Airtel payment Bank'}`,
-                sub: `Direct Account Transfer to ${ownerPayment.beneficiaryName || 'ANOJKUMAR'} (A/C: ${ownerPayment.accountNumber || '7290894907'}, IFSC: ${ownerPayment.ifscCode || 'AIRP0000001'})`,
-              },
-            ].map(opt => (
+
+            {/* UPI Quick Highlights Banner */}
+            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-3 rounded-xl shadow-sm flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-black tracking-wide text-amber-300">⚡ RAZORPAY UPI INSTANT CHECKOUT</span>
+                </div>
+                <p className="text-[11px] text-gray-300 mt-0.5">Google Pay • PhonePe • Paytm • BHIM • UPI QR • Cards</p>
+              </div>
+              <div className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-lg text-[10px] font-semibold backdrop-blur-xs">
+                <span>100% Safe</span>
+              </div>
+            </div>
+
+            {/* Payment Options */}
+            <div className="space-y-3">
+              {/* Option 1: Full Prepaid via Razorpay UPI */}
               <button
-                key={opt.value}
-                onClick={() => setForm({ ...form, paymentMethod: opt.value })}
-                className={`w-full flex items-start gap-3 px-3 py-3.5 rounded-lg border transition-colors ${
-                  form.paymentMethod === opt.value ? 'border-flipkart-500 bg-flipkart-50' : 'border-gray-200 hover:bg-gray-50'
+                type="button"
+                onClick={() => setForm({ ...form, paymentMethod: 'razorpay' })}
+                className={`w-full text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                  form.paymentMethod === 'razorpay'
+                    ? 'border-blue-600 bg-blue-50/70 shadow-sm ring-1 ring-blue-500'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                <span className="text-xl mt-0.5">{opt.icon}</span>
-                <div className="flex-1 text-left">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-gray-800">{opt.label}</span>
-                    <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
-                      {opt.badge}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm shrink-0">
+                      ⚡
                     </span>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-black text-gray-900">
+                          Prepaid Online Payment (Razorpay UPI)
+                        </span>
+                        <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.2 rounded-full">
+                          Zero COD Fees • Fast Dispatch
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        Pay full ₹{finalAmount} securely via Razorpay. Instant order confirmation.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">{opt.sub}</p>
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-1 shrink-0 ${
+                    form.paymentMethod === 'razorpay' ? 'border-blue-600 bg-blue-600' : 'border-gray-300'
+                  }`}>
+                    {form.paymentMethod === 'razorpay' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
                 </div>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-1 shrink-0 ${
-                  form.paymentMethod === opt.value ? 'border-flipkart-500' : 'border-gray-300'
-                }`}>
-                  {form.paymentMethod === opt.value && <div className="w-2.5 h-2.5 rounded-full bg-flipkart-500" />}
+
+                {/* Branded UPI Apps Pills */}
+                <div className="flex items-center gap-1.5 flex-wrap mt-3 pt-2.5 border-t border-blue-200/60">
+                  <span className="text-[10px] font-extrabold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200 shadow-2xs">
+                    Google Pay
+                  </span>
+                  <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 shadow-2xs">
+                    PhonePe
+                  </span>
+                  <span className="text-[10px] font-extrabold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 shadow-2xs">
+                    Paytm UPI
+                  </span>
+                  <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shadow-2xs">
+                    Scan UPI QR
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-700 bg-white px-2 py-0.5 rounded border border-gray-200 shadow-2xs">
+                    RuPay / Cards
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-700 bg-white px-2 py-0.5 rounded border border-gray-200 shadow-2xs">
+                    NetBanking
+                  </span>
                 </div>
               </button>
-            ))}
+
+              {/* Option 2: Cash on Delivery with 10% Advance via Razorpay */}
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, paymentMethod: 'cod' })}
+                className={`w-full text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                  form.paymentMethod === 'cod'
+                    ? 'border-amber-500 bg-amber-50/70 shadow-sm ring-1 ring-amber-400'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-black text-sm shrink-0">
+                      💵
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-black text-gray-900">
+                          Cash on Delivery (10% Advance Token)
+                        </span>
+                        <span className="text-[10px] font-extrabold text-amber-900 bg-amber-200 px-2 py-0.2 rounded-full">
+                          Pay ₹{codAdvanceAmount} Token Online
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        Pay 10% advance token (₹{codAdvanceAmount}) online via Razorpay. Pay remaining ₹{codRemainingAmount} in cash on doorstep delivery.
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-1 shrink-0 ${
+                    form.paymentMethod === 'cod' ? 'border-amber-600 bg-amber-600' : 'border-gray-300'
+                  }`}>
+                    {form.paymentMethod === 'cod' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap mt-3 pt-2.5 border-t border-amber-200/60">
+                  <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                    UPI Token: ₹{codAdvanceAmount}
+                  </span>
+                  <span className="text-[10px] text-gray-600">
+                    Remaining at doorstep: <strong>₹{codRemainingAmount}</strong>
+                  </span>
+                </div>
+              </button>
+            </div>
+
             <div className="flex gap-2 pt-2">
               <button
+                type="button"
                 onClick={() => setStep('address')}
-                className="px-4 text-sm text-gray-500 font-medium rounded-lg hover:bg-gray-100"
+                className="px-4 py-2.5 text-xs text-gray-600 font-bold rounded-xl border border-gray-200 hover:bg-gray-100 cursor-pointer"
               >
                 Back
               </button>
               <button
+                type="button"
                 onClick={handlePaymentNext}
-                className="flex-1 bg-flipkart-500 text-white font-bold text-sm py-3 rounded-xl hover:bg-flipkart-600 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm cursor-pointer"
               >
                 Continue to Review <ChevronRight size={18} />
               </button>
@@ -1036,12 +1147,13 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
                 </div>
                 <button onClick={() => setStep('payment')} className="text-xs text-flipkart-500 font-medium">Edit</button>
               </div>
-              <p className="text-sm text-gray-600 font-medium">
+              <p className="text-sm text-gray-900 font-bold">
                 {form.paymentMethod === 'cod'
-                  ? `Cash on Delivery (10% ₹${codAdvanceAmount} advance via Direct UPI + ₹${codRemainingAmount} at doorstep)`
-                  : form.paymentMethod === 'upi'
-                  ? 'Direct Personal UPI & QR (100% Prepaid directly to Owner Bank)'
-                  : `Direct Bank Transfer (IMPS / NEFT to Owner ${ownerPayment.bankName || 'Airtel payment Bank'})`}
+                  ? `Cash on Delivery (10% Advance Token ₹${codAdvanceAmount} via Razorpay + ₹${codRemainingAmount} at doorstep)`
+                  : `Razorpay Online Gateway (100% Prepaid • ₹${finalAmount})`}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Processed via official Razorpay Gateway (Google Pay, PhonePe, Paytm, Cards, NetBanking)
               </p>
             </div>
 
@@ -1142,47 +1254,48 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
 
       {/* Bottom Action */}
       {step === 'review' && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 px-4 py-3 max-w-md mx-auto w-full shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
-          <div className="flex items-center justify-between">
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 px-4 py-3 max-w-md mx-auto w-full shadow-[0_-4px_12px_rgba(0,0,0,0.1)]">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs text-gray-400">{t('totalAmount')}</p>
-              <p className="text-lg font-bold text-gray-900">{formatPrice(finalAmount)}</p>
+              <p className="text-[11px] text-gray-500 font-medium">
+                {form.paymentMethod === 'cod' ? 'Advance Due Now' : t('totalAmount')}
+              </p>
+              <p className="text-lg font-black text-gray-900">
+                ₹{form.paymentMethod === 'cod' ? codAdvanceAmount : finalAmount}
+              </p>
             </div>
             <button
               onClick={handleConfirm}
               disabled={isPaymentAuthorizing}
-              className={`flex-1 ml-4 ${
-                isPaymentAuthorizing ? 'bg-accent-400/80 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700'
-              } text-white font-bold text-base py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer`}
+              className={`flex-1 py-3.5 px-3 rounded-xl font-bold text-sm sm:text-base text-white transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer ${
+                isPaymentAuthorizing
+                  ? 'bg-blue-400 cursor-wait'
+                  : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99]'
+              }`}
             >
               {isPaymentAuthorizing ? (
                 <>
-                  <Loader2 size={18} className="animate-spin" /> Confirming Payment...
+                  <Loader2 size={18} className="animate-spin" /> Processing Payment...
+                </>
+              ) : form.paymentMethod === 'cod' ? (
+                <>
+                  <Zap size={16} className="text-amber-300 fill-amber-300" />
+                  <span>Pay ₹{codAdvanceAmount} Token via Razorpay UPI</span>
                 </>
               ) : (
                 <>
-                  <QrCode size={18} /> {form.paymentMethod === 'cod' ? `Pay 10% Advance (₹${codAdvanceAmount}) via UPI` : `Pay ₹${finalAmount} via Direct UPI / QR`}
+                  <Zap size={16} className="text-amber-300 fill-amber-300" />
+                  <span>Pay ₹{finalAmount} with Razorpay UPI</span>
                 </>
               )}
             </button>
           </div>
+          <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 font-medium mt-1.5">
+            <ShieldCheck size={12} className="text-emerald-600" />
+            <span>Official Razorpay 256-Bit SSL Secured • Instant UPI Confirmation</span>
+          </div>
         </div>
       )}
-
-      {/* Direct Personal UPI & QR Payment Modal */}
-      <DirectUpiPaymentModal
-        isOpen={isDirectUpiModalOpen}
-        onClose={() => setIsDirectUpiModalOpen(false)}
-        onConfirmPayment={handleDirectUpiPaymentConfirm}
-        orderId={pendingOrderId}
-        amount={form.paymentMethod === 'cod' ? codAdvanceAmount : finalAmount}
-        payableAmount={form.paymentMethod === 'cod' ? codAdvanceAmount : finalAmount}
-        isCodAdvance={form.paymentMethod === 'cod'}
-        totalOrderAmount={finalAmount}
-        paymentMode={form.paymentMethod === 'cod' ? 'cod_advance' : 'direct_upi_full'}
-        customerName={form.name}
-        customerPhone={form.phone}
-      />
     </div>
   );
 }

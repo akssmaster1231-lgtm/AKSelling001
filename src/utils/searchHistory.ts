@@ -26,13 +26,13 @@ const MAX_SEARCH_HISTORY = 15;
 const MAX_RECENTLY_VIEWED = 12;
 
 export const POPULAR_SEARCH_TAGS = [
-  'Banarasi Silk Saree',
-  'Men Ethnic Kurta',
-  'Wireless Earbuds',
-  'Running Shoes',
-  'Smart Watch',
-  'Embroidered Kurti',
-  'Leather Wallet',
+  'Oversized T-Shirt',
+  '180 GSM Bio-Wash Cotton',
+  'Drop Shoulder Streetwear',
+  'Heavyweight 240+ GSM Tee',
+  'Trust The Process White',
+  'Pure Combed Cotton Indore',
+  'Graphic Print Apparel',
 ];
 
 /**

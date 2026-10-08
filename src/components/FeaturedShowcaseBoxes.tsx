@@ -17,22 +17,7 @@ export const CottonShowcaseBox: React.FC<ShowcaseBoxProps> = ({
   onProductClick,
   className = '',
 }) => {
-  const cottonItems = React.useMemo(() => {
-    const matched = products.filter(
-      (p) =>
-        p.fabric?.toLowerCase().includes('cotton') ||
-        p.fabric?.toLowerCase().includes('180') ||
-        p.weightGsm?.toLowerCase().includes('180') ||
-        p.title?.toLowerCase().includes('cotton') ||
-        p.description?.toLowerCase().includes('180') ||
-        p.tags?.some(
-          (t) =>
-            t.toLowerCase().includes('cotton') ||
-            t.toLowerCase().includes('180')
-        )
-    );
-    return (matched.length >= 2 ? matched : products).slice(0, 12);
-  }, [products]);
+  const cottonItems = products;
 
   if (cottonItems.length === 0) return null;
 
@@ -124,23 +109,7 @@ export const StreetwearShowcaseBox: React.FC<ShowcaseBoxProps> = ({
   onProductClick,
   className = '',
 }) => {
-  const streetwearItems = React.useMemo(() => {
-    const matched = products.filter(
-      (p) =>
-        p.title?.toLowerCase().includes('oversized') ||
-        p.title?.toLowerCase().includes('heavy') ||
-        p.fitType?.toLowerCase().includes('oversized') ||
-        p.fabric?.toLowerCase().includes('240') ||
-        p.description?.toLowerCase().includes('streetwear') ||
-        p.tags?.some(
-          (t) =>
-            t.toLowerCase().includes('oversized') ||
-            t.toLowerCase().includes('streetwear') ||
-            t.toLowerCase().includes('drop')
-        )
-    );
-    return (matched.length >= 2 ? matched : products.slice(1)).slice(0, 12);
-  }, [products]);
+  const streetwearItems = products;
 
   if (streetwearItems.length === 0) return null;
 

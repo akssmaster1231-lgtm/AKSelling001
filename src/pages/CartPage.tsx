@@ -18,15 +18,13 @@ import {
   Navigation,
   Mail,
   Sparkles,
-  QrCode,
 } from 'lucide-react';
 import { useCart } from '@/cart-context';
 import { useAuth } from '@/auth-context';
 import { formatPrice } from '@/data';
-import DirectUpiPaymentModal, { DirectUpiPaymentResult } from '@/components/payment/DirectUpiPaymentModal';
-import { getOwnerPaymentSettings } from '@/config/ownerPaymentConfig';
+import { openRazorpayCheckout } from '@/utils/razorpayClient';
 import { saveOrderToFirestore, deductProductInventory, savePaymentTransactionToFirestore, type FirestoreOrder } from '@/firebase';
-import { recordPlacedOrder } from '@/utils/orderSync';
+import { recordPlacedOrder, getProductSizeSku, getProductDesignImage } from '@/utils/orderSync';
 import { lookupPincode } from '@/utils/pincode';
 import { awardOrderCashback, deductWalletBalanceForOrder, getLocalWalletCache } from '@/utils/walletService';
 import {
@@ -85,7 +83,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
     state: '',
     pincode: '',
     addressType: 'Home' as 'Home' | 'Work' | 'Other',
-    paymentMethod: 'cod',
+    paymentMethod: 'razorpay' as 'razorpay' | 'cod',
   });
 
   // Pre-fill user primary real address from profile
@@ -187,11 +185,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
   const codAdvanceAmount = Math.max(1, Math.round(finalCartAmount * 0.10));
   const codRemainingAmount = Math.max(0, finalCartAmount - codAdvanceAmount);
 
-  const ownerPayment = getOwnerPaymentSettings();
-  const [isDirectUpiModalOpen, setIsDirectUpiModalOpen] = useState(false);
-  const [pendingOrderId, setPendingOrderId] = useState('');
-
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     setOrderError('');
     if (!form.name.trim() || !form.phone.trim() || (!form.houseNo.trim() && !form.street.trim()) || !form.pincode.trim() || !form.city.trim()) {
       setOrderError('Please fill in your complete delivery address (Name, Phone, House/Street, City, Pincode).');
@@ -207,70 +201,81 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
     }
 
     const genId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
-    setPendingOrderId(genId);
-    setIsDirectUpiModalOpen(true);
-  };
 
-  const handleDirectUpiPaymentConfirm = async (result: DirectUpiPaymentResult) => {
+    const isCod = form.paymentMethod === 'cod';
+    const amountToPay = isCod ? codAdvanceAmount : finalCartAmount;
+
     setIsPaymentAuthorizing(true);
-    setOrderError('');
     try {
-      // 1. Verify and record direct UPI transaction on server
-      const verifyResp = await fetch('/api/orders/direct-upi-verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: pendingOrderId,
-          utrNumber: result.utrNumber,
-          amount: result.amountPaid,
-          customerName: form.name,
-          customerPhone: form.phone,
-          paymentMode: result.paymentMode,
-          screenshotUrl: result.screenshotUrl,
-        }),
+      const rzpResult = await openRazorpayCheckout({
+        amount: amountToPay,
+        orderId: genId,
+        customerName: form.name,
+        customerEmail: user?.email || 'customer@akselling.com',
+        customerPhone: form.phone,
+        description: isCod
+          ? `10% COD Advance Token #${genId}`
+          : `AKSelling Bag Order (${cartItems.length} items)`,
+        isCodAdvance: isCod,
       });
 
-      if (!verifyResp.ok) {
-        const errJson = await verifyResp.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Server could not record UPI transaction reference.');
-      }
-
-      // Record in Firebase Payment Ledger in real-time
+      // Record in Firebase Payment Ledger
       savePaymentTransactionToFirestore({
-        id: `tx_${Date.now()}_${result.utrNumber.slice(-4)}`,
-        orderId: pendingOrderId,
-        utrNumber: result.utrNumber,
-        amount: result.amountPaid,
+        id: `tx_${Date.now()}_${rzpResult.razorpay_payment_id.slice(-6)}`,
+        orderId: genId,
+        utrNumber: rzpResult.razorpay_payment_id,
+        amount: amountToPay,
         currency: 'INR',
         customerName: form.name,
         customerPhone: form.phone,
-        paymentMethod: result.paymentMode === 'card' ? 'Debit/Credit Card' : 'Direct UPI',
-        paymentMode: result.paymentMode,
+        customerEmail: user?.email || undefined,
+        paymentMethod: isCod
+          ? 'Razorpay (10% COD Advance Token)'
+          : 'Razorpay Online Gateway (Full Prepaid)',
+        paymentMode: 'razorpay_gateway',
         status: 'verified',
-        screenshotUrl: result.screenshotUrl,
         createdAt: new Date().toISOString(),
+        verifiedAt: new Date().toISOString(),
       }).catch(() => {});
 
-      // 2. Deduct wallet rewards if applied
+      // Record in Server Disk Ledger for instant Seller Hub sync
+      fetch('/api/payments/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `tx_${Date.now()}_${rzpResult.razorpay_payment_id.slice(-6)}`,
+          orderId: genId,
+          paymentId: rzpResult.razorpay_payment_id,
+          utrNumber: rzpResult.razorpay_payment_id,
+          amount: amountToPay,
+          customerName: form.name,
+          customerPhone: form.phone,
+          customerEmail: form.email?.trim() || user?.email || undefined,
+          paymentMethod: isCod
+            ? 'Razorpay (10% COD Advance Token)'
+            : 'Razorpay Online Gateway (Full Prepaid)',
+          paymentMode: 'razorpay_gateway',
+          status: 'verified',
+          createdAt: new Date().toISOString(),
+          verifiedAt: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+
       if (walletDiscount > 0 && user?.id) {
-        await deductWalletBalanceForOrder(user.id, pendingOrderId, walletDiscount);
+        await deductWalletBalanceForOrder(user.id, genId, walletDiscount).catch(() => {});
       }
 
-      // 3. Place order in database
-      const isCod = form.paymentMethod === 'cod';
       await placeOrderInDb(
-        pendingOrderId,
-        result.utrNumber,
-        result.screenshotUrl,
-        isCod ? codAdvanceAmount : finalCartAmount,
+        genId,
+        rzpResult.razorpay_payment_id,
+        undefined,
+        amountToPay,
         isCod ? codRemainingAmount : 0
       );
-      setIsDirectUpiModalOpen(false);
     } catch (err: unknown) {
       setIsPaymentAuthorizing(false);
-      const errMsg = err instanceof Error ? err.message : 'Payment confirmation failed';
+      const errMsg = err instanceof Error ? err.message : 'Razorpay payment was cancelled.';
       setOrderError(errMsg);
-      throw err;
     }
   };
 
@@ -283,18 +288,31 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
   ) => {
     setCheckoutState('processing');
 
-    const orderItems = activeItems.map((item: CartItem) => ({
-      product_id: item.product.id,
-      product_title: item.product.title,
-      product_image: item.product.images[0],
-      quantity: item.quantity,
-      price: item.product.price,
-      size: item.selectedSize || item.product.sizes?.[0] || 'Standard',
-      color: item.selectedColor || item.product.colors?.[0] || 'Default',
-      design: item.product.printDesign || item.product.pattern || 'Original Design',
-      fabric: item.product.fabric || 'Premium Cotton',
-      brand: item.product.brand || 'AKSelling Fashion',
-    }));
+    const orderItems = activeItems.map((item: CartItem) => {
+      const resolvedSize = item.selectedSize || item.product.sizes?.[0] || 'Standard';
+      const resolvedColor = item.selectedColor || item.product.colors?.[0] || 'Default';
+      const sizeSku = getProductSizeSku(item.product, resolvedSize, resolvedColor);
+      const designImg = getProductDesignImage(item.product);
+
+      return {
+        product_id: item.product.id,
+        product_title: item.product.title,
+        product_image: designImg,
+        design_image: designImg,
+        designImage: designImg,
+        quantity: item.quantity,
+        price: item.product.price,
+        sku: sizeSku,
+        sku_id: sizeSku,
+        size: resolvedSize,
+        color: resolvedColor,
+        design: item.product.printDesign || item.product.pattern || 'Original Design',
+        fabric: item.product.fabric || 'Premium Cotton',
+        brand: item.product.brand || 'AKSelling Fashion',
+        category: item.product.category || 'fashion',
+        description: item.product.description || '',
+      };
+    });
 
     const addressParts = [
       form.houseNo.trim(),
@@ -308,7 +326,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
 
     const generatedId = orderIdToUse;
     const customerEmailToUse = form.email.trim() || user?.email || undefined;
-    const isPrepaid = form.paymentMethod !== 'cod';
+    const isCod = form.paymentMethod === 'cod';
     const orderPayload: FirestoreOrder = {
       id: generatedId,
       customer_name: form.name,
@@ -318,11 +336,16 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
       user_id: user?.id,
       items: orderItems,
       total_amount: finalCartAmount,
-      payment_method: isPrepaid ? 'Direct Personal UPI & QR (Owner Bank)' : 'Cash on Delivery (10% Direct UPI Advance Paid)',
-      payment_status: isPrepaid ? `Paid via Direct UPI (UTR: ${utrNumber})` : `COD (10% Paid) • ₹${advancePaid} Advance Paid (UTR: ${utrNumber})`,
+      payment_method: isCod
+        ? 'Cash on Delivery (10% Razorpay Token Paid)'
+        : 'Razorpay Secure Online Gateway',
+      payment_status: isCod
+        ? `COD (10% Paid via Razorpay) • ₹${advancePaid} Advance Paid (ID: ${utrNumber})`
+        : `Paid in Full via Razorpay (ID: ${utrNumber})`,
       upi_utr: utrNumber,
-      upi_id: getOwnerPaymentSettings().upiId || '7290894907@ybl',
-      transaction_id: `upi_${utrNumber}`,
+      razorpay_payment_id: utrNumber,
+      upi_id: 'razorpay@gateway',
+      transaction_id: utrNumber,
       payment_screenshot: screenshotUrl,
       wallet_discount_applied: walletDiscount,
       spin_discount_applied: spinDiscountAmount,
@@ -348,16 +371,28 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
       }
     }
 
-    // 1. Save to Firebase Firestore in real-time
-    await saveOrderToFirestore(orderPayload);
+    // 1. Save to Firebase Firestore in real-time (safe non-blocking)
+    try {
+      await saveOrderToFirestore(orderPayload);
+    } catch (fErr) {
+      console.warn('saveOrderToFirestore notice:', fErr);
+    }
 
-    // 2. Automatically deduct inventory in product catalog
-    await deductProductInventory(
-      orderItems.map((item) => ({ product_id: item.product_id, quantity: item.quantity }))
-    );
+    // 2. Automatically deduct inventory in product catalog (safe non-blocking)
+    try {
+      await deductProductInventory(
+        orderItems.map((item) => ({ product_id: item.product_id, quantity: item.quantity }))
+      );
+    } catch (dErr) {
+      console.warn('deductProductInventory notice:', dErr);
+    }
 
-    // 3. Save to customer local orders AND Supplier Dashboard
-    recordPlacedOrder(orderPayload);
+    // 3. Save to customer local orders AND Supplier Dashboard (guaranteed)
+    try {
+      recordPlacedOrder(orderPayload);
+    } catch (rErr) {
+      console.warn('recordPlacedOrder notice:', rErr);
+    }
 
     // 4. Trigger automated instant email notifications (Seller alert to anojkumaryadav7290@gmail.com + Customer confirmation)
     fetch('/api/notifications/send-order-email', {
@@ -593,6 +628,18 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
             {/* Address Input Form (Shown when adding a new address OR if no saved address exists) */}
             {(!user?.addresses?.length || isAddingNewAddress) && (
               <div className="space-y-3 pt-1 border-t border-gray-100">
+                {!user && onRequireLogin && (
+                  <div className="flex items-center justify-between p-2.5 bg-blue-50/60 rounded-xl border border-blue-100 text-xs text-blue-900 mb-2">
+                    <span>Have an AKSelling account?</span>
+                    <button
+                      type="button"
+                      onClick={onRequireLogin}
+                      className="font-bold text-blue-700 hover:underline"
+                    >
+                      Login to use saved addresses →
+                    </button>
+                  </div>
+                )}
                 {user?.addresses && user.addresses.length > 0 && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-800">Enter New Delivery Address</span>
@@ -795,32 +842,45 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
 
         {/* Payment Method */}
         <div className="px-3 mt-3">
-          <div className="bg-white rounded-xl shadow-card p-4">
-            <h2 className="text-sm font-bold text-gray-800 mb-3">Payment Method</h2>
-            <div className="space-y-2">
+          <div className="bg-white rounded-xl shadow-card p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                <CreditCard size={16} className="text-blue-600" />
+                <span>Payment Method</span>
+              </h2>
+              <span className="text-[10px] font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 flex items-center gap-1">
+                <ShieldCheck size={11} className="text-blue-600" />
+                <span>Razorpay Secured</span>
+              </span>
+            </div>
+
+            {/* UPI Ribbon */}
+            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-3 rounded-xl shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-black tracking-wide text-amber-300">⚡ RAZORPAY UPI INSTANT CHECKOUT</p>
+                <p className="text-[10px] text-gray-300 mt-0.5">Google Pay • PhonePe • Paytm • BHIM • UPI QR • Cards</p>
+              </div>
+              <span className="text-[10px] font-bold bg-white/10 px-2 py-0.5 rounded text-white">100% Safe</span>
+            </div>
+
+            <div className="space-y-2.5">
               <PaymentOption
-                label="Cash on Delivery"
+                label="⚡ Prepaid Online Payment (Razorpay UPI)"
+                value="razorpay"
+                selected={form.paymentMethod === 'razorpay'}
+                badge="Fastest Dispatch • Zero COD Fees"
+                sub={`Pay full ₹${finalCartAmount} securely via Razorpay Gateway. Instant verification.`}
+                brands={['Google Pay', 'PhonePe', 'Paytm', 'Scan UPI QR', 'Cards', 'NetBanking']}
+                onSelect={() => setForm({ ...form, paymentMethod: 'razorpay' })}
+              />
+              <PaymentOption
+                label="💵 Cash on Delivery (10% Advance via Razorpay)"
                 value="cod"
                 selected={form.paymentMethod === 'cod'}
-                badge={`COD Rule: 10% Advance (₹${codAdvanceAmount}) Mandatory`}
-                sub={`COD orders ke liye 10% advance payment zaroori hai. Abhi ₹${codAdvanceAmount} UPI se pay karein, baki ₹${codRemainingAmount} delivery par cash dein.`}
+                badge={`10% Token (₹${codAdvanceAmount}) via Razorpay + 90% at Doorstep`}
+                sub={`Pay ₹${codAdvanceAmount} online token now via Razorpay. Pay remaining ₹${codRemainingAmount} in cash upon delivery to courier rider.`}
+                brands={['UPI Token: ₹' + codAdvanceAmount, 'Remaining on Delivery: ₹' + codRemainingAmount]}
                 onSelect={() => setForm({ ...form, paymentMethod: 'cod' })}
-              />
-              <PaymentOption
-                label="Direct Personal UPI & QR Code"
-                value="upi"
-                selected={form.paymentMethod === 'upi'}
-                badge="0% Fees • Pay Direct to Bank"
-                sub="Scan QR or Pay via Google Pay, PhonePe, Paytm, BHIM with zero commissions"
-                onSelect={() => setForm({ ...form, paymentMethod: 'upi' })}
-              />
-              <PaymentOption
-                label="Direct Bank Transfer (IMPS / NEFT)"
-                value="card"
-                selected={form.paymentMethod === 'card'}
-                badge={ownerPayment.bankName || "Airtel payment Bank"}
-                sub={`Direct Account Transfer to ${ownerPayment.beneficiaryName || 'ANOJKUMAR'} (A/C: ${ownerPayment.accountNumber || '7290894907'}, IFSC: ${ownerPayment.ifscCode || 'AIRP0000001'})`}
-                onSelect={() => setForm({ ...form, paymentMethod: 'card' })}
               />
             </div>
           </div>
@@ -926,36 +986,25 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
               onClick={handlePlaceOrder}
               disabled={isPaymentAuthorizing}
               className={`flex-1 ml-4 ${
-                isPaymentAuthorizing ? 'bg-accent-400/80 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700'
+                isPaymentAuthorizing ? 'bg-blue-400 cursor-wait' : 'bg-blue-600 hover:bg-blue-700'
               } text-white font-bold text-base py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer`}
             >
               {isPaymentAuthorizing ? (
                 <>
-                  <Loader2 size={18} className="animate-spin" /> Confirming Payment...
+                  <Loader2 size={18} className="animate-spin" /> Processing Payment...
+                </>
+              ) : form.paymentMethod === 'cod' ? (
+                <>
+                  ⚡ Pay 10% Advance (₹{codAdvanceAmount}) via Razorpay
                 </>
               ) : (
                 <>
-                  <QrCode size={18} /> {form.paymentMethod === 'cod' ? `Pay 10% Advance (₹${codAdvanceAmount}) via UPI` : `Pay ₹${finalCartAmount} via Direct UPI / QR`}
+                  ⚡ Pay ₹{finalCartAmount} with Razorpay
                 </>
               )}
             </button>
           </div>
         </div>
-
-        {/* Direct Personal UPI & QR Payment Modal */}
-        <DirectUpiPaymentModal
-          isOpen={isDirectUpiModalOpen}
-          onClose={() => setIsDirectUpiModalOpen(false)}
-          onConfirmPayment={handleDirectUpiPaymentConfirm}
-          orderId={pendingOrderId}
-          amount={form.paymentMethod === 'cod' ? codAdvanceAmount : finalCartAmount}
-          payableAmount={form.paymentMethod === 'cod' ? codAdvanceAmount : finalCartAmount}
-          isCodAdvance={form.paymentMethod === 'cod'}
-          totalOrderAmount={finalCartAmount}
-          paymentMode={form.paymentMethod === 'cod' ? 'cod_advance' : 'direct_upi_full'}
-          customerName={form.name}
-          customerPhone={form.phone}
-        />
       </div>
     );
   }
@@ -1119,10 +1168,6 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
                     <button
                       type="button"
                       onClick={() => {
-                        if (!user && onRequireLogin) {
-                          onRequireLogin();
-                          return;
-                        }
                         if (onBuyNow) {
                           onBuyNow(item.product, item.selectedSize, item.selectedColor);
                         } else {
@@ -1141,10 +1186,6 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
             <div className="p-3 border-t border-gray-100">
               <button
                 onClick={() => {
-                  if (!user && onRequireLogin) {
-                    onRequireLogin();
-                    return;
-                  }
                   setCheckoutState('checkout');
                 }}
                 className="w-full bg-accent-400 text-white font-bold text-base py-3.5 rounded-xl hover:bg-accent-600 transition-colors cursor-pointer"
@@ -1297,6 +1338,7 @@ function PaymentOption({
   selected,
   badge,
   sub,
+  brands,
   onSelect,
 }: {
   label: string;
@@ -1304,32 +1346,58 @@ function PaymentOption({
   selected: boolean;
   badge?: string;
   sub?: string;
+  brands?: string[];
   onSelect: () => void;
 }) {
   return (
     <button
       onClick={onSelect}
-      className={`w-full flex items-start gap-3 px-3 py-3 rounded-lg border transition-colors ${
-        selected ? 'border-flipkart-500 bg-flipkart-50' : 'border-gray-200 hover:bg-gray-50'
+      className={`w-full flex items-start gap-3 p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+        selected ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-500 shadow-xs' : 'border-gray-200 hover:bg-gray-50'
       }`}
     >
       <div
-        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-          selected ? 'border-flipkart-500' : 'border-gray-300'
+        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 shrink-0 ${
+          selected ? 'border-blue-600 bg-blue-600' : 'border-gray-300'
         }`}
       >
-        {selected && <div className="w-2.5 h-2.5 rounded-full bg-flipkart-500" />}
+        {selected && <div className="w-2 h-2 rounded-full bg-white" />}
       </div>
       <div className="flex-1 text-left">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-gray-800">{label}</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-black text-gray-900">{label}</span>
           {badge && (
-            <span className="text-[10px] font-semibold text-flipkart-700 bg-blue-100/70 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded-full">
               {badge}
             </span>
           )}
         </div>
-        {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+        {sub && <p className="text-xs text-gray-600 mt-1 leading-relaxed">{sub}</p>}
+        {brands && brands.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap mt-2 pt-2 border-t border-blue-200/50">
+            {brands.map((b) => {
+              const isGpay = b.includes('Google');
+              const isPhonePe = b.includes('PhonePe');
+              const isPaytm = b.includes('Paytm');
+              const isQr = b.includes('QR');
+
+              let badgeStyle = 'text-slate-700 bg-white border-gray-200';
+              if (isGpay) badgeStyle = 'text-blue-700 bg-white border-blue-200 font-extrabold';
+              else if (isPhonePe) badgeStyle = 'text-purple-700 bg-purple-50 border-purple-200 font-extrabold';
+              else if (isPaytm) badgeStyle = 'text-sky-700 bg-sky-50 border-sky-200 font-extrabold';
+              else if (isQr) badgeStyle = 'text-emerald-700 bg-emerald-50 border-emerald-200 font-extrabold';
+
+              return (
+                <span
+                  key={b}
+                  className={`text-[10px] px-2 py-0.5 rounded border shadow-2xs ${badgeStyle}`}
+                >
+                  {b}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
       <input type="hidden" value={value} readOnly />
     </button>

@@ -124,53 +124,102 @@ export default function HomePage({
   }, [searchQuery, allProducts]);
 
   const {
+    flashDropProducts,
+    cottonShowcaseProducts,
     freshDropsProducts,
     trendingProducts,
+    streetwearShowcaseProducts,
     categoryShelves,
     exploreCatalogProducts,
   } = useMemo(() => {
     const dedup = new DisplayDeduplicator();
+    const isCompactCatalog = allProducts.length <= 8;
 
-    // 1. Fresh Drops & New Arrivals (First slice of newest unique products)
-    const fresh = dedup.filterAndMark(allProducts, 6);
+    // 1. Limited Flash Drop (Exclusive 2 products if compact, 3 if larger)
+    const flashPool = allProducts.filter(p => (p.discount && p.discount >= 20) || p.price <= 599);
+    const flash = dedup.filterAndMark(flashPool.length > 0 ? flashPool : allProducts, isCompactCatalog ? 2 : 3);
 
-    // 2. Trending Products (Sorted by rating/sales, strictly excluding anything already in Fresh Drops)
-    const sortedPool = [...allProducts].sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
-    const trending = dedup.filterAndMark(sortedPool, 6);
+    // 2. Pure 180 GSM Bio-Wash Cotton Showcase
+    let cotton: Product[] = [];
+    if (!isCompactCatalog) {
+      const cottonPool = allProducts.filter(p =>
+        !dedup.isDisplayed(p) && (
+          p.fabric?.toLowerCase().includes('cotton') ||
+          p.fabric?.toLowerCase().includes('180') ||
+          p.title?.toLowerCase().includes('cotton') ||
+          p.tags?.some(t => t.toLowerCase().includes('cotton'))
+        )
+      );
+      cotton = dedup.filterAndMark(cottonPool, 4);
+    }
 
-    // 3. Category Shelves (Matching activeCategories, strictly distinct unshown products)
+    // 3. Fresh Drops & New Arrivals
+    let fresh: Product[] = [];
+    if (!isCompactCatalog) {
+      fresh = dedup.filterAndMark(allProducts, 4);
+    }
+
+    // 4. Trending Products
+    let trending: Product[] = [];
+    if (!isCompactCatalog) {
+      const sortedPool = [...allProducts].sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
+      trending = dedup.filterAndMark(sortedPool, 4);
+    }
+
+    // 5. Streetwear Luxe Showcase
+    let streetwear: Product[] = [];
+    if (!isCompactCatalog) {
+      const streetwearPool = allProducts.filter(p =>
+        !dedup.isDisplayed(p) && (
+          p.title?.toLowerCase().includes('oversized') ||
+          p.title?.toLowerCase().includes('heavy') ||
+          p.fitType?.toLowerCase().includes('oversized') ||
+          p.description?.toLowerCase().includes('streetwear')
+        )
+      );
+      streetwear = dedup.filterAndMark(streetwearPool, 4);
+    }
+
+    // 6. Category Shelves
     const shelves: { category: Category; products: Product[] }[] = [];
-    for (const cat of activeCategories) {
-      if (cat.id === 'all') continue;
-      const catRemaining = allProducts.filter(p => {
-        const pCat = (p.category || '').toLowerCase().trim();
-        const cId = cat.id.toLowerCase().trim();
-        const cName = cat.name.toLowerCase().trim();
-        return (
-          pCat === cId ||
-          pCat === cName ||
-          (cId === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion' || pCat.includes('apparel'))) ||
-          (cId === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing' || pCat.includes('apparel')))
-        );
-      });
-
-      const shelfProds = dedup.filterAndMark(catRemaining, 6);
-      if (shelfProds.length > 0) {
-        shelves.push({
-          category: cat,
-          products: shelfProds,
+    if (!isCompactCatalog) {
+      for (const cat of activeCategories) {
+        if (cat.id === 'all') continue;
+        const catRemaining = allProducts.filter(p => {
+          if (dedup.isDisplayed(p)) return false;
+          const pCat = (p.category || '').toLowerCase().trim();
+          const cId = cat.id.toLowerCase().trim();
+          const cName = cat.name.toLowerCase().trim();
+          return (
+            pCat === cId ||
+            pCat === cName ||
+            (cId === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion' || pCat.includes('apparel'))) ||
+            (cId === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing' || pCat.includes('apparel')))
+          );
         });
+
+        const shelfProds = dedup.filterAndMark(catRemaining, 4);
+        if (shelfProds.length > 0) {
+          shelves.push({
+            category: cat,
+            products: shelfProds,
+          });
+        }
       }
     }
 
-    // 4. Explore Catalog (All remaining products that haven't appeared in any previous section)
+    // 7. Explore Catalog - Ensure all products are prominently accessible
     const remaining = allProducts.filter(p => !dedup.isDisplayed(p));
+    const exploreList = remaining.length > 0 ? remaining : allProducts;
 
     return {
+      flashDropProducts: flash,
+      cottonShowcaseProducts: cotton,
       freshDropsProducts: fresh,
       trendingProducts: trending,
+      streetwearShowcaseProducts: streetwear,
       categoryShelves: shelves,
-      exploreCatalogProducts: remaining,
+      exploreCatalogProducts: exploreList,
     };
   }, [allProducts, activeCategories]);
 
@@ -285,21 +334,25 @@ export default function HomePage({
       </div>
 
       {/* Limited Midnight 1-Hour Flash Drop Shelf */}
-      {!searchQuery.trim() && allProducts.length > 0 && (
+      {!searchQuery.trim() && (
         <>
-          <FlashDropSection
-            products={allProducts}
-            onProductClick={onProductClick}
-            onNavigateDeals={onNavigateDeals || (() => onCategoryClick('all'))}
-          />
+          {flashDropProducts.length > 0 && (
+            <FlashDropSection
+              products={flashDropProducts}
+              onProductClick={onProductClick}
+              onNavigateDeals={onNavigateDeals || (() => onCategoryClick('all'))}
+            />
+          )}
 
           {/* TOP SECTION: Pure 180 GSM Bio-Wash Cotton Collection */}
-          <div className="mt-4 px-3">
-            <CottonShowcaseBox
-              products={allProducts}
-              onProductClick={onProductClick}
-            />
-          </div>
+          {cottonShowcaseProducts.length > 0 && (
+            <div className="mt-4 px-3">
+              <CottonShowcaseBox
+                products={cottonShowcaseProducts}
+                onProductClick={onProductClick}
+              />
+            </div>
+          )}
         </>
       )}
 
@@ -437,12 +490,14 @@ export default function HomePage({
           )}
 
           {/* MIDDLE SECTION: Streetwear Luxe • Heavy 240+ GSM Drop Shoulder */}
-          <div className="mt-4 px-3">
-            <StreetwearShowcaseBox
-              products={allProducts}
-              onProductClick={onProductClick}
-            />
-          </div>
+          {streetwearShowcaseProducts.length > 0 && (
+            <div className="mt-4 px-3">
+              <StreetwearShowcaseBox
+                products={streetwearShowcaseProducts}
+                onProductClick={onProductClick}
+              />
+            </div>
+          )}
 
           {/* Dynamic Category & Catalogue Shelves (Smooth Horizontal Feeds) */}
           {categoryShelves.map(shelf => (

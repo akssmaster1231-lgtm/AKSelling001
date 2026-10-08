@@ -35,6 +35,7 @@ import { compressImageFile } from '@/utils/imageCompressor';
 import { fetchAllBanners, addBanner, deleteBanner, updateBanner, type MasterBanner } from '@/banner-api';
 import { AdminWithdrawalManager } from '@/components/AdminWithdrawalManager';
 import { AdminDirectUpiSettings } from '@/components/admin/AdminDirectUpiSettings';
+import { AdminRazorpaySettings } from '@/components/admin/AdminRazorpaySettings';
 import { AdminPriceListManager } from '@/components/admin/AdminPriceListManager';
 import { AdminVideoReelsManager } from '@/components/admin/AdminVideoReelsManager';
 import { AdminPaymentLedger } from '@/components/admin/AdminPaymentLedger';
@@ -58,7 +59,7 @@ import { lookupPincode } from '@/utils/pincode';
 
 interface AdminPanelProps {
   onBack: () => void;
-  initialTab?: 'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos';
+  initialTab?: 'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay';
 }
 
 const SAMPLE_BANNER_PRESETS = [
@@ -99,7 +100,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos'>(initialTab || 'categories');
+  const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay'>(initialTab || 'categories');
 
   // Categories State & Management
   const [categoriesList, setCategoriesList] = useState<Category[]>(() => getAllCategories());
@@ -982,6 +983,19 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         >
           <QrCode size={13} />
           <span>Direct UPI</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('razorpay')}
+          className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
+            adminTab === 'razorpay'
+              ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-300'
+              : 'text-blue-900 bg-blue-50 hover:bg-blue-100'
+          }`}
+        >
+          <Zap size={13} className="text-amber-400" />
+          <span>Razorpay PG</span>
         </button>
 
         <button
@@ -2339,6 +2353,11 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         {/* TAB 8: REAL-TIME PAYMENT & ORDER LEDGER (UTR & RECEIPT AUDIT) */}
         {adminTab === 'ledger' && (
           <AdminPaymentLedger />
+        )}
+
+        {/* TAB 9: RAZORPAY PAYMENT GATEWAY SETTINGS & ACTIVATION */}
+        {adminTab === 'razorpay' && (
+          <AdminRazorpaySettings />
         )}
       </div>
     </div>

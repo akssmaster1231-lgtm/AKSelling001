@@ -10,10 +10,11 @@ import {
   Eye,
   X,
   CreditCard,
-  QrCode,
   Phone,
   ShieldCheck,
   FileSpreadsheet,
+  Zap,
+  Calendar,
 } from 'lucide-react';
 import { subscribeToPaymentLedger, updatePaymentStatusInFirestore } from '@/firebase';
 import type { PaymentLedgerEntry } from '@/types';
@@ -22,7 +23,7 @@ export function AdminPaymentLedger() {
   const [ledgerEntries, setLedgerEntries] = useState<PaymentLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'pending' | 'direct_upi' | 'card'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'razorpay' | 'prepaid' | 'cod_advance' | 'verified' | 'pending'>('all');
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<PaymentLedgerEntry | null>(null);
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
@@ -63,15 +64,19 @@ export function AdminPaymentLedger() {
       entry.customerName?.toLowerCase().includes(q) ||
       entry.customerPhone?.includes(q) ||
       entry.orderId?.toLowerCase().includes(q) ||
-      entry.utrNumber?.toLowerCase().includes(q)
+      entry.utrNumber?.toLowerCase().includes(q) ||
+      entry.paymentId?.toLowerCase().includes(q)
     );
 
     if (!matchesSearch) return false;
 
+    const methodLower = (entry.paymentMethod || entry.paymentMode || '').toLowerCase();
+
     if (statusFilter === 'verified') return entry.status === 'verified';
     if (statusFilter === 'pending') return entry.status === 'pending';
-    if (statusFilter === 'direct_upi') return entry.paymentMethod?.toLowerCase().includes('upi') || entry.paymentMode?.toLowerCase().includes('upi');
-    if (statusFilter === 'card') return entry.paymentMethod?.toLowerCase().includes('card') || entry.paymentMode?.toLowerCase().includes('card');
+    if (statusFilter === 'razorpay') return methodLower.includes('razorpay') || entry.paymentMode === 'razorpay_gateway' || entry.utrNumber?.startsWith('pay_');
+    if (statusFilter === 'prepaid') return methodLower.includes('prepaid') || (!methodLower.includes('cod') && (methodLower.includes('razorpay') || methodLower.includes('full')));
+    if (statusFilter === 'cod_advance') return methodLower.includes('cod') || methodLower.includes('advance');
 
     return true;
   });
@@ -80,6 +85,10 @@ export function AdminPaymentLedger() {
   const totalVolume = ledgerEntries.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const verifiedCount = ledgerEntries.filter(e => e.status === 'verified').length;
   const pendingCount = ledgerEntries.filter(e => e.status !== 'verified').length;
+  const razorpayCount = ledgerEntries.filter(e => {
+    const m = (e.paymentMethod || e.paymentMode || '').toLowerCase();
+    return m.includes('razorpay') || e.utrNumber?.startsWith('pay_');
+  }).length;
 
   const handleExportCsv = () => {
     if (ledgerEntries.length === 0) return;
@@ -207,6 +216,39 @@ export function AdminPaymentLedger() {
           </button>
           <button
             type="button"
+            onClick={() => setStatusFilter('razorpay')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1 ${
+              statusFilter === 'razorpay'
+                ? 'bg-blue-600 text-white'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+            }`}
+          >
+            <Zap size={11} /> Razorpay PG ({razorpayCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('prepaid')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'prepaid'
+                ? 'bg-emerald-700 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            100% Prepaid
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('cod_advance')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'cod_advance'
+                ? 'bg-amber-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            10% COD Advance
+          </button>
+          <button
+            type="button"
             onClick={() => setStatusFilter('verified')}
             className={`px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
               statusFilter === 'verified'
@@ -215,39 +257,6 @@ export function AdminPaymentLedger() {
             }`}
           >
             Verified ({verifiedCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('pending')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-              statusFilter === 'pending'
-                ? 'bg-yellow-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Pending Review ({pendingCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('direct_upi')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-              statusFilter === 'direct_upi'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Direct UPI
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('card')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-              statusFilter === 'card'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Debit / Credit Card
           </button>
         </div>
       </div>
@@ -268,8 +277,19 @@ export function AdminPaymentLedger() {
         ) : (
           filteredEntries.map((entry) => {
             const isVerified = entry.status === 'verified';
-            const isCard = entry.paymentMethod?.toLowerCase().includes('card') || entry.paymentMode?.toLowerCase().includes('card');
             const cleanPhone = (entry.customerPhone || '').replace(/\D/g, '').slice(-10);
+            const methodStr = (entry.paymentMethod || entry.paymentMode || '').toLowerCase();
+            const isRzp = methodStr.includes('razorpay') || entry.paymentMode === 'razorpay_gateway' || entry.utrNumber?.startsWith('pay_');
+            const isCodToken = methodStr.includes('cod') || methodStr.includes('advance');
+
+            // Format date & time
+            const dateObj = entry.createdAt ? new Date(entry.createdAt) : new Date();
+            const dateFormatted = !isNaN(dateObj.getTime())
+              ? dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+              : 'Recent';
+            const timeFormatted = !isNaN(dateObj.getTime())
+              ? dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+              : '';
 
             return (
               <div
@@ -317,45 +337,51 @@ export function AdminPaymentLedger() {
                   </div>
                 </div>
 
-                {/* Middle Row: UTR Verification & Payment Mode */}
+                {/* Middle Row: Transaction ID, Date & Time, Payment Method */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 bg-gray-50 rounded-xl p-2.5 border border-gray-100">
                   <div>
                     <span className="text-[10px] font-bold text-gray-400 block uppercase tracking-wider">
-                      {isCard ? 'Card Reference Ref' : '12-Digit UTR Number'}
+                      Transaction ID / UTR
                     </span>
                     <div className="flex items-center gap-1 mt-0.5">
                       <span className="text-xs font-mono font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-gray-200">
-                        {entry.utrNumber || 'N/A'}
+                        {entry.utrNumber || entry.paymentId || 'N/A'}
                       </span>
-                      {entry.utrNumber && (
+                      {(entry.utrNumber || entry.paymentId) && (
                         <button
                           type="button"
-                          onClick={() => handleCopy(entry.utrNumber, entry.id)}
+                          onClick={() => handleCopy(entry.utrNumber || entry.paymentId || '', entry.id)}
                           className="p-1 text-gray-500 hover:text-slate-900 bg-white rounded border border-gray-200 cursor-pointer"
-                          title="Copy UTR"
+                          title="Copy Transaction ID"
                         >
                           {copiedUtr === entry.id ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
                         </button>
                       )}
                     </div>
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500 mt-1 font-medium">
+                      <Calendar size={11} className="text-gray-400" />
+                      <span>{dateFormatted}</span>
+                      {timeFormatted && <span>• {timeFormatted}</span>}
+                    </div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-gray-400 block uppercase tracking-wider">Payment Mode</span>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      {isCard ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                          <CreditCard size={12} /> Debit/Credit Card
+                    <span className="text-[10px] font-bold text-gray-400 block uppercase tracking-wider">Payment Method</span>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {isRzp ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                          <Zap size={11} className="text-amber-500" />
+                          {isCodToken ? 'Razorpay (10% COD Advance Token)' : 'Razorpay Gateway (100% Prepaid)'}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          <QrCode size={12} /> Direct UPI (ANOJKUMAR)
+                          <CreditCard size={11} /> {entry.paymentMethod || 'Online Gateway'}
                         </span>
                       )}
-                      <span className="text-[10px] text-gray-400 font-medium">
-                        {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                      </span>
                     </div>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      {isCodToken ? 'Balance 90% payable in cash at delivery' : 'All UPI, Cards, NetBanking handled via Razorpay'}
+                    </p>
                   </div>
                 </div>
 

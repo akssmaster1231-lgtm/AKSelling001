@@ -38,6 +38,7 @@ export function deduplicateProducts(products: Product[]): Product[] {
   if (!Array.isArray(products) || products.length === 0) return [];
 
   const seenIds = new Set<string>();
+  const seenSignatures = new Set<string>();
   const uniqueProducts: Product[] = [];
 
   for (const product of products) {
@@ -49,8 +50,20 @@ export function deduplicateProducts(products: Product[]): Product[] {
     if (PERMANENT_DUMMY_IDS.has(rawId) || rawId.startsWith('sp_')) continue;
 
     // Check duplicate ID
-    if (seenIds.has(rawId)) continue;
-    seenIds.add(rawId);
+    const cleanId = rawId.toLowerCase();
+    if (seenIds.has(cleanId)) continue;
+
+    // Check duplicate Title / SKU signature
+    const normTitle = (product.title || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normSku = ((product as { sku?: string }).sku || '').trim().toLowerCase();
+    const sigKey = normSku ? `sku_${normSku}` : (normTitle ? `title_${normTitle}__${(product.category || '').toLowerCase()}` : cleanId);
+
+    if (sigKey && seenSignatures.has(sigKey)) {
+      continue;
+    }
+
+    seenIds.add(cleanId);
+    if (sigKey) seenSignatures.add(sigKey);
     uniqueProducts.push(product);
   }
 
@@ -63,17 +76,28 @@ export function deduplicateProducts(products: Product[]): Product[] {
  */
 export class DisplayDeduplicator {
   private displayedIds = new Set<string>();
+  private displayedSignatures = new Set<string>();
 
   public isDisplayed(product: Product): boolean {
     if (!product || !product.id) return true;
-    const cleanId = String(product.id).trim();
-    return this.displayedIds.has(cleanId);
+    const cleanId = String(product.id).trim().toLowerCase();
+    if (this.displayedIds.has(cleanId)) return true;
+
+    const normTitle = (product.title || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normTitle && this.displayedSignatures.has(normTitle)) return true;
+
+    return false;
   }
 
   public markDisplayed(product: Product): void {
     if (!product || !product.id) return;
-    const cleanId = String(product.id).trim();
+    const cleanId = String(product.id).trim().toLowerCase();
     this.displayedIds.add(cleanId);
+
+    const normTitle = (product.title || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normTitle) {
+      this.displayedSignatures.add(normTitle);
+    }
   }
 
   public filterAndMark(products: Product[], limit?: number): Product[] {
@@ -90,5 +114,6 @@ export class DisplayDeduplicator {
 
   public reset(): void {
     this.displayedIds.clear();
+    this.displayedSignatures.clear();
   }
 }

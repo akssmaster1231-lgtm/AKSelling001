@@ -49,6 +49,7 @@ export default function SupplierOrdersTab({
   const [copiedAwb, setCopiedAwb] = useState<string | null>(null);
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
   const [shippingShiprocketId, setShippingShiprocketId] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string; sku?: string; pid?: string } | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -66,7 +67,8 @@ City/PIN: ${order.customerCity} - ${order.customerPincode || '201301'}
 Total Amount: ₹${order.totalAmount}
 Payment Status: ${order.paymentStatus || order.paymentMethod || 'Prepaid (Paid)'}
 Transaction ID: ${order.razorpayPaymentId || order.transactionId || order.razorpayOrderId || 'Prepaid Online Verified'}
-Items: ${order.items.map(i => `${i.title} (Qty: ${i.quantity})`).join(', ')}
+Items:
+${order.items.map((i, idx) => `${idx + 1}. ${i.title}\n   - Product ID: ${i.productId || i.product_id || 'N/A'}\n   - Size SKU: ${i.sku || i.skuId || 'N/A'}\n   - Size: ${i.size || 'Standard'} | Color: ${i.color || 'Default'} | Qty: ${i.quantity}\n   - Price: ₹${i.price}`).join('\n')}
 Logistics Provider: ${providerName}`;
 
     navigator.clipboard?.writeText(text);
@@ -464,52 +466,87 @@ Logistics Provider: ${providerName}`;
               </div>
 
               {/* Product Item info */}
-              <div className="space-y-2">
-                {order.items.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="w-14 h-14 object-cover rounded-xl border border-gray-200 shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-bold text-gray-900 line-clamp-1">{item.title}</h4>
-                      <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5 flex-wrap">
-                        {item.sku && (
-                          <span className="font-mono bg-gray-100 px-1.5 py-0.2 rounded text-[10px]">
-                            SKU: {item.sku}
-                          </span>
-                        )}
-                        {item.size && (
-                          <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black px-2 py-0.5 rounded text-[11px]">
-                            Size: {item.size}
-                          </span>
-                        )}
-                        {item.color && (
-                          <span>
-                            Color: <strong className="text-gray-700">{item.color}</strong>
-                          </span>
-                        )}
-                        {item.design && (
-                          <span>
-                            Design: <strong className="text-indigo-700">{item.design}</strong>
-                          </span>
-                        )}
-                        {item.fabric && (
-                          <span>
-                            Fabric: <strong className="text-emerald-700">{item.fabric}</strong>
-                          </span>
-                        )}
-                        <span>
-                          Qty: <strong className="text-gray-700">{item.quantity}</strong>
+              <div className="space-y-2.5">
+                {order.items.map((item, idx) => {
+                  const itemPid = item.productId || item.product_id;
+                  const itemSku = item.sku || item.skuId;
+                  const itemImg = item.designImage || item.design_image || item.image;
+
+                  return (
+                    <div key={idx} className="flex items-start gap-3 p-2 bg-gray-50/70 hover:bg-gray-50 rounded-xl border border-gray-100 transition-colors">
+                      {/* Clickable Design / Mockup Image Preview */}
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage({ url: itemImg, title: item.title, sku: itemSku, pid: itemPid })}
+                        className="relative group shrink-0 cursor-pointer overflow-hidden rounded-xl border border-gray-200"
+                        title="Click to zoom design image"
+                      >
+                        <img
+                          src={itemImg}
+                          alt={item.title}
+                          className="w-14 h-14 sm:w-16 sm:h-16 object-cover group-hover:scale-105 transition-transform"
+                        />
+                        <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] font-bold text-center py-0.5 opacity-90 group-hover:opacity-100">
+                          Design 🔍
                         </span>
-                      </div>
-                      <div className="text-xs font-black text-[#2874f0] mt-0.5">
-                        ₹{item.price.toLocaleString('en-IN')}
+                      </button>
+
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <h4 className="text-xs font-bold text-gray-900 line-clamp-1">{item.title}</h4>
+                          <span className="text-xs font-black text-[#2874f0] shrink-0">
+                            ₹{item.price.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+
+                        {/* Order ID, Product ID, Size SKU Badges */}
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-600 flex-wrap">
+                          {itemPid && (
+                            <span className="font-mono bg-blue-50 text-blue-700 border border-blue-200 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                              PID: {itemPid}
+                            </span>
+                          )}
+                          {itemSku && (
+                            <span className="font-mono bg-purple-50 text-purple-700 border border-purple-200 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                              SKU: {itemSku}
+                            </span>
+                          )}
+                          {item.size && (
+                            <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black px-1.5 py-0.5 rounded text-[10px]">
+                              Size: {item.size}
+                            </span>
+                          )}
+                          {item.color && (
+                            <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-[10px]">
+                              Color: <strong>{item.color}</strong>
+                            </span>
+                          )}
+                          <span className="text-[10px] text-gray-600">
+                            Qty: <strong className="text-gray-900 font-bold">{item.quantity}</strong>
+                          </span>
+                        </div>
+
+                        {/* Product Details (Design, Fabric, Brand, Category) */}
+                        {(item.design || item.fabric || item.brand || item.category) && (
+                          <div className="text-[10px] text-gray-500 flex items-center gap-2 flex-wrap pt-0.5">
+                            {item.design && (
+                              <span>Design: <strong className="text-indigo-700 font-semibold">{item.design}</strong></span>
+                            )}
+                            {item.fabric && (
+                              <span>Fabric: <strong className="text-emerald-700 font-semibold">{item.fabric}</strong></span>
+                            )}
+                            {item.brand && (
+                              <span>Brand: <strong className="text-gray-700">{item.brand}</strong></span>
+                            )}
+                            {item.category && (
+                              <span className="capitalize">Category: {item.category}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Customer Full Shipping Address & Payment Verification */}
@@ -888,6 +925,43 @@ Logistics Provider: ${providerName}`;
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Design Image Full Preview Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 animate-fade-in" onClick={() => setPreviewImage(null)}>
+          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl space-y-3 p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+              <div className="min-w-0 pr-2">
+                <h3 className="text-xs font-bold text-gray-900 truncate">{previewImage.title}</h3>
+                <div className="flex items-center gap-2 text-[10px] mt-0.5">
+                  {previewImage.pid && (
+                    <span className="font-mono text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded">PID: {previewImage.pid}</span>
+                  )}
+                  {previewImage.sku && (
+                    <span className="font-mono text-purple-700 font-bold bg-purple-50 px-1.5 py-0.5 rounded">SKU: {previewImage.sku}</span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="relative rounded-xl overflow-hidden bg-gray-50 border border-gray-200">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="w-full h-72 object-contain bg-white"
+              />
+            </div>
+            <p className="text-[11px] text-gray-500 text-center">
+              Inspect print design, graphic alignment, and colorway before packaging & dispatch.
+            </p>
           </div>
         </div>
       )}

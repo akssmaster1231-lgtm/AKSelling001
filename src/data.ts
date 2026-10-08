@@ -22,89 +22,149 @@ export {
 
 export const DEFAULT_PRODUCT_PLACEHOLDER = DEFAULT_PRODUCT_IMAGE;
 
-export async function fetchProducts(): Promise<Product[]> {
-  const localSellerProducts = getLocalSellerProducts();
-  const cached = getCachedProducts();
-  const dbItems: Product[] = [];
-  const serverItems: Product[] = [];
+// High-speed In-Memory Product Cache & Deduplicated In-Flight Promise
+let _inMemoryProducts: Product[] | null = null;
+let _inFlightProductPromise: Promise<Product[]> | null = null;
+let _lastFetchTime = 0;
+const CACHE_TTL_MS = 60000; // 1 minute fresh TTL, instant return
 
-  // 1. Fetch from server backend API
-  try {
-    const sRes = await fetch('/api/products');
-    if (sRes.ok) {
-      const sData = await sRes.json();
-      if (Array.isArray(sData.products)) {
-        sData.products.forEach((p: Product) => {
-          if (p && p.id) {
-            const resolvedImgs = resolveProductImages(p);
-            serverItems.push({
-              ...p,
-              images: resolvedImgs,
-              imageUrl: resolvedImgs[0],
-              image: resolvedImgs[0],
+export async function fetchProducts(forceRefresh = false): Promise<Product[]> {
+  const now = Date.now();
+  // 1. Instant 0ms In-Memory Cache return if available and fresh
+  if (!forceRefresh && _inMemoryProducts && _inMemoryProducts.length > 0) {
+    if (now - _lastFetchTime < CACHE_TTL_MS) {
+      return _inMemoryProducts;
+    }
+  }
+
+  // 2. Reuse in-flight fetch promise if already loading
+  if (!forceRefresh && _inFlightProductPromise) {
+    return _inFlightProductPromise;
+  }
+
+  // 3. Stale-While-Revalidate: If we have localStorage cached products, seed in-memory cache immediately
+  if (!_inMemoryProducts) {
+    const cached = getCachedProducts();
+    if (cached.length > 0) {
+      _inMemoryProducts = cached;
+    }
+  }
+
+  _inFlightProductPromise = (async () => {
+    const localSellerProducts = getLocalSellerProducts();
+    const cached = getCachedProducts();
+    const dbItems: Product[] = [];
+    const serverItems: Product[] = [];
+
+    // Parallel high-speed fetch: backend API (/api/products) + Firestore getDocs
+    const serverPromise = fetch('/api/products')
+      .then(async (sRes) => {
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          if (Array.isArray(sData.products)) {
+            sData.products.forEach((p: Product) => {
+              if (p && p.id) {
+                const resolvedImgs = resolveProductImages(p);
+                serverItems.push({
+                  ...p,
+                  images: resolvedImgs,
+                  imageUrl: resolvedImgs[0],
+                  image: resolvedImgs[0],
+                });
+              }
             });
           }
-        });
+        }
+      })
+      .catch(() => {});
+
+    // Firestore fetch with a 1500ms safety timeout so slow network never halts product display
+    const firestorePromise = new Promise<void>((resolve) => {
+      const timeoutId = setTimeout(() => resolve(), 1500);
+      try {
+        const productsRef = collection(db, 'products');
+        getDocs(productsRef)
+          .then((snap) => {
+            clearTimeout(timeoutId);
+            if (!snap.empty) {
+              snap.forEach((docSnap) => {
+                const d = docSnap.data();
+                const resolvedImgs = resolveProductImages({ id: docSnap.id, ...d });
+                dbItems.push({
+                  id: docSnap.id,
+                  title: d.title || '',
+                  description: d.description || '',
+                  price: Number(d.price) || 0,
+                  mrp: Number(d.mrp) || Number(d.price) || 0,
+                  discount: Number(d.discount) || 0,
+                  category: d.category || 'fashion',
+                  images: resolvedImgs,
+                  imageUrl: resolvedImgs[0],
+                  image: resolvedImgs[0],
+                  rating: typeof d.rating === 'number' ? d.rating : 4.2,
+                  ratingCount: Number(d.ratingCount || d.rating_count || 120),
+                  brand: d.brand || 'AKSelling',
+                  inStock: d.inStock !== false && d.in_stock !== false,
+                  delivery: d.delivery || 'Free delivery by tomorrow',
+                  sizes: d.sizes,
+                  colors: d.colors,
+                  neckType: d.neckType,
+                  sleeveType: d.sleeveType,
+                  fitType: d.fitType,
+                  fabric: d.fabric,
+                  tags: Array.isArray(d.tags) ? d.tags : [],
+                  keywords: Array.isArray(d.keywords) ? d.keywords : [],
+                  pickupLocation: d.pickupLocation,
+                  weight: d.weight,
+                  dimensions: d.dimensions,
+                });
+              });
+            }
+            resolve();
+          })
+          .catch(() => {
+            clearTimeout(timeoutId);
+            resolve();
+          });
+      } catch {
+        clearTimeout(timeoutId);
+        resolve();
       }
+    });
+
+    await Promise.allSettled([serverPromise, firestorePromise]);
+
+    const combined = deduplicateProducts([
+      ...dbItems,
+      ...serverItems,
+      ...localSellerProducts,
+      ...cached,
+      ...(_inMemoryProducts || []),
+    ]);
+
+    if (combined.length > 0) {
+      _inMemoryProducts = combined;
+      _lastFetchTime = Date.now();
+      setCachedProducts(combined);
+      return combined;
     }
-  } catch {
-    // silent
-  }
 
-  // 2. Fetch from Firebase Firestore
-  try {
-    const productsRef = collection(db, 'products');
-    const snap = await getDocs(productsRef);
-    if (!snap.empty) {
-      snap.forEach(docSnap => {
-        const d = docSnap.data();
-        const resolvedImgs = resolveProductImages({ id: docSnap.id, ...d });
-        dbItems.push({
-          id: docSnap.id,
-          title: d.title || '',
-          description: d.description || '',
-          price: Number(d.price) || 0,
-          mrp: Number(d.mrp) || Number(d.price) || 0,
-          discount: Number(d.discount) || 0,
-          category: d.category || 'fashion',
-          images: resolvedImgs,
-          imageUrl: resolvedImgs[0],
-          image: resolvedImgs[0],
-          rating: typeof d.rating === 'number' ? d.rating : 4.2,
-          ratingCount: Number(d.ratingCount || d.rating_count || 120),
-          brand: d.brand || 'AKSelling',
-          inStock: d.inStock !== false && d.in_stock !== false,
-          delivery: d.delivery || 'Free delivery by tomorrow',
-          sizes: d.sizes,
-          colors: d.colors,
-          neckType: d.neckType,
-          sleeveType: d.sleeveType,
-          fitType: d.fitType,
-          fabric: d.fabric,
-          tags: Array.isArray(d.tags) ? d.tags : [],
-          keywords: Array.isArray(d.keywords) ? d.keywords : [],
-          pickupLocation: d.pickupLocation,
-          weight: d.weight,
-          dimensions: d.dimensions,
-        });
-      });
+    if (_inMemoryProducts && _inMemoryProducts.length > 0) {
+      return _inMemoryProducts;
     }
-  } catch {
-    // silent
+    return cached.length > 0 ? cached : [];
+  })()
+    .finally(() => {
+      _inFlightProductPromise = null;
+    });
+
+  // If we already have in-memory or cached products, return them immediately
+  // while the in-flight background promise refreshes the data!
+  if (_inMemoryProducts && _inMemoryProducts.length > 0) {
+    return _inMemoryProducts;
   }
 
-  const combined = deduplicateProducts([
-    ...dbItems,
-    ...serverItems,
-    ...localSellerProducts,
-    ...cached,
-  ]);
-
-  if (combined.length > 0) {
-    setCachedProducts(combined);
-    return combined;
-  }
-  return cached.length > 0 ? cached : [];
+  return _inFlightProductPromise;
 }
 
 export async function fetchProductById(productId: string): Promise<Product | null> {

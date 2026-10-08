@@ -80,16 +80,27 @@ export interface SellerOrder {
   courierName?: string;
   awbCode?: string;
   items: {
+    productId?: string;
+    product_id?: string;
     title: string;
     quantity: number;
     price: number;
     image: string;
+    designImage?: string;
+    design_image?: string;
     sku?: string;
+    skuId?: string;
+    sku_id?: string;
     size?: string;
     color?: string;
     design?: string;
     fabric?: string;
     brand?: string;
+    category?: string;
+    fit_type?: string;
+    sleeve_type?: string;
+    neck_type?: string;
+    description?: string;
   }[];
   totalAmount: number;
   paymentMethod: string;

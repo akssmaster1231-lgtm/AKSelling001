@@ -492,11 +492,31 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                                     </p>
                                     <p className="text-[11px] text-slate-500">
                                       Qty: {item.quantity} • {formatPrice(item.price)}
-                                      {item.size ? ` • Size: ${item.size}` : ''}
-                                      {item.color ? ` • Color: ${item.color}` : ''}
                                       {item.design ? ` • Design: ${item.design}` : ''}
                                       {item.fabric ? ` • Fabric: ${item.fabric}` : ''}
                                     </p>
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                      {item.product_id && (
+                                        <span className="font-mono bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded text-[10px] border border-blue-200">
+                                          PID: {item.product_id}
+                                        </span>
+                                      )}
+                                      {(item.sku || (item as unknown as { sku_id?: string }).sku_id) && (
+                                        <span className="font-mono bg-purple-50 text-purple-700 px-1.5 py-0.2 rounded text-[10px] border border-purple-200 font-bold">
+                                          SKU: {item.sku || (item as unknown as { sku_id?: string }).sku_id}
+                                        </span>
+                                      )}
+                                      {item.size && (
+                                        <span className="bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                                          Size: {item.size}
+                                        </span>
+                                      )}
+                                      {item.color && (
+                                        <span className="text-[10px] text-slate-500">
+                                          Color: {item.color}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
 
