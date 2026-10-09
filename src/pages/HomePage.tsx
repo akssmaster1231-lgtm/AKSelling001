@@ -10,6 +10,7 @@ import CategoryIcon from '@/components/CategoryIcon';
 import FlashDropSection from '@/components/flash-drop/FlashDropSection';
 import { CottonShowcaseBox, StreetwearShowcaseBox, PrintingShowcaseBox } from '@/components/FeaturedShowcaseBoxes';
 import BannerCarousel from '@/components/BannerCarousel';
+import UrgencyTimerBar from '@/components/UrgencyTimerBar';
 
 interface HomePageProps {
   searchQuery: string;
@@ -262,11 +263,78 @@ export default function HomePage({
     );
   }
 
+  const handleBannerClick = (banner: Banner) => {
+    // 1. If banner explicitly links to a specific product
+    if (banner.productId) {
+      const targetProd = allProducts.find(p => p.id === banner.productId);
+      if (targetProd) {
+        onProductClick(targetProd);
+        return;
+      }
+    }
+
+    // 2. If banner links to a category
+    if (banner.targetCategory) {
+      onCategoryClick(banner.targetCategory);
+      return;
+    }
+
+    // 3. Fallback matching based on banner content keywords
+    const titleLower = (banner.title + ' ' + banner.subtitle).toLowerCase();
+    
+    // Check for Cotton collection
+    if (titleLower.includes('cotton') || titleLower.includes('180 gsm')) {
+      const cotton = allProducts.find(p => 
+        p.fabric?.toLowerCase().includes('cotton') || 
+        p.title.toLowerCase().includes('cotton')
+      );
+      if (cotton) {
+        onProductClick(cotton);
+        return;
+      }
+    }
+
+    // Check for Streetwear / Combo
+    if (titleLower.includes('streetwear') || titleLower.includes('combo') || titleLower.includes('oversized')) {
+      const streetwear = allProducts.find(p => 
+        p.fitType?.toLowerCase().includes('oversized') || 
+        p.title.toLowerCase().includes('oversized')
+      );
+      if (streetwear) {
+        onProductClick(streetwear);
+        return;
+      }
+    }
+
+    // Check for Flash / Deals
+    if (titleLower.includes('flash') || titleLower.includes('sale') || titleLower.includes('discount') || titleLower.includes('drop')) {
+      if (flashDropProducts.length > 0) {
+        onProductClick(flashDropProducts[0]);
+        return;
+      }
+      if (onNavigateDeals) {
+        onNavigateDeals();
+        return;
+      }
+    }
+
+    // 4. Default: Open the first featured product or deals
+    if (allProducts.length > 0) {
+      onProductClick(allProducts[0]);
+    } else if (onNavigateDeals) {
+      onNavigateDeals();
+    }
+  };
+
   return (
     <div className="pb-4 w-full overflow-x-hidden touch-scroll-container">
       {/* High-Quality Promotional Banners & Posters (Official AKSelling Carousel) */}
       <div className="px-3 pt-3">
-        <BannerCarousel banners={bannersList} />
+        <BannerCarousel banners={bannersList} onBannerClick={handleBannerClick} />
+        {/* Flipkart-Style Mega Discount Urgency Timer Strip */}
+        <div className="mt-2 rounded-xl overflow-hidden shadow-2xs border border-amber-300">
+          <UrgencyTimerBar variant="banner" />
+        </div>
       </div>
 
       {/* Interactive Quick Rewards Hub */}

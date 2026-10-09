@@ -188,7 +188,8 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
   const totalAmount = Math.max(1, baseTotalAmount - groupDiscount - spinDiscountAmount);
   const mrpTotal = product.mrp * quantity;
   const discount = (mrpTotal - baseTotalAmount) + groupDiscount + spinDiscountAmount;
-  const deliveryFee = totalAmount > 500 ? 0 : 49;
+  // Immutable Flat Delivery Charge: ₹30
+  const deliveryFee = 30;
 
   // Wallet Rewards Balance & Redemption (Retaining ₹30+ Welcome Rewards & Earned Cashback)
   const userWalletBalance = user?.id ? (getLocalWalletCache(user.id).walletBalance ?? user.walletBalance ?? 30) : 30;
@@ -1216,7 +1217,7 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
                     <span>- {formatPrice(groupDiscount)}</span>
                   </div>
                 )}
-                <Row label={t('deliveryCharges')} value={deliveryFee === 0 ? t('free') : formatPrice(deliveryFee)} color={deliveryFee === 0 ? 'text-success-500' : 'text-gray-700'} />
+                <Row label="Flat Delivery Charge" value={formatPrice(deliveryFee)} color="text-gray-900" />
                 <div className="border-t border-dashed border-gray-200 pt-2.5">
                   <Row label={t('totalAmount')} value={formatPrice(finalAmount)} bold />
                 </div>

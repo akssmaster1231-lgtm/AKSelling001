@@ -112,6 +112,9 @@ export interface Banner {
   cta: string;
   image: string;
   gradient: string;
+  productId?: string;
+  targetCategory?: string;
+  targetType?: 'product' | 'category' | 'deals';
 }
 
 export type OrderTrackingStepId = 'placed' | 'packed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'ordered';

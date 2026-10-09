@@ -77,8 +77,8 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
           {product.title}
         </h3>
 
-        {/* Flipkart-Grade Star Rating Badge - Real-Time Synced with Firebase Reviews */}
-        <div className="flex items-center gap-1.5">
+        {/* Rating and Reviews Row */}
+        <div className="flex items-center gap-1.5 mt-0.5">
           <span
             className={`flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded ${
               dynamicRating.rating > 0
@@ -97,9 +97,25 @@ const ProductCard = memo(function ProductCard({ product, onClick }: ProductCardP
           <span className="text-xs text-slate-500 font-medium">({formatCount(dynamicRating.ratingCount)})</span>
         </div>
 
-        <div className="flex items-baseline gap-1.5 mt-0.5">
+        {/* Perfectly Aligned Price Row: Selling Price, MRP, and Discount Badge in 1 Line */}
+        <div className="flex items-baseline gap-1.5 mt-1 flex-wrap">
           <span className="text-base font-extrabold text-slate-950">{formatPrice(product.price)}</span>
           <span className="text-xs text-slate-400 line-through">{formatPrice(product.mrp)}</span>
+          {product.discount > 0 && (
+            <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+              {product.discount}% off
+            </span>
+          )}
+        </div>
+
+        {/* Flipkart-Style Scarcity & Fast Selling Tag */}
+        <div className="mt-1 pt-1 border-t border-slate-100 flex items-center justify-between text-[10px]">
+          <span className="font-bold text-rose-600 truncate">
+            🔥 Only 3 left at this price!
+          </span>
+          <span className="text-slate-400 font-medium shrink-0">
+            Fast delivery
+          </span>
         </div>
       </div>
     </button>

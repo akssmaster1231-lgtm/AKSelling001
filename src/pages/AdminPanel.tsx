@@ -127,6 +127,8 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
     image: '',
     gradient: 'from-[#9f2089] to-pink-800',
     display_order: 0,
+    productId: '',
+    targetCategory: '',
   });
   const [savingBanner, setSavingBanner] = useState(false);
   const [bannerFormError, setBannerFormError] = useState('');
@@ -322,6 +324,8 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       image: '',
       gradient: 'from-[#9f2089] to-pink-800',
       display_order: banners.length + 1,
+      productId: '',
+      targetCategory: '',
     });
     setShowAddBanner(true);
   };
@@ -336,6 +340,8 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
       image: String(banner.image || ''),
       gradient: String(banner.gradient || 'from-[#9f2089] to-pink-800'),
       display_order: Number(banner.display_order || 1),
+      productId: String(banner.productId || ''),
+      targetCategory: String(banner.targetCategory || banner.category || ''),
     });
     setShowAddBanner(true);
   };
@@ -356,6 +362,8 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
           image: bannerForm.image.trim(),
           gradient: bannerForm.gradient,
           display_order: bannerForm.display_order,
+          productId: bannerForm.productId.trim() || undefined,
+          targetCategory: bannerForm.targetCategory.trim() || undefined,
         });
         setSavedMsg('Banner updated successfully!');
       } else {
@@ -366,6 +374,8 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
           image: bannerForm.image.trim(),
           gradient: bannerForm.gradient,
           display_order: bannerForm.display_order || banners.length + 1,
+          productId: bannerForm.productId.trim() || undefined,
+          targetCategory: bannerForm.targetCategory.trim() || undefined,
         });
         setSavedMsg('New Banner published live on Homepage!');
       }
@@ -1427,6 +1437,33 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                       className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-xs font-medium text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#9f2089] focus:bg-white"
                     />
                   </div>
+                </div>
+
+                {/* Direct Product Link for Instant 1-Click Buy Now */}
+                <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                      <span>🎯 Link Specific Product (Buy Now / Open on Tap)</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full">
+                      Optional Direct Product Link
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-800">
+                    Banner par ya button par click karne par direct yahi product open hoga.
+                  </p>
+                  <select
+                    value={bannerForm.productId}
+                    onChange={(e) => setBannerForm({ ...bannerForm, productId: e.target.value })}
+                    className="w-full bg-white border border-blue-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- No specific product (Auto keyword/category match) --</option>
+                    {productsList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title} (₹{p.price}) • ID: {p.id}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Banner Image Upload & URL */}

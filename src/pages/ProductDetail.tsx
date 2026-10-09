@@ -28,6 +28,8 @@ import CompleteTheLook from '@/components/combo-bundle/CompleteTheLook';
 import PincodeServiceabilityWidget from '@/components/logistics/PincodeServiceabilityWidget';
 import TrustBadges from '@/components/trust/TrustBadges';
 import ProductReviewsSection from '@/components/reviews/ProductReviewsSection';
+import UrgencyTimerBar from '@/components/UrgencyTimerBar';
+import EffectivePriceCalculator from '@/components/EffectivePriceCalculator';
 
 interface ProductDetailProps {
   product: Product;
@@ -190,6 +192,11 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         fitType={product.fitType}
       />
 
+      {/* Live Flipkart-Style Ticking Urgency Countdown Bar Directly Below Image */}
+      <div className="px-3 pt-2">
+        <UrgencyTimerBar variant="productDetail" />
+      </div>
+
       {/* Product Info */}
       <div className="mt-2 bg-white px-4 py-4">
         <div className="flex items-center justify-between">
@@ -204,7 +211,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         </div>
         <h1 className="text-lg font-semibold text-gray-900 mt-1 leading-snug">{product.title}</h1>
 
-        {/* Star Rating above price - starts at 0.00 and increases dynamically with sales */}
+        {/* Star Rating above price */}
         <div className="flex items-center gap-2 mt-2">
           <span
             className={`flex items-center gap-1 text-sm font-bold px-2 py-0.5 rounded ${
@@ -228,22 +235,33 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
           </span>
         </div>
 
-        {/* Price */}
-        <div className="flex items-baseline gap-2 mt-3">
+        {/* Standard Selling Price Row */}
+        <div className="flex items-baseline gap-2 mt-3 flex-wrap">
           <span className="text-3xl font-extrabold text-gray-900">{formatPrice(product.price)}</span>
           <span className="text-base text-gray-400 line-through">{formatPrice(product.mrp)}</span>
           <span className="text-base font-bold text-success-500">{product.discount}% off</span>
         </div>
-        <p className="text-sm text-gray-500 mt-1">{product.delivery}</p>
+        <p className="text-xs text-gray-500 mt-1">{product.delivery} • Flat ₹30 Doorstep Delivery</p>
+
+        {/* Big Flipkart-Style Combined Offer & Effective Price Breakdown Calculator */}
+        <div className="mt-3.5">
+          <EffectivePriceCalculator
+            price={product.price}
+            mrp={product.mrp}
+            discount={product.discount}
+          />
+        </div>
+
+        {/* Live Social Proof Badge & Urgency Stock Scarcity Bar */}
+        <SocialProofBadge productId={product.id} className="mt-3.5" />
 
         {/* Automated Shiprocket & NimbusPost Pincode Serviceability */}
-        <PincodeServiceabilityWidget
-          defaultPincode="110001"
-          pickupPincode={product.pickupAddress?.pincode || '122016'}
-        />
-
-        {/* Live Social Proof Badge & Urgency Stock Bar */}
-        <SocialProofBadge productId={product.id} className="mt-3" />
+        <div className="mt-3">
+          <PincodeServiceabilityWidget
+            defaultPincode="110001"
+            pickupPincode={product.pickupAddress?.pincode || '122016'}
+          />
+        </div>
 
         {/* Notify me of price drops toggle & preferences */}
         <PriceDropAlertToggle product={product} />

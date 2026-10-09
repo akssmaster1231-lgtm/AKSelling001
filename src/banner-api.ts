@@ -99,6 +99,9 @@ export async function fetchAllMasterBanners(): Promise<MasterBanner[]> {
           active: d.active !== false && d.isActive !== false,
           display_order: Number(d.display_order || d.order || 1),
           category: d.category as string,
+          productId: (d.productId as string) || (d.product_id as string) || undefined,
+          targetCategory: (d.targetCategory as string) || undefined,
+          targetType: (d.targetType as 'product' | 'category' | 'deals') || undefined,
         });
       });
     }

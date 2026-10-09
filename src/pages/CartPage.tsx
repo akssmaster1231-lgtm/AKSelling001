@@ -148,7 +148,8 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
   const effectiveCartTotal = activeItems.reduce((sum, item) => sum + (item.product.price || 0) * Math.max(1, item.quantity || 1), 0);
   const mrpTotal = activeItems.reduce((sum, item) => sum + (item.product.mrp || item.product.price || 0) * Math.max(1, item.quantity || 1), 0);
   const discount = Math.max(0, mrpTotal - effectiveCartTotal);
-  const deliveryFee = effectiveCartTotal > 500 ? 0 : (effectiveCartTotal > 0 ? 49 : 0);
+  // Immutable Flat Delivery Charge: ₹30
+  const deliveryFee = activeItems.length > 0 ? 30 : 0;
 
   // Auto-Discount from Lucky Spin Wheel (Automatically maps to checkout item prices)
   const [spinDiscount, setSpinDiscount] = useState<SpinDiscountCoupon | null>(() => getActiveSpinDiscount());
@@ -943,9 +944,9 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
                 </div>
               )}
               <PriceRow
-                label="Delivery Charges"
-                value={deliveryFee === 0 ? 'FREE' : formatPrice(deliveryFee)}
-                color={deliveryFee === 0 ? 'text-success-500' : 'text-gray-700'}
+                label="Flat Delivery Charge"
+                value={formatPrice(deliveryFee)}
+                color="text-gray-900"
               />
               <div className="border-t border-dashed border-gray-200 pt-2.5">
                 <PriceRow label="Total Amount" value={formatPrice(finalCartAmount)} bold />
@@ -1281,9 +1282,9 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
                 color="text-success-500"
               />
               <PriceRow
-                label="Delivery Charges"
-                value={deliveryFee === 0 ? 'FREE' : formatPrice(deliveryFee)}
-                color={deliveryFee === 0 ? 'text-success-500' : 'text-gray-700'}
+                label="Flat Delivery Charge"
+                value={formatPrice(deliveryFee)}
+                color="text-gray-900"
               />
               <div className="border-t border-dashed border-gray-200 pt-2.5">
                 <PriceRow label="Total Amount" value={formatPrice(totalAmount)} bold />

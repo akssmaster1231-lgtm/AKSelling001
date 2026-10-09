@@ -4,9 +4,10 @@ import type { Banner } from '@/types';
 
 interface BannerCarouselProps {
   banners: Banner[];
+  onBannerClick?: (banner: Banner) => void;
 }
 
-export default function BannerCarousel({ banners }: BannerCarouselProps) {
+export default function BannerCarousel({ banners, onBannerClick }: BannerCarouselProps) {
   const safeBanners = banners && banners.length > 0 ? banners : [];
   const [index, setIndex] = useState(0);
   const touchStartXRef = useRef<number>(0);
@@ -63,7 +64,8 @@ export default function BannerCarousel({ banners }: BannerCarouselProps) {
         {safeBanners.map((banner, idx) => (
           <div
             key={banner.id}
-            className={`relative w-full h-full shrink-0 bg-gradient-to-br ${banner.gradient || 'from-blue-600 to-indigo-800'}`}
+            onClick={() => onBannerClick?.(banner)}
+            className={`relative w-full h-full shrink-0 bg-gradient-to-br ${banner.gradient || 'from-blue-600 to-indigo-800'} cursor-pointer`}
           >
             {/* Banner Image with rich presentation and subtle text contrast overlay */}
             {banner.image && (
@@ -73,7 +75,7 @@ export default function BannerCarousel({ banners }: BannerCarouselProps) {
                 loading={idx === 0 ? 'eager' : 'lazy'}
                 decoding="async"
                 referrerPolicy="no-referrer"
-                className="absolute inset-0 w-full h-full object-cover object-center"
+                className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
               />
             )}
 
@@ -92,9 +94,14 @@ export default function BannerCarousel({ banners }: BannerCarouselProps) {
               {banner.cta && (
                 <button
                   type="button"
-                  className="mt-3.5 w-fit bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-orange-500 text-slate-950 text-xs sm:text-sm font-black px-5 py-2 rounded-full shadow-lg border border-amber-300 active:scale-95 transition-all cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onBannerClick?.(banner);
+                  }}
+                  className="mt-3.5 w-fit bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-orange-500 text-slate-950 text-xs sm:text-sm font-black px-5 py-2 rounded-full shadow-lg border border-amber-300 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  {banner.cta}
+                  <span>{banner.cta}</span>
+                  <span className="text-sm">→</span>
                 </button>
               )}
             </div>
