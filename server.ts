@@ -464,7 +464,7 @@ async function startServer() {
       const { id } = req.params;
       const updates = req.body as Partial<StoredOrder>;
       const orders = readDataFile<StoredOrder[]>(ORDERS_FILE, []);
-      const existingIdx = orders.findIndex(o => o.id === id);
+      const existingIdx = orders.findIndex(o => o.id === id || o.orderNumber === id);
       if (existingIdx >= 0) {
         orders[existingIdx] = { ...orders[existingIdx], ...updates, updated_at: new Date().toISOString() };
         writeDataFile(ORDERS_FILE, orders);
@@ -474,6 +474,65 @@ async function startServer() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update order';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // DELETE /api/orders/:id (Permanently delete order from history)
+  app.delete('/api/orders/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const orders = readDataFile<StoredOrder[]>(ORDERS_FILE, []);
+      const filtered = orders.filter(
+        o => o.id !== id && o.orderNumber !== id && String(o.id).toLowerCase() !== String(id).toLowerCase()
+      );
+      writeDataFile(ORDERS_FILE, filtered);
+      res.json({ success: true, message: `Order ${id} deleted permanently` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete order';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // POST /api/orders/clear-cancelled (Permanently purge all cancelled orders to free up storage)
+  app.post('/api/orders/clear-cancelled', (_req, res) => {
+    try {
+      const orders = readDataFile<StoredOrder[]>(ORDERS_FILE, []);
+      const filtered = orders.filter(o => {
+        const st = (o.status || '').toLowerCase();
+        return st !== 'cancelled' && st !== 'canceled';
+      });
+      const removedCount = orders.length - filtered.length;
+      writeDataFile(ORDERS_FILE, filtered);
+      res.json({ success: true, removedCount, message: `${removedCount} cancelled orders cleared from history` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to clear cancelled orders';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // POST /api/orders/:id/cancel (Cancel order due to out of stock or request)
+  app.post('/api/orders/:id/cancel', (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body || {};
+      const orders = readDataFile<StoredOrder[]>(ORDERS_FILE, []);
+      const idx = orders.findIndex(o => o.id === id || o.orderNumber === id);
+      if (idx >= 0) {
+        orders[idx] = {
+          ...orders[idx],
+          status: 'cancelled',
+          cancellation_reason: reason || 'Product Out of Stock / Unavailable',
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        writeDataFile(ORDERS_FILE, orders);
+        res.json({ success: true, order: orders[idx] });
+      } else {
+        res.status(404).json({ error: 'Order not found' });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to cancel order';
       res.status(500).json({ error: msg });
     }
   });

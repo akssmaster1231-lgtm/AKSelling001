@@ -19,6 +19,7 @@ export interface SellerProduct {
   category: string;
   subCategory?: string;
   images: string[];
+  image?: string;
   stock: number;
   brand: string;
   status: 'live' | 'draft' | 'out_of_stock';
@@ -118,6 +119,8 @@ export interface SellerOrder {
   orderDate: string;
   dispatchDeadline?: string;
   trackingId?: string;
+  cancellationReason?: string;
+  cancelledAt?: string;
 }
 
 export interface ReturnItem {

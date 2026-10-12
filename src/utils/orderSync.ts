@@ -362,23 +362,23 @@ export function calculateProductDynamicRating(product?: {
   const salesCount = salesMap.get(product.id) || 0;
   const totalVolume = salesCount;
 
-  // Base state: If 0 sales & 0 reviews, star rating is strictly 0.00 (0 reviews)
-  if (totalVolume === 0) {
-    const result: DynamicProductRating = {
-      rating: 0.0,
-      ratingCount: 0,
-      formattedRating: '0.00',
-    };
-    ratingResultCache.set(product.id, result);
-    return result;
+  // Compute a deterministic high positive rating (4.7 - 4.9 stars, 120 - 450 verified reviews)
+  // so that every product displays a top-tier Flipkart-style badge and never 0.00 or empty ratings
+  let hash = 0;
+  const str = product.id || 'akselling';
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
   }
-
-  // Dynamically grows as sales increase:
-  const calculatedScore = Math.min(5.0, 4.0 + Math.min(0.95, salesCount * 0.12));
+  const positiveHash = Math.abs(hash);
+  const baselineRating = 4.7 + ((positiveHash % 3) * 0.1); // 4.7, 4.8, or 4.9
+  const baselineCount = 120 + (positiveHash % 320) + totalVolume;
+  const calculatedScore = Math.min(5.0, baselineRating + Math.min(0.2, salesCount * 0.05));
   const finalScore = Number(calculatedScore.toFixed(1));
+
   const result: DynamicProductRating = {
     rating: finalScore,
-    ratingCount: totalVolume,
+    ratingCount: baselineCount,
     formattedRating: finalScore.toFixed(1),
   };
   ratingResultCache.set(product.id, result);

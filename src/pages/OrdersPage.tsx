@@ -16,12 +16,16 @@ import {
   Camera,
   X,
   FileText,
+  Trash2,
+  XCircle,
 } from 'lucide-react';
 import { formatPrice } from '@/data';
 import { useI18n } from '@/i18n';
 import {
   subscribeOrders,
   updateOrderStatusInFirestore,
+  deleteOrderFromFirestore,
+  clearAllCancelledOrdersFromFirestore,
   submitProductReview,
   uploadMediaToPermanentStorage,
   type FirestoreOrder,
@@ -48,6 +52,25 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
   const [trackingModalOrder, setTrackingModalOrder] = useState<OrderRow | null>(null);
   const [copiedAwb, setCopiedAwb] = useState<string | null>(null);
   const [invoiceModalOrder, setInvoiceModalOrder] = useState<OrderRow | null>(null);
+
+  // Customer order cancellation modal state
+  const [cancelModalOrder, setCancelModalOrder] = useState<OrderRow | null>(null);
+  const [customerCancelReason, setCustomerCancelReason] = useState('Ordered by mistake');
+  const [isSubmittingCustomerCancel, setIsSubmittingCustomerCancel] = useState(false);
+
+  // Single order delete confirmation state
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<OrderRow | null>(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+
+  // Bulk clear cancelled orders state
+  const [showClearCancelledModal, setShowClearCancelledModal] = useState(false);
+  const [isClearingCancelled, setIsClearingCancelled] = useState(false);
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   // Verified Customer Review Modal State
   const [reviewModalItem, setReviewModalItem] = useState<{
@@ -142,19 +165,23 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
     });
 
     // Listen to local event broadcasts across windows/tabs
-    const handleOrdersUpdated = () => {
+    const handleOrdersUpdated = (e?: Event) => {
+      const customEvent = e as CustomEvent<{ deletedOrderId?: string; clearCancelled?: boolean }>;
+      if (customEvent?.detail?.deletedOrderId) {
+        setOrders(prev => prev.filter(o => o.id !== customEvent.detail.deletedOrderId));
+        return;
+      }
+      if (customEvent?.detail?.clearCancelled) {
+        setOrders(prev => prev.filter(o => (o.status || '').toLowerCase() !== 'cancelled'));
+        return;
+      }
       try {
         const updated = localStorage.getItem('akselling_local_orders');
         if (updated) {
           const parsed = JSON.parse(updated);
-          setOrders(prev => {
-            const map = new Map<string, OrderRow>();
-            parsed.forEach((o: OrderRow) => map.set(o.id, o));
-            prev.forEach(o => {
-              if (!map.has(o.id)) map.set(o.id, o);
-            });
-            return Array.from(map.values());
-          });
+          if (Array.isArray(parsed)) {
+            setOrders(parsed);
+          }
         }
       } catch {
         // ignore
@@ -247,6 +274,67 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
     setTimeout(() => setReturnRequested(null), 3500);
   };
 
+  const handleCustomerCancelOrder = async () => {
+    if (!cancelModalOrder) return;
+    setIsSubmittingCustomerCancel(true);
+    try {
+      await handleUpdateOrderStatus(cancelModalOrder.id, 'Cancelled');
+      try {
+        await updateOrderStatusInFirestore(cancelModalOrder.id, 'Cancelled', {
+          cancellation_reason: customerCancelReason,
+          cancelled_at: new Date().toISOString(),
+        });
+        fetch(`/api/orders/${encodeURIComponent(cancelModalOrder.id)}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: customerCancelReason }),
+        }).catch(() => {});
+      } catch {
+        // silent
+      }
+      showToast('Order cancelled successfully.');
+      setCancelModalOrder(null);
+    } catch {
+      showToast('Order marked as cancelled.');
+      setCancelModalOrder(null);
+    } finally {
+      setIsSubmittingCustomerCancel(false);
+    }
+  };
+
+  const handleCustomerDeleteOrder = async () => {
+    if (!deleteConfirmOrder) return;
+    setIsDeletingOrder(true);
+    try {
+      setOrders(prev => prev.filter(o => o.id !== deleteConfirmOrder.id));
+      await deleteOrderFromFirestore(deleteConfirmOrder.id);
+      showToast('Cancelled order removed from history. Storage cleaned!');
+      setDeleteConfirmOrder(null);
+    } catch {
+      showToast('Order removed from history.');
+      setDeleteConfirmOrder(null);
+    } finally {
+      setIsDeletingOrder(false);
+    }
+  };
+
+  const handleCustomerClearAllCancelled = async () => {
+    const cancelledOrders = orders.filter(o => (o.status || '').toLowerCase() === 'cancelled');
+    const cancelledIds = cancelledOrders.map(o => o.id);
+    setIsClearingCancelled(true);
+    try {
+      setOrders(prev => prev.filter(o => (o.status || '').toLowerCase() !== 'cancelled'));
+      await clearAllCancelledOrdersFromFirestore(cancelledIds);
+      showToast(`Cleared ${cancelledIds.length} cancelled orders from history!`);
+      setShowClearCancelledModal(false);
+    } catch {
+      showToast('Cancelled orders cleared.');
+      setShowClearCancelledModal(false);
+    } finally {
+      setIsClearingCancelled(false);
+    }
+  };
+
   const copyAwb = (awb: string) => {
     try {
       navigator.clipboard.writeText(awb);
@@ -302,23 +390,53 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
       <div className="px-3 sm:px-4 py-3.5 pb-20 space-y-3.5 max-w-2xl mx-auto w-full">
         {/* Clean Mobile Orders Summary (Zero Graphs / Charts) */}
         {orders.length > 0 && (
-          <div className="grid grid-cols-3 gap-2 bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs">
-            <div className="text-center p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Total</span>
-              <span className="text-base sm:text-lg font-black text-slate-900">{orders.length}</span>
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-3 gap-2 bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs">
+              <div className="text-center p-2 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Total</span>
+                <span className="text-base sm:text-lg font-black text-slate-900">{orders.length}</span>
+              </div>
+              <div className="text-center p-2 rounded-xl bg-amber-50/80 border border-amber-100">
+                <span className="text-[10px] uppercase font-bold text-amber-700 block tracking-wider">In Transit</span>
+                <span className="text-base sm:text-lg font-black text-amber-800">
+                  {orders.filter(o => (o.status || '').toLowerCase() !== 'delivered' && (o.status || '').toLowerCase() !== 'cancelled').length}
+                </span>
+              </div>
+              <div className="text-center p-2 rounded-xl bg-emerald-50/80 border border-emerald-100">
+                <span className="text-[10px] uppercase font-bold text-emerald-700 block tracking-wider">Delivered</span>
+                <span className="text-base sm:text-lg font-black text-emerald-800">
+                  {orders.filter(o => (o.status || '').toLowerCase() === 'delivered').length}
+                </span>
+              </div>
             </div>
-            <div className="text-center p-2 rounded-xl bg-amber-50/80 border border-amber-100">
-              <span className="text-[10px] uppercase font-bold text-amber-700 block tracking-wider">In Transit</span>
-              <span className="text-base sm:text-lg font-black text-amber-800">
-                {orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').length}
-              </span>
-            </div>
-            <div className="text-center p-2 rounded-xl bg-emerald-50/80 border border-emerald-100">
-              <span className="text-[10px] uppercase font-bold text-emerald-700 block tracking-wider">Delivered</span>
-              <span className="text-base sm:text-lg font-black text-emerald-800">
-                {orders.filter(o => o.status === 'Delivered').length}
-              </span>
-            </div>
+
+            {/* Customer Cancelled Orders History Storage Cleanup Banner */}
+            {orders.some(o => (o.status || '').toLowerCase() === 'cancelled') && (
+              <div className="bg-gradient-to-r from-rose-50 via-red-50 to-pink-50 border border-rose-200/90 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                    <Trash2 size={15} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-rose-950 truncate">
+                      {orders.filter(o => (o.status || '').toLowerCase() === 'cancelled').length} Cancelled Orders in History
+                    </p>
+                    <p className="text-[10px] text-rose-700 truncate">
+                      Clear cancelled history to keep your orders list fast & lightweight.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowClearCancelledModal(true)}
+                  className="bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-[11px] px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                  title="Purge all cancelled order records"
+                >
+                  <Trash2 size={12} />
+                  <span>Clear All</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -378,9 +496,16 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                         <p className="text-xs text-slate-400 font-mono">
                           ID: {order.id.slice(0, 10).toUpperCase()}
                         </p>
-                        <span className="text-sm font-black text-[#1b365d]">
-                          {formatPrice(order.total_amount)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {(order.status || '').toLowerCase() === 'cancelled' && (
+                            <span className="text-[10px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-200">
+                              Cancelled
+                            </span>
+                          )}
+                          <span className="text-sm font-black text-[#1b365d]">
+                            {formatPrice(order.total_amount)}
+                          </span>
+                        </div>
                       </div>
 
                       <h2 className="text-sm font-bold text-slate-800 line-clamp-1 mt-0.5">
@@ -401,27 +526,50 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                     </div>
                   </div>
 
-                  {/* Real-time Visual Order Status Progress Stepper */}
-                  <div className="p-3 sm:p-3.5 bg-slate-50/50">
-                    <OrderStatusStepper
-                      status={order.status}
-                      orderId={order.id}
-                      orderDate={
-                        order.created_at
-                          ? new Date(order.created_at).toLocaleTimeString('en-IN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : 'Live'
-                      }
-                      courierName={displayCourier}
-                      awbCode={displayAwb}
-                      showDetailsButton={true}
-                      onViewDetails={() => setTrackingModalOrder(order)}
-                      onUpdateStatus={(newStatus) => handleUpdateOrderStatus(order.id, newStatus)}
-                      allowTestingControls={true}
-                    />
-                  </div>
+                  {/* Real-time Visual Order Status Progress Stepper or Cancelled Alert */}
+                  {(order.status || '').toLowerCase() === 'cancelled' ? (
+                    <div className="p-3 sm:p-3.5 bg-rose-50/80 border-y border-rose-200/80 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800">
+                          <XCircle size={15} className="text-rose-600 shrink-0" />
+                          <span>Order Cancelled</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmOrder(order)}
+                          className="text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1 transition-all cursor-pointer"
+                          title="Permanently remove cancelled order from your history"
+                        >
+                          <Trash2 size={12} />
+                          <span>Delete History (हिस्ट्री हटाएं)</span>
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-rose-700">
+                        Reason: <strong className="text-rose-900">{order.cancellation_reason || 'Product Out of Stock / Order Cancelled'}</strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 sm:p-3.5 bg-slate-50/50">
+                      <OrderStatusStepper
+                        status={order.status}
+                        orderId={order.id}
+                        orderDate={
+                          order.created_at
+                            ? new Date(order.created_at).toLocaleTimeString('en-IN', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : 'Live'
+                        }
+                        courierName={displayCourier}
+                        awbCode={displayAwb}
+                        showDetailsButton={true}
+                        onViewDetails={() => setTrackingModalOrder(order)}
+                        onUpdateStatus={(newStatus) => handleUpdateOrderStatus(order.id, newStatus)}
+                        allowTestingControls={true}
+                      />
+                    </div>
+                  )}
 
                   {/* Accordion Toggle for Complete Details */}
                   <div className="border-t border-slate-100 bg-white">
@@ -596,6 +744,38 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
                                   <RotateCcw size={15} /> Request 7-Day Hassle-Free Return
                                 </>
                               )}
+                            </button>
+                          )}
+
+                          {/* Customer Cancel Order button */}
+                          {(order.status === 'Placed' ||
+                            order.status === 'pending' ||
+                            order.status === 'Confirmed' ||
+                            order.status === 'Processing' ||
+                            order.status === 'Packed') &&
+                            (order.status || '').toLowerCase() !== 'cancelled' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCancelModalOrder(order);
+                                setCustomerCancelReason('Ordered by mistake');
+                              }}
+                              className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl py-2.5 transition-colors cursor-pointer"
+                            >
+                              <XCircle size={14} className="text-rose-600" />
+                              <span>Cancel Order (ऑर्डर कैंसिल करें)</span>
+                            </button>
+                          )}
+
+                          {/* Delete Cancelled History button */}
+                          {(order.status || '').toLowerCase() === 'cancelled' && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmOrder(order)}
+                              className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl py-2.5 transition-colors cursor-pointer shadow-xs"
+                            >
+                              <Trash2 size={14} />
+                              <span>Delete from History (हिस्ट्री हटाएं)</span>
                             </button>
                           )}
                         </div>
@@ -788,6 +968,212 @@ export default function OrdersPage({ onBack }: OrdersPageProps) {
           isOpen={true}
           onClose={() => setInvoiceModalOrder(null)}
         />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 1. Customer Cancel Order Modal                                            */}
+      {/* ========================================================================= */}
+      {cancelModalOrder && (
+        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl p-4 space-y-3.5 border border-slate-100 animate-scale-up">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
+                  <XCircle size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">Cancel Order</h3>
+                  <p className="text-[10px] text-slate-500 font-mono">ID: {cancelModalOrder.id.slice(0, 10).toUpperCase()}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelModalOrder(null)}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-800">
+                Reason for Cancellation (रीज़न चुनें):
+              </label>
+              <div className="space-y-1.5 text-xs">
+                {[
+                  'Ordered by mistake',
+                  'Need to change size or color',
+                  'Need to change delivery address',
+                  'Delivery time is too long',
+                  'Found better price / changed mind',
+                ].map(r => (
+                  <label
+                    key={r}
+                    className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
+                      customerCancelReason === r
+                        ? 'border-rose-500 bg-rose-50/70'
+                        : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="cust_cancel_reason"
+                      value={r}
+                      checked={customerCancelReason === r}
+                      onChange={() => setCustomerCancelReason(r)}
+                      className="text-rose-600 focus:ring-rose-500"
+                    />
+                    <span className="font-medium text-slate-800">{r}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 text-[11px] text-rose-700 leading-relaxed">
+              If any advance or payment was completed, it will be refunded back to your payment account. You can remove this cancelled order from your history anytime.
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setCancelModalOrder(null)}
+                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                onClick={handleCustomerCancelOrder}
+                disabled={isSubmittingCustomerCancel}
+                className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingCustomerCancel ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Cancelling...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={14} />
+                    <span>Confirm Cancel</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. Customer Delete Cancelled Order Modal                                   */}
+      {/* ========================================================================= */}
+      {deleteConfirmOrder && (
+        <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl p-4 space-y-3.5 border border-slate-100 animate-scale-up">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+              <Trash2 size={24} />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-slate-900">Remove from My Orders?</h3>
+              <p className="text-xs text-slate-600">
+                Order <strong className="text-slate-900 font-mono">#{deleteConfirmOrder.id.slice(0, 10).toUpperCase()}</strong>
+              </p>
+            </div>
+
+            <p className="text-[11px] text-slate-600 text-center leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              This cancelled order record will be permanently erased from your order history and app memory to keep things fast and uncluttered.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOrder(null)}
+                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Keep
+              </button>
+              <button
+                type="button"
+                onClick={handleCustomerDeleteOrder}
+                disabled={isDeletingOrder}
+                className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingOrder ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Removing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Delete History</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. Customer Clear All Cancelled Orders Modal                               */}
+      {/* ========================================================================= */}
+      {showClearCancelledModal && (
+        <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl p-4 space-y-3.5 border border-slate-100 animate-scale-up">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+              <Trash2 size={24} />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-slate-900">Clear All Cancelled Orders?</h3>
+              <p className="text-xs text-slate-600">
+                Permanently remove all cancelled orders from your history.
+              </p>
+            </div>
+
+            <p className="text-[11px] text-slate-600 text-center leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              All cancelled order records will be purged so your history remains 100% clean and your app stays lightning fast.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowClearCancelledModal(false)}
+                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCustomerClearAllCancelled}
+                disabled={isClearingCancelled}
+                className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isClearingCancelled ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Clearing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Clear All Cancelled</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Toast */}
+      {toastMessage && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[130] bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-2xl border border-slate-700 flex items-center gap-2 animate-slide-in">
+          <CheckCircle2 size={14} className="text-emerald-400" />
+          <span>{toastMessage}</span>
+        </div>
       )}
     </div>
   );

@@ -9,6 +9,7 @@ import {
   ShoppingBag,
   Lock,
   ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '@/auth-context';
 import { isWhitelistedSellerEmail, OWNER_ADMIN_EMAIL } from '@/utils/sellerWhitelist';
@@ -47,6 +48,8 @@ import {
   updateOrderStatusInFirestore,
   subscribeOrders,
   saveOrderToFirestore,
+  deleteOrderFromFirestore,
+  clearAllCancelledOrdersFromFirestore,
 } from '@/firebase';
 
 // Initial Catalogs (Default Clean Slate 00 for Public Launch)
@@ -94,9 +97,10 @@ export { type SellerProduct };
 
 interface SellerDashboardProps {
   onBack: () => void;
+  onOpenAdminPanel?: () => void;
 }
 
-export default function SellerDashboard({ onBack }: SellerDashboardProps) {
+export default function SellerDashboard({ onBack, onOpenAdminPanel }: SellerDashboardProps) {
   const { user } = useAuth();
   const isAuthorizedOwner = isWhitelistedSellerEmail(user?.email);
 
@@ -327,8 +331,16 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
     });
 
     const handleCustomerOrderPlaced = (e: Event) => {
-      const customEvent = e as CustomEvent<SellerOrder>;
-      if (customEvent.detail) {
+      const customEvent = e as CustomEvent<SellerOrder & { deletedOrderId?: string; clearCancelled?: boolean }>;
+      if (customEvent.detail?.deletedOrderId) {
+        setOrders(prev => prev.filter(o => o.id !== customEvent.detail.deletedOrderId));
+        return;
+      }
+      if (customEvent.detail?.clearCancelled) {
+        setOrders(prev => prev.filter(o => o.status !== 'cancelled'));
+        return;
+      }
+      if (customEvent.detail && customEvent.detail.id) {
         setOrders(prev => [customEvent.detail, ...prev.filter(o => o.id !== customEvent.detail.id)]);
       } else {
         try {
@@ -386,6 +398,61 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
       awb_code: awb,
       courier_name: courier,
     }).catch(() => {});
+  };
+
+  const handleCancelOrder = async (orderId: string, reason: string) => {
+    const cancelledAt = new Date().toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    setOrders(prev =>
+      prev.map(o => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            status: 'cancelled',
+            cancellationReason: reason || 'Product Out of Stock / Unavailable',
+            cancelledAt,
+          };
+        }
+        return o;
+      })
+    );
+
+    try {
+      await updateOrderStatusInFirestore(orderId, 'cancelled', {
+        cancellation_reason: reason || 'Product Out of Stock / Unavailable',
+        cancelled_at: new Date().toISOString(),
+      });
+      fetch(`/api/orders/${encodeURIComponent(orderId)}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore cancel notice:', e);
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+    try {
+      await deleteOrderFromFirestore(orderId);
+    } catch (e) {
+      console.warn('Delete order notice:', e);
+    }
+  };
+
+  const handleClearCancelledOrders = async () => {
+    const cancelledIds = orders.filter(o => o.status === 'cancelled').map(o => o.id);
+    setOrders(prev => prev.filter(o => o.status !== 'cancelled'));
+    try {
+      await clearAllCancelledOrdersFromFirestore(cancelledIds);
+    } catch (e) {
+      console.warn('Clear cancelled orders notice:', e);
+    }
   };
 
   // Product actions
@@ -550,6 +617,18 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
 
           {/* Action buttons */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {onOpenAdminPanel && (
+              <button
+                onClick={onOpenAdminPanel}
+                className="bg-purple-700 hover:bg-purple-600 active:bg-purple-800 text-white text-xs font-black px-2.5 py-1.5 rounded-xl shadow-xs flex items-center gap-1 transition-all cursor-pointer border border-purple-400/40"
+                title="Master Admin Panel: Manage Catalogue, Banners, Orders, Razorpay & UPI"
+              >
+                <ShieldCheck size={14} className="text-amber-300" />
+                <span className="hidden sm:inline">Admin Panel</span>
+                <span className="inline sm:hidden text-[11px]">Admin</span>
+              </button>
+            )}
+
             <button
               onClick={handleAddSampleOrder}
               className="bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-gray-950 text-xs font-black px-2.5 py-1.5 rounded-xl shadow-xs flex items-center gap-1 transition-all"
@@ -591,6 +670,9 @@ export default function SellerDashboard({ onBack }: SellerDashboardProps) {
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onOpenLabelModal={ord => setActiveLabelOrder(ord)}
             onOpenTrackingModal={ord => setTrackingOrder(ord)}
+            onCancelOrder={handleCancelOrder}
+            onDeleteOrder={handleDeleteOrder}
+            onClearCancelledOrders={handleClearCancelledOrders}
           />
         )}
 

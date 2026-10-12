@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { CartProvider, useCart } from '@/cart-context';
 import { AuthProvider, useAuth } from '@/auth-context';
 import { I18nProvider } from '@/i18n';
@@ -15,10 +15,11 @@ import SellerRegistration from '@/pages/SellerRegistration';
 import SellerDashboard from '@/pages/SellerDashboard';
 import BuyNowCheckout from '@/pages/BuyNowCheckout';
 import OrdersPage from '@/pages/OrdersPage';
-import AdminPanel from '@/pages/AdminPanel';
 import SellerLockedModal from '@/components/SellerLockedModal';
 import { isWhitelistedSellerEmail } from '@/utils/sellerWhitelist';
 import ErrorBoundary from '@/components/ErrorBoundary';
+
+const AdminPanel = lazy(() => import('@/pages/AdminPanel'));
 import type { Product } from '@/types';
 import { fetchProductById } from '@/data';
 import { db, resolveProductImages } from '@/firebase';
@@ -61,7 +62,7 @@ function AppContent() {
   const [showOrders, setShowOrders] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInitialTab, setAdminInitialTab] = useState<
-    'categories' | 'banners' | 'products' | 'price_list' | 'payouts' | 'direct_upi' | undefined
+    'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay' | 'shipping' | undefined
   >(undefined);
   const [showNotifications, setShowNotifications] = useState(false);
   const [buyNowProduct, setBuyNowProduct] = useState<Product | null>(null);
@@ -460,9 +461,10 @@ function AppContent() {
         />
         <EdgeSwipeBackContainer canGoBack={canGoBack} onBack={handleBackGesture}>
           <div className="min-h-screen bg-slate-950 flex justify-center w-full overflow-x-hidden touch-scroll-container">
-            <div className="min-h-screen bg-white max-w-md w-full relative sm:shadow-2xl sm:border-x sm:border-slate-800 overflow-x-hidden">
-              <SellerDashboard onBack={() => handleSwitchMode('buying')} />
-            </div>
+              <SellerDashboard
+                onBack={() => handleSwitchMode('buying')}
+                onOpenAdminPanel={() => setShowAdmin(true)}
+              />
           </div>
         </EdgeSwipeBackContainer>
       </>
@@ -672,13 +674,24 @@ function AppContent() {
             setAdminInitialTab(undefined);
           }}
         >
-          <AdminPanel
-            onBack={() => {
-              setShowAdmin(false);
-              setAdminInitialTab(undefined);
-            }}
-            initialTab={adminInitialTab}
-          />
+          <Suspense
+            fallback={
+              <div className="fixed inset-0 z-[70] bg-gray-900 flex items-center justify-center text-white p-4">
+                <div className="text-center space-y-3">
+                  <div className="w-10 h-10 border-3 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs font-bold text-amber-300">Loading Secure Admin Panel...</p>
+                </div>
+              </div>
+            }
+          >
+            <AdminPanel
+              onBack={() => {
+                setShowAdmin(false);
+                setAdminInitialTab(undefined);
+              }}
+              initialTab={adminInitialTab}
+            />
+          </Suspense>
         </ErrorBoundary>
       )}
 

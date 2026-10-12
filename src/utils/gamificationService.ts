@@ -379,3 +379,50 @@ export function clearActiveSpinDiscount(): void {
     // ignore
   }
 }
+
+/**
+ * Automatically awards generous shopping coins (double coin multiplier) whenever a customer places an order.
+ * Coins accumulate lifetime in user account and sync to Firestore and localStorage without error.
+ */
+export function awardPurchaseCoins(amountSpent: number, userId = 'guest'): { coinsAwarded: number; newBalance: number } {
+  // Base 20 coins per ₹100 spent, minimum 50 coins
+  const baseCoins = Math.max(50, Math.round(((amountSpent || 100) / 100) * 20));
+  // Double coins for shopping loyalty: 2x multiplier
+  const coinsAwarded = baseCoins * 2;
+
+  const current = getStreakData();
+  const newBalance = (current.coinsBalance || 0) + coinsAwarded;
+  const newTotalEarned = (current.totalCoinsEarned || 0) + coinsAwarded;
+
+  const updatedState: DailyStreakState = {
+    ...current,
+    coinsBalance: newBalance,
+    totalCoinsEarned: newTotalEarned,
+  };
+
+  saveStreakData(updatedState, userId);
+
+  // Sync to Firestore wallet transactions if logged in
+  if (userId && userId !== 'guest' && isFirebaseConfigured) {
+    const txId = `tx_order_coins_${Date.now()}`;
+    setDoc(doc(db, 'wallet_transactions', txId), {
+      id: txId,
+      userId,
+      type: 'CREDIT',
+      amount: 0,
+      title: '🪙 2X Shopping Coins Earned',
+      description: `Earned +${coinsAwarded} Double Shopping Coins on order of ₹${amountSpent}! (Never Expires)`,
+      category: 'purchase_coins_reward',
+      status: 'SUCCESS',
+      createdAt: new Date().toISOString(),
+    }).catch(() => {});
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('akselling_streak_updated', { detail: updatedState }));
+    window.dispatchEvent(new Event('akselling_wallet_updated'));
+  }
+
+  return { coinsAwarded, newBalance };
+}
+

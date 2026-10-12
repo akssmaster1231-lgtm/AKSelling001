@@ -80,6 +80,7 @@ export interface PaymentLedgerEntry {
   currency?: string;
   customerName: string;
   customerPhone: string;
+  customerEmail?: string;
   paymentMethod: string;
   paymentMode?: string;
   status: 'verified' | 'pending' | 'flagged' | 'settled' | string;

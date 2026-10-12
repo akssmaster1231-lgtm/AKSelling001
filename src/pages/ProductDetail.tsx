@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChevronLeft,
   Star,
@@ -39,6 +39,7 @@ interface ProductDetailProps {
 }
 
 export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }: ProductDetailProps) {
+  const sizeSelectorRef = useRef<HTMLDivElement>(null);
   const [dynamicRating, setDynamicRating] = useState(() => calculateProductDynamicRating(product));
 
   useEffect(() => {
@@ -127,7 +128,8 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
     try {
       if (product.sizes && product.sizes.length > 0 && !selectedSize) {
         setSizeAlert(true);
-        setTimeout(() => setSizeAlert(false), 2500);
+        sizeSelectorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => setSizeAlert(false), 3000);
         return;
       }
       addToCart(product, 1, selectedSize, selectedColor);
@@ -144,6 +146,12 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
       e.stopPropagation();
     }
     try {
+      if (product.sizes && product.sizes.length > 0 && !selectedSize) {
+        setSizeAlert(true);
+        sizeSelectorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => setSizeAlert(false), 3000);
+        return;
+      }
       const sizeToUse = selectedSize || (product.sizes && product.sizes.length > 0 ? product.sizes[0] : 'Standard');
       const colorToUse = selectedColor || (product.colors && product.colors.length > 0 ? product.colors[0] : 'Default');
       onBuyNow(product, sizeToUse, colorToUse);
@@ -229,9 +237,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
             />
           </span>
           <span className="text-sm text-gray-500">
-            {dynamicRating.ratingCount > 0
-              ? `${formatCount(dynamicRating.ratingCount)} Ratings & Reviews`
-              : '0 Ratings • Fresh Launch 0.00★ (Grows with Orders)'}
+            {formatCount(dynamicRating.ratingCount)} Ratings & Reviews • Verified Buyers
           </span>
         </div>
 
@@ -243,39 +249,227 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         </div>
         <p className="text-xs text-gray-500 mt-1">{product.delivery} • Flat ₹30 Doorstep Delivery</p>
 
-        {/* Big Flipkart-Style Combined Offer & Effective Price Breakdown Calculator */}
-        <div className="mt-3.5">
-          <EffectivePriceCalculator
-            price={product.price}
-            mrp={product.mrp}
-            discount={product.discount}
+      </div>
+
+      {/* 1. Flipkart-Grade Size Selection (Immediately Below Price) */}
+      {product.sizes && product.sizes.length > 0 && (
+        <div ref={sizeSelectorRef} className="mt-2 bg-white px-4 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-gray-900">Select Size</span>
+              {selectedSize && (
+                <span className="text-xs font-extrabold text-flipkart-600 bg-flipkart-50 px-2 py-0.5 rounded-md border border-flipkart-200">
+                  {selectedSize}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowSizeChart(true)}
+              className="text-xs font-bold text-flipkart-600 hover:text-flipkart-700 flex items-center gap-1.5 bg-flipkart-50 hover:bg-flipkart-100 px-2.5 py-1 rounded-lg border border-flipkart-100 transition-colors cursor-pointer"
+            >
+              <Ruler size={13} /> Size Chart
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+            {product.sizes.map(size => {
+              const isSelected = selectedSize === size;
+              return (
+                <button
+                  key={size}
+                  onClick={() => {
+                    setSelectedSize(size);
+                    setSizeAlert(false);
+                  }}
+                  className={`min-w-[52px] h-11 px-3.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center cursor-pointer ${
+                    isSelected
+                      ? 'bg-flipkart-600 text-white border-flipkart-600 shadow-sm ring-2 ring-flipkart-500/20 scale-105'
+                      : 'bg-white text-gray-800 border-gray-200 hover:border-flipkart-400 hover:bg-gray-50'
+                  }`}
+                >
+                  {size}
+                </button>
+              );
+            })}
+          </div>
+
+          {sizeAlert && (
+            <div className="mt-2.5 p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 animate-bounce">
+              <span className="text-xs font-bold text-rose-700">⚠️ Please select a size before proceeding!</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Color Selection (if available) */}
+      {product.colors && product.colors.length > 0 && (
+        <div className="mt-2 bg-white px-4 py-3.5">
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="text-sm font-bold text-gray-900">Color:</span>
+            <span className="text-sm font-bold text-flipkart-600">{selectedColor || 'Default'}</span>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {product.colors.map(color => {
+              const isSelected = selectedColor === color;
+              return (
+                <button
+                  key={color}
+                  onClick={() => setSelectedColor(color)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all border cursor-pointer ${
+                    isSelected
+                      ? 'bg-flipkart-50 text-flipkart-700 border-flipkart-500 ring-1 ring-flipkart-500 font-bold'
+                      : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span
+                    className="w-3.5 h-3.5 rounded-full border border-black/10 shrink-0 shadow-2xs"
+                    style={{ backgroundColor: getColorHex(color) }}
+                  />
+                  {color}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. Flipkart-Grade Product Details & Description (High Priority UX) */}
+      <div className="mt-2 bg-white px-4 py-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Product Details</h2>
+          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            AKSelling Assured
+          </span>
+        </div>
+        <p className="text-sm text-gray-700 leading-relaxed font-normal">
+          {product.description}
+        </p>
+
+        {/* Key Style Highlights (Neck, Sleeve, Fit, Fabric) */}
+        {(product.neckType || product.sleeveType || product.fitType || product.fabric) && (
+          <div className="mt-3.5 pt-3.5 border-t border-gray-100">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">
+              Key Style Highlights
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              {product.neckType && (
+                <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-2.5">
+                  <span className="text-[10px] font-semibold text-blue-600 uppercase block">Neck / Collar</span>
+                  <span className="text-xs font-bold text-gray-900">{product.neckType}</span>
+                </div>
+              )}
+              {product.sleeveType && (
+                <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2.5">
+                  <span className="text-[10px] font-semibold text-emerald-600 uppercase block">Sleeve</span>
+                  <span className="text-xs font-bold text-gray-900">{product.sleeveType}</span>
+                </div>
+              )}
+              {product.fitType && (
+                <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-2.5">
+                  <span className="text-[10px] font-semibold text-amber-600 uppercase block">Fit</span>
+                  <span className="text-xs font-bold text-gray-900">{product.fitType}</span>
+                </div>
+              )}
+              {product.fabric && (
+                <div className="bg-purple-50/70 border border-purple-100 rounded-xl p-2.5">
+                  <span className="text-[10px] font-semibold text-purple-600 uppercase block">Fabric</span>
+                  <span className="text-xs font-bold text-gray-900">{product.fabric}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Flipkart-Style Combined Offer & Effective Price Breakdown */}
+      <div className="mt-2 bg-white px-4 py-4">
+        <EffectivePriceCalculator
+          price={product.price}
+          mrp={product.mrp}
+          discount={product.discount}
+        />
+      </div>
+
+      {/* Available Bank & Promotional Offers */}
+      <div className="mt-2 bg-white px-4 py-4">
+        <h2 className="text-base font-bold text-gray-800 mb-3">Available Offers</h2>
+        <div className="space-y-3">
+          <OfferItem
+            title="Bank Offer"
+            desc="10% off on AKSelling Axis Bank Credit Card up to ₹2,000"
+          />
+          <OfferItem
+            title="Special Price"
+            desc={`Get extra ${product.discount}% off (Price inclusive of discount)`}
+          />
+          <OfferItem
+            title="Wallet Offer"
+            desc="Extra ₹50 instant discount on checkout with AKSelling Wallet"
+          />
+          <OfferItem
+            title="No Cost EMI"
+            desc={`Avail No Cost EMI on select cards for orders above ₹3,000`}
+          />
+          <OfferItem
+            title="Partner Offer"
+            desc="Sign up for AKSelling Plus and get additional 5% off"
           />
         </div>
+      </div>
 
+      {/* 4. Automated Shiprocket & NimbusPost Pincode Serviceability & Delivery */}
+      <div className="mt-2 bg-white px-4 py-4">
+        <PincodeServiceabilityWidget
+          defaultPincode="110001"
+          pickupPincode={product.pickupAddress?.pincode || '122016'}
+        />
+
+        {/* Delivery & Warranty Guarantees */}
+        <div className="mt-3.5 pt-3.5 border-t border-gray-100 space-y-3">
+          <div className="flex items-start gap-3">
+            <Truck size={20} className="text-flipkart-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-gray-800">Flat ₹30 Doorstep Delivery</p>
+              <p className="text-xs text-gray-500">{product.delivery}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <Shield size={20} className="text-flipkart-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-gray-800">1 Year Warranty & 100% Genuine</p>
+              <p className="text-xs text-gray-500">Official AKSelling Factory Direct Bio-Wash Cotton</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <RotateCcw size={20} className="text-flipkart-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-gray-800">7-Day Free Replacement</p>
+              <p className="text-xs text-gray-500">Easy returns and replacements</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Prominent Trust Badges & Secure Policies */}
+      <TrustBadges variant="full" className="mt-2" />
+
+      {/* 6. Live Social Proof, Group Buy & Sharing */}
+      <div className="mt-2 bg-white px-4 py-4 space-y-3">
         {/* Live Social Proof Badge & Urgency Stock Scarcity Bar */}
-        <SocialProofBadge productId={product.id} className="mt-3.5" />
+        <SocialProofBadge productId={product.id} />
 
-        {/* Automated Shiprocket & NimbusPost Pincode Serviceability */}
-        <div className="mt-3">
-          <PincodeServiceabilityWidget
-            defaultPincode="110001"
-            pickupPincode={product.pickupAddress?.pincode || '122016'}
-          />
-        </div>
+        {/* Gen-Z WhatsApp Group Buying ("Saath Mein Khareedo") */}
+        <GroupBuyTriggerButton
+          price={product.price}
+          onClick={() => setShowGroupBuyModal(true)}
+        />
 
         {/* Notify me of price drops toggle & preferences */}
         <PriceDropAlertToggle product={product} />
 
-        {/* Gen-Z WhatsApp Group Buying ("Saath Mein Khareedo") */}
-        <div className="mt-3">
-          <GroupBuyTriggerButton
-            price={product.price}
-            onClick={() => setShowGroupBuyModal(true)}
-          />
-        </div>
-
         {/* Quick Share with Friends Bar */}
-        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+        <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-full bg-blue-50 text-flipkart-600 flex items-center justify-center shrink-0">
               <Share2 size={16} />
@@ -308,172 +502,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         </div>
       </div>
 
-      {/* Key Features & Style Highlights (Neck Type, Sleeve, Fit, Fabric) */}
-      {(product.neckType || product.sleeveType || product.fitType || product.fabric) && (
-        <div className="mt-2 bg-white px-4 py-3.5">
-          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">
-            Key Style Highlights
-          </h3>
-          <div className="grid grid-cols-2 gap-2">
-            {product.neckType && (
-              <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-2.5">
-                <span className="text-[10px] font-semibold text-blue-600 uppercase block">Neck / Collar</span>
-                <span className="text-xs font-bold text-gray-900">{product.neckType}</span>
-              </div>
-            )}
-            {product.sleeveType && (
-              <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2.5">
-                <span className="text-[10px] font-semibold text-emerald-600 uppercase block">Sleeve</span>
-                <span className="text-xs font-bold text-gray-900">{product.sleeveType}</span>
-              </div>
-            )}
-            {product.fitType && (
-              <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-2.5">
-                <span className="text-[10px] font-semibold text-amber-600 uppercase block">Fit</span>
-                <span className="text-xs font-bold text-gray-900">{product.fitType}</span>
-              </div>
-            )}
-            {product.fabric && (
-              <div className="bg-purple-50/70 border border-purple-100 rounded-xl p-2.5">
-                <span className="text-[10px] font-semibold text-purple-600 uppercase block">Fabric</span>
-                <span className="text-xs font-bold text-gray-900">{product.fabric}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Size Selection */}
-      {product.sizes && product.sizes.length > 0 && (
-        <div className="mt-2 bg-white px-4 py-4">
-          <div className="flex items-center justify-between mb-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold text-gray-900">Select Size:</span>
-              <span className="text-sm font-bold text-flipkart-600">{selectedSize || 'Select one'}</span>
-            </div>
-            <button
-              onClick={() => setShowSizeChart(true)}
-              className="text-xs font-bold text-flipkart-600 hover:text-flipkart-700 flex items-center gap-1 bg-flipkart-50 px-2 py-1 rounded-lg"
-            >
-              <Ruler size={13} /> Size Chart
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {product.sizes.map(size => {
-              const isSelected = selectedSize === size;
-              return (
-                <button
-                  key={size}
-                  onClick={() => setSelectedSize(size)}
-                  className={`min-w-[48px] px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
-                    isSelected
-                      ? 'bg-flipkart-600 text-white border-flipkart-600 shadow-sm scale-105'
-                      : 'bg-white text-gray-800 border-gray-200 hover:border-flipkart-400'
-                  }`}
-                >
-                  {size}
-                </button>
-              );
-            })}
-          </div>
-
-          {sizeAlert && (
-            <p className="text-xs text-rose-600 font-semibold mt-2 animate-bounce">
-              ⚠️ Please select a size before proceeding!
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Color Selection */}
-      {product.colors && product.colors.length > 0 && (
-        <div className="mt-2 bg-white px-4 py-4">
-          <div className="flex items-center gap-1.5 mb-2.5">
-            <span className="text-sm font-bold text-gray-900">Color:</span>
-            <span className="text-sm font-bold text-gray-700">{selectedColor || 'Default'}</span>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {product.colors.map(color => {
-              const isSelected = selectedColor === color;
-              return (
-                <button
-                  key={color}
-                  onClick={() => setSelectedColor(color)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all border ${
-                    isSelected
-                      ? 'bg-flipkart-50 text-flipkart-700 border-flipkart-500 ring-1 ring-flipkart-500 font-bold'
-                      : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <span
-                    className="w-3.5 h-3.5 rounded-full border border-black/10 shrink-0 shadow-2xs"
-                    style={{ backgroundColor: getColorHex(color) }}
-                  />
-                  {color}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Offers */}
-      <div className="mt-2 bg-white px-4 py-4">
-        <h2 className="text-base font-bold text-gray-800 mb-3">Available Offers</h2>
-        <div className="space-y-3">
-          <OfferItem
-            title="Bank Offer"
-            desc="10% off on AKSelling Axis Bank Credit Card up to ₹2,000"
-          />
-          <OfferItem
-            title="Special Price"
-            desc={`Get extra ${product.discount}% off (Price inclusive of discount)`}
-          />
-          <OfferItem
-            title="No Cost EMI"
-            desc={`Avail No Cost EMI on select cards for orders above ₹3,000`}
-          />
-          <OfferItem
-            title="Partner Offer"
-            desc="Sign up for AKSelling Plus and get additional 5% off"
-          />
-        </div>
-      </div>
-
-      {/* Delivery & Warranty */}
-      <div className="mt-2 bg-white px-4 py-4 space-y-3">
-        <div className="flex items-start gap-3">
-          <Truck size={20} className="text-flipkart-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-gray-800">Free Delivery</p>
-            <p className="text-xs text-gray-500">{product.delivery}</p>
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <Shield size={20} className="text-flipkart-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-gray-800">1 Year Warranty</p>
-            <p className="text-xs text-gray-500">Manufacturer warranty on this product</p>
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <RotateCcw size={20} className="text-flipkart-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-gray-800">7-Day Returns</p>
-            <p className="text-xs text-gray-500">Easy returns and replacements</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Description */}
-      <div className="mt-2 bg-white px-4 py-4">
-        <h2 className="text-base font-bold text-gray-800 mb-2">Product Description</h2>
-        <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
-      </div>
-
-      {/* AI Complete The Look & Combo Bundles */}
+      {/* 7. AI Complete The Look & Combo Bundles */}
       <div className="mt-2 bg-white px-4 py-4">
         <CompleteTheLook
           currentProduct={product}
@@ -485,7 +514,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         />
       </div>
 
-      {/* Specifications */}
+      {/* 8. Specifications */}
       <div className="mt-2 bg-white px-4 py-4">
         <h2 className="text-base font-bold text-gray-800 mb-3">Specifications</h2>
         <div className="space-y-2">
@@ -510,10 +539,7 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         </div>
       </div>
 
-      {/* Prominent Trust Badges & Secure Policies */}
-      <TrustBadges variant="full" className="mt-2" />
-
-      {/* Verified Customer Reviews & Photo Rating Engine */}
+      {/* 9. Verified Customer Reviews & Photo Rating Engine */}
       <ProductReviewsSection
         productId={product.id}
         productTitle={product.title}

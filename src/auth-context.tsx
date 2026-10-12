@@ -18,6 +18,7 @@ import {
 } from '@/firebase';
 import { parseFirebaseAuthError, type ParsedAuthError } from '@/utils/authErrorHelper';
 import { initializeUserWallet } from '@/utils/walletService';
+import { SIGNUP_BONUS_FLAT } from '@/utils/cashbackEngine';
 
 export interface UserProfile {
   id: string;

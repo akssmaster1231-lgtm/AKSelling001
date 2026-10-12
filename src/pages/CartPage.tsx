@@ -18,6 +18,8 @@ import {
   Navigation,
   Mail,
   Sparkles,
+  CreditCard,
+  ShieldCheck,
 } from 'lucide-react';
 import { useCart } from '@/cart-context';
 import { useAuth } from '@/auth-context';
@@ -30,6 +32,7 @@ import { awardOrderCashback, deductWalletBalanceForOrder, getLocalWalletCache } 
 import {
   getActiveSpinDiscount,
   clearActiveSpinDiscount,
+  awardPurchaseCoins,
   type SpinDiscountCoupon,
 } from '@/utils/gamificationService';
 import { processReferralRewardOnOrder } from '@/utils/referralService';
@@ -61,6 +64,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
     milestone: number;
     newBalance: number;
     message?: string;
+    coinsEarned?: number;
   } | null>(null);
   const [showMilestoneModal, setShowMilestoneModal] = useState<boolean>(false);
   const [showScratchCard, setShowScratchCard] = useState<boolean>(true);
@@ -216,7 +220,7 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
         customerPhone: form.phone,
         description: isCod
           ? `10% COD Advance Token #${genId}`
-          : `AKSelling Bag Order (${cartItems.length} items)`,
+          : `AKSelling Bag Order (${activeItems.length} items)`,
         isCodAdvance: isCod,
       });
 
@@ -419,11 +423,13 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
         })),
         `upi_${utrNumber}`
       );
+      const coinResult = awardPurchaseCoins(finalCartAmount, user?.id || 'guest');
       setEarnedReward({
         cashback: rewardResult.cashbackEarned,
         milestone: rewardResult.milestoneAwarded,
         newBalance: rewardResult.newWalletBalance,
         message: rewardResult.celebrationMessage,
+        coinsEarned: coinResult.coinsAwarded,
       });
       if (rewardResult.milestoneAwarded > 0) {
         setShowMilestoneModal(true);
@@ -479,29 +485,42 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
           <p className="text-xs text-gray-400 mt-1">Order ID: {orderId.slice(0, 8).toUpperCase()}</p>
         )}
 
-        {/* Real-time Cashback Earned Announcement Card */}
-        {earnedReward && (earnedReward.cashback > 0 || earnedReward.milestone > 0) && (
+        {/* Real-time Cashback & Shopping Coins Earned Announcement Card */}
+        {earnedReward && (
           <div className="mt-4 w-full max-w-sm rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 p-4 text-white shadow-lg border border-indigo-700/40 text-left">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-yellow-300">
-                Cashback Earned!
+              <span className="text-xs font-bold uppercase tracking-wider text-yellow-300 flex items-center gap-1">
+                <Sparkles size={13} /> Rewards & Coins Earned!
               </span>
               <span className="text-[10px] font-semibold bg-emerald-500 text-white px-2 py-0.5 rounded-full">
-                CREDITED TO WALLET
+                LIFETIME ACTIVE
               </span>
             </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-black text-emerald-400">
-                +₹{earnedReward.cashback + earnedReward.milestone}
-              </span>
-              <span className="text-xs text-blue-200">
-                (New Balance: ₹{earnedReward.newBalance})
-              </span>
-            </div>
+
+            {/* Shopping Coins Row */}
+            {earnedReward.coinsEarned && earnedReward.coinsEarned > 0 && (
+              <div className="mt-2.5 flex items-center justify-between bg-white/10 rounded-xl p-2.5 border border-white/10">
+                <span className="text-xs text-amber-200 font-bold flex items-center gap-1">
+                  🪙 2X Shopping Coins Added
+                </span>
+                <span className="text-sm font-black text-yellow-300">
+                  +{earnedReward.coinsEarned} Coins
+                </span>
+              </div>
+            )}
+
+            {(earnedReward.cashback > 0 || earnedReward.milestone > 0) && (
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-emerald-400">
+                  +₹{earnedReward.cashback + earnedReward.milestone} Cashback
+                </span>
+                <span className="text-xs text-blue-200">
+                  (New Wallet: ₹{earnedReward.newBalance})
+                </span>
+              </div>
+            )}
             <p className="text-[11px] text-blue-200 mt-1">
-              {earnedReward.milestone > 0
-                ? `Includes ₹${earnedReward.cashback} order cashback and ₹${earnedReward.milestone} 3rd order milestone reward!`
-                : 'Available for immediate automated UPI or Bank withdrawal.'}
+              Coins and rewards are lifetime safe in your account. Redeem coins for cash anytime!
             </p>
           </div>
         )}

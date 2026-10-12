@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, Gift, Calendar, Trophy } from 'lucide-react';
+import { ChevronRight, Gift, Calendar, Trophy, ShoppingBag, Zap } from 'lucide-react';
 import { products as fallbackProducts, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, DisplayDeduplicator, banners as defaultBanners } from '@/data';
 import { subscribeProducts, getCachedProducts, subscribeCategories } from '@/firebase';
 import { fetchBanners } from '@/banner-api';
@@ -446,42 +446,46 @@ export default function HomePage({
       ) : allProducts.length === 0 ? (
         <div className="mt-4 px-3 space-y-4">
           <div className="bg-white rounded-xl shadow-card p-6 text-center">
-            <div className="w-14 h-14 bg-flipkart-50 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Gift size={26} className="text-flipkart-500" />
+            <div className="w-14 h-14 bg-flipkart-50 rounded-full flex items-center justify-center mx-auto mb-3 text-flipkart-600">
+              <ShoppingBag size={26} />
             </div>
-            <h3 className="text-base font-bold text-gray-900">Welcome to AKSelling</h3>
+            <h3 className="text-base font-bold text-gray-900">AKSelling Factory Direct</h3>
             <p className="text-xs text-gray-500 mt-1.5 max-w-xs mx-auto leading-relaxed">
-              India's trusted marketplace. Real verified sellers are onboarding! Are you a manufacturer, distributor, or artisan?
+              100% Pure Combed Bio-Wash Cotton Streetwear & Heavyweight Tees. Direct customer shipping with Flat ₹30 delivery.
             </p>
             <button
-              onClick={onBecomeSeller}
+              onClick={() => onCategoryClick('all')}
               className="mt-4 inline-flex items-center gap-2 bg-flipkart-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl hover:bg-flipkart-600 transition-colors shadow-xs cursor-pointer"
             >
-              Start Selling Today →
+              Explore Collections →
             </button>
           </div>
 
           <div
-            onClick={onBecomeSeller}
-            className="bg-gradient-to-r from-accent-400 to-accent-600 rounded-xl p-4 flex items-center gap-3 shadow-card cursor-pointer hover:opacity-95 transition-opacity"
+            onClick={() => {
+              if (onNavigateDeals) onNavigateDeals();
+              else onCategoryClick('all');
+            }}
+            className="bg-gradient-to-r from-[#1b365d] to-amber-600 rounded-xl p-4 flex items-center gap-3 shadow-card cursor-pointer hover:opacity-95 transition-opacity"
           >
-            <div className="bg-white/20 rounded-full p-2 shrink-0">
-              <Gift size={24} className="text-white" />
+            <div className="bg-white/20 rounded-full p-2 shrink-0 text-amber-300">
+              <ShoppingBag size={24} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white font-bold text-sm">{t('becomeSeller')}</p>
-              <p className="text-white/80 text-xs truncate">Instant GST & Bank verified seller onboarding</p>
+              <p className="text-white font-bold text-sm">Direct Customer Orders</p>
+              <p className="text-white/80 text-xs truncate">Buy directly from factory with Flat ₹30 delivery & COD</p>
             </div>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onBecomeSeller?.();
+                if (onNavigateDeals) onNavigateDeals();
+                else onCategoryClick('all');
               }}
-              className="bg-white text-flipkart-700 text-xs font-bold px-4 py-2 rounded-full shadow-xs hover:bg-slate-50 active:scale-95 transition-all shrink-0 cursor-pointer"
-              id="home-join-seller-btn"
+              className="bg-amber-400 text-slate-950 text-xs font-bold px-4 py-2 rounded-full shadow-xs hover:bg-amber-300 active:scale-95 transition-all shrink-0 cursor-pointer"
+              id="home-buy-customer-btn"
             >
-              Join Now
+              Shop Now
             </button>
           </div>
         </div>
@@ -657,31 +661,63 @@ export default function HomePage({
             </section>
           )}
 
-          {/* Become a Seller Card */}
+          {/* Direct Factory Shopping Card for Customers */}
           <div className="mt-4 px-3">
             <div
-              onClick={onBecomeSeller}
-              className="bg-gradient-to-r from-slate-900 via-[#1b365d] to-amber-600 rounded-xl p-4 flex items-center gap-3 shadow-card cursor-pointer hover:opacity-95 transition-opacity border border-slate-700/60"
+              onClick={() => {
+                if (onNavigateDeals) {
+                  onNavigateDeals();
+                } else {
+                  onCategoryClick('all');
+                }
+              }}
+              className="bg-gradient-to-r from-slate-900 via-[#1b365d] to-amber-600 rounded-xl p-4 flex items-center gap-3 shadow-card cursor-pointer hover:opacity-95 transition-opacity border border-slate-700/60 group"
             >
-              <div className="bg-amber-400/20 border border-amber-400/30 rounded-full p-2 shrink-0">
-                <Gift size={24} className="text-amber-400" />
+              <div className="bg-amber-400/20 border border-amber-400/30 rounded-full p-2.5 shrink-0 text-amber-400 group-hover:scale-105 transition-transform">
+                <ShoppingBag size={22} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-white font-bold text-sm">{t('becomeSeller')}</p>
-                <p className="text-amber-100/80 text-xs truncate">Start selling on AKSelling with auto-verified KYC</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-white font-black text-sm">Direct Factory Purchase</span>
+                  <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded shadow-xs">
+                    100% COTTON
+                  </span>
+                </div>
+                <p className="text-amber-100/90 text-xs mt-0.5 truncate">
+                  Seedha factory se khareedo • Flat ₹30 All-India Delivery & COD
+                </p>
               </div>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onBecomeSeller?.();
+                  if (onNavigateDeals) {
+                    onNavigateDeals();
+                  } else {
+                    onCategoryClick('all');
+                  }
                 }}
-                className="bg-amber-400 text-slate-950 text-xs font-black px-4 py-2 rounded-full shadow-md hover:bg-amber-300 active:scale-95 transition-all shrink-0 cursor-pointer"
-                id="home-join-seller-btn"
+                className="bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-xs font-black px-4 py-2 rounded-full shadow-md hover:from-amber-300 hover:to-amber-400 active:scale-95 transition-all shrink-0 cursor-pointer flex items-center gap-1"
+                id="home-buy-factory-btn"
               >
-                Join Now
+                <Zap size={13} className="fill-slate-950 text-slate-950" />
+                <span>Khareedo Abhi</span>
               </button>
             </div>
+
+            {/* Subtle optional supplier registration link */}
+            {onBecomeSeller && (
+              <div className="text-center mt-2.5">
+                <button
+                  type="button"
+                  onClick={onBecomeSeller}
+                  className="text-[11px] text-slate-400 hover:text-slate-600 font-medium inline-flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <span>Are you a clothing manufacturer?</span>
+                  <span className="underline font-bold text-amber-600">Register as Supplier →</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {minPrice > 0 && (

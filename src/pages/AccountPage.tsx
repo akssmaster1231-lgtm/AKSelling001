@@ -34,6 +34,8 @@ import {
   ShieldCheck,
   Wallet,
   ArrowUpRight,
+  Coins,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth, type AddressEntry, type CardEntry } from '@/auth-context';
 import { useCart } from '@/cart-context';
@@ -43,6 +45,7 @@ import { isVerifiedOwnerAdmin } from '@/utils/sellerWhitelist';
 import { WalletPage } from '@/pages/WalletPage';
 import { getLocalWalletCache, initializeUserWallet } from '@/utils/walletService';
 import { SIGNUP_BONUS_FLAT } from '@/utils/cashbackEngine';
+import { getStreakData, convertCoinsToCash } from '@/utils/gamificationService';
 import { PWAInstallButton } from '@/components/pwa/PWAInstallButton';
 
 interface AccountPageProps {
@@ -118,6 +121,13 @@ export default function AccountPage({
   }, [user?.id, user?.walletBalance]);
 
   const [walletBalance, setWalletBalance] = useState<number>(getActiveWalletBalance);
+  const [streakData, setStreakData] = useState(() => getStreakData());
+
+  useEffect(() => {
+    const syncStreak = () => setStreakData(getStreakData());
+    window.addEventListener('akselling_streak_updated', syncStreak);
+    return () => window.removeEventListener('akselling_streak_updated', syncStreak);
+  }, []);
 
   useEffect(() => {
     setWalletBalance(getActiveWalletBalance());
@@ -354,6 +364,51 @@ export default function AccountPage({
         </button>
       </div>
 
+      {/* Customer Shopping Coins & Lifetime Rewards Card */}
+      <div className="px-3 mt-3">
+        <div
+          onClick={() => setSubScreen('wallet')}
+          className="w-full text-left bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-2xl p-4 shadow-md text-white hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer relative overflow-hidden group"
+        >
+          <div className="relative z-10 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center font-bold shadow-md shrink-0">
+                <Coins size={24} className="text-yellow-200" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-100">
+                    Shopping Coins & Rewards
+                  </span>
+                  <span className="bg-slate-950 text-amber-300 text-[10px] font-black px-1.5 py-0.2 rounded shadow-xs">
+                    LIFETIME ACTIVE
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-2xl font-black text-white">
+                    {streakData.coinsBalance} Coins
+                  </span>
+                  <span className="text-xs text-amber-100 font-semibold">
+                    (₹{convertCoinsToCash(streakData.coinsBalance)} Cash)
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-100 mt-0.5 truncate">
+                  Earn 2X Coins on every purchase • Redeem for instant cash
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <div className="bg-slate-950 hover:bg-slate-900 text-amber-300 text-xs font-black px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1">
+                <span>Redeem</span>
+                <Sparkles size={12} />
+              </div>
+              <span className="text-[10px] text-amber-100 font-medium">100 Coins = ₹5</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Play Store / PWA Install Action Card */}
       <div className="px-3 mt-3">
         <PWAInstallButton />
@@ -430,13 +485,17 @@ export default function AccountPage({
           <div className="bg-white rounded-2xl border border-gray-100 shadow-2xs overflow-hidden">
             <button
               onClick={() => {
+                if (isVerifiedOwnerAdmin(user?.email)) {
+                  sessionStorage.setItem('akselling_admin_unlocked', 'true');
+                  localStorage.setItem('akselling_admin_unlocked', 'true');
+                }
                 if (onOpenAdminWithTab) {
                   onOpenAdminWithTab('products');
                 } else {
                   onAdminPanel();
                 }
               }}
-              className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors text-left group"
+              className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors text-left group cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center">

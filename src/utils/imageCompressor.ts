@@ -12,7 +12,7 @@ export interface CompressImageOptions {
 }
 
 export async function compressImageFile(
-  file: File | Blob,
+  file: File | Blob | string,
   maxWidthOrOptions?: number | CompressImageOptions,
   maybeMaxHeight?: number,
   maybeQuality?: number
@@ -34,9 +34,7 @@ export async function compressImageFile(
   }
 
   return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
+    const processDataUrl = (dataUrl: string) => {
       if (!dataUrl) {
         resolve('');
         return;
@@ -152,10 +150,18 @@ export async function compressImageFile(
       img.src = dataUrl;
     };
 
-    reader.onerror = () => {
-      resolve('');
-    };
-
-    reader.readAsDataURL(file);
+    if (typeof file === 'string') {
+      processDataUrl(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        processDataUrl(dataUrl);
+      };
+      reader.onerror = () => {
+        resolve('');
+      };
+      reader.readAsDataURL(file);
+    }
   });
 }

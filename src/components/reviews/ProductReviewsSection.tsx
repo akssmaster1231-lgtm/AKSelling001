@@ -38,7 +38,7 @@ export default function ProductReviewsSection({
   const [formRating, setFormRating] = useState(5);
   const [formTitle, setFormTitle] = useState('');
   const [formComment, setFormComment] = useState('');
-  const [formName, setFormName] = useState(user?.displayName || 'Anoj Kumar');
+  const [formName, setFormName] = useState(user?.name || 'Anoj Kumar');
   const [formSize, setFormSize] = useState('L');
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);

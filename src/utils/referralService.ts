@@ -1,15 +1,23 @@
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, runTransaction } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/firebase';
 import { getLocalWalletCache, setLocalWalletCache } from './walletService';
+import { MAX_WALLET_ACCUMULATION_CAP } from './cashbackEngine';
 import type { UserProfile } from '@/auth-context';
 
-export const REFERRAL_REWARD_AMOUNT = 30; // Fixed reward of ₹30 per successful referral (strictly capped at max ₹30)
+/**
+ * Locked Referral Constants
+ * Reward is strictly ₹30 per friend's completed order.
+ * Minimum withdrawal limit is ₹100; Maximum is ₹500.
+ */
+export const REFERRAL_REWARD_AMOUNT = 30; // Strictly ₹30 Cash per valid referred friend order
 export const MIN_WITHDRAWAL_LIMIT = 100; // Minimum withdrawal limit is ₹100
+export const MAX_WITHDRAWAL_LIMIT = 500; // Maximum withdrawal limit is ₹500
 
-const REFERRER_STORAGE_KEY = 'akselling_referred_by';
+const REFERRER_CODE_STORAGE_KEY = 'akselling_referred_by_code';
+const REFERRER_UID_STORAGE_KEY = 'akselling_referred_by_uid';
 
 /**
- * Returns or generates a deterministic referral code for the user
+ * Generates or returns a deterministic referral code for the user
  */
 export function getUserReferralCode(user?: UserProfile | null): string {
   if (!user || !user.id || user.id === 'guest') {
@@ -20,52 +28,69 @@ export function getUserReferralCode(user?: UserProfile | null): string {
 }
 
 /**
- * Builds a shareable product or app referral URL
+ * Builds a shareable product or app referral URL with both code and referrer UID
  */
 export function getReferralShareUrl(productId?: string, user?: UserProfile | null): string {
   if (typeof window === 'undefined') return '';
   const origin = window.location.origin;
   const refCode = getUserReferralCode(user);
-  
-  if (productId) {
-    return `${origin}/?productId=${encodeURIComponent(productId)}&ref=${encodeURIComponent(refCode)}`;
-  }
-  return `${origin}/?ref=${encodeURIComponent(refCode)}`;
+  const refUid = user?.id && user.id !== 'guest' ? user.id : '';
+
+  const params = new URLSearchParams();
+  if (productId) params.set('productId', productId);
+  params.set('ref', refCode);
+  if (refUid) params.set('refUid', refUid);
+
+  return `${origin}/?${params.toString()}`;
 }
 
 /**
- * Captures referral code from URL query parameters (?ref=AKXXXX) on initial app load
+ * Captures referral parameters from URL (?ref=AKXXXX&refUid=USER_ID) on initial app load
  */
-export function captureReferralFromUrl(): string | null {
-  if (typeof window === 'undefined') return null;
+export function captureReferralFromUrl(): { code: string | null; uid: string | null } {
+  if (typeof window === 'undefined') return { code: null, uid: null };
   try {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref') || params.get('referral');
+    const refUid = params.get('refUid') || params.get('referrer');
+
+    let cleanRef: string | null = null;
+    let cleanUid: string | null = null;
+
     if (ref && ref.trim()) {
-      const cleanRef = ref.trim().toUpperCase();
-      localStorage.setItem(REFERRER_STORAGE_KEY, cleanRef);
-      return cleanRef;
+      cleanRef = ref.trim().toUpperCase();
+      localStorage.setItem(REFERRER_CODE_STORAGE_KEY, cleanRef);
     }
+    if (refUid && refUid.trim()) {
+      cleanUid = refUid.trim();
+      localStorage.setItem(REFERRER_UID_STORAGE_KEY, cleanUid);
+    }
+
+    return { code: cleanRef, uid: cleanUid };
   } catch {
-    // ignore
+    return { code: null, uid: null };
   }
-  return null;
 }
 
 /**
- * Gets currently tracked referrer code from local storage
+ * Gets currently tracked referrer code and UID from local storage
  */
-export function getTrackedReferrer(): string | null {
+export function getTrackedReferral(): { code: string | null; uid: string | null } {
   try {
-    return localStorage.getItem(REFERRER_STORAGE_KEY);
+    return {
+      code: localStorage.getItem(REFERRER_CODE_STORAGE_KEY),
+      uid: localStorage.getItem(REFERRER_UID_STORAGE_KEY),
+    };
   } catch {
-    return null;
+    return { code: null, uid: null };
   }
 }
 
 /**
- * Credits the referrer when a referred user places an order or completes a purchase.
- * Reward is fixed at ₹30 (strictly capped at max ₹30 per share/referral).
+ * STRICT BUSINESS RULE:
+ * Referral reward (₹30) is ONLY credited to the referrer's verified cash balance
+ * AFTER a referred friend successfully completes a valid, paid product order.
+ * Prevents any arbitrary, pre-order, or unearned balance credits.
  */
 export async function processReferralRewardOnOrder(
   buyerId: string,
@@ -73,16 +98,22 @@ export async function processReferralRewardOnOrder(
   orderId: string,
   orderAmount: number
 ): Promise<{ success: boolean; rewardedAmount: number; referrerCode: string | null }> {
-  const refCode = getTrackedReferrer();
-  if (!refCode) {
+  // Validate order existence and non-zero amount
+  if (!orderId || !orderAmount || orderAmount <= 0) {
     return { success: false, rewardedAmount: 0, referrerCode: null };
   }
 
-  // Prevent self-referral
+  const { code: refCode, uid: refUid } = getTrackedReferral();
+  if (!refCode && !refUid) {
+    return { success: false, rewardedAmount: 0, referrerCode: null };
+  }
+
+  // Prevent self-referral: buyer cannot refer themselves
   const buyerCode = getUserReferralCode({ id: buyerId } as UserProfile);
-  if (refCode === buyerCode) {
+  if ((refCode && refCode === buyerCode) || (refUid && refUid === buyerId)) {
     try {
-      localStorage.removeItem(REFERRER_STORAGE_KEY);
+      localStorage.removeItem(REFERRER_CODE_STORAGE_KEY);
+      localStorage.removeItem(REFERRER_UID_STORAGE_KEY);
     } catch {
       // ignore
     }
@@ -90,15 +121,24 @@ export async function processReferralRewardOnOrder(
   }
 
   const rewardAmount = REFERRAL_REWARD_AMOUNT; // Strictly ₹30 capped
+  const targetReferrerId = refUid || refCode || '';
 
   try {
-    // 1. Record referral event in Firestore
+    // 1. Idempotency Check in Firestore: prevent duplicate payout for the same order
     if (isFirebaseConfigured) {
-      const refRecordId = `ref_${orderId}_${Date.now()}`;
-      await setDoc(doc(db, 'referral_rewards', refRecordId), {
-        id: refRecordId,
+      const refRecordRef = doc(db, 'referral_rewards', `ref_${orderId}`);
+      const existingSnap = await getDoc(refRecordRef);
+      if (existingSnap.exists()) {
+        console.warn(`[ReferralEngine] Reward for order #${orderId} already processed.`);
+        return { success: false, rewardedAmount: 0, referrerCode: refCode };
+      }
+
+      // 2. Record referral event in Firestore (Immutable Audit)
+      await setDoc(refRecordRef, {
+        id: `ref_${orderId}`,
+        referrerId: targetReferrerId,
         referrerCode: refCode,
-        buyerId,
+        buyerId: buyerId || 'guest_buyer',
         buyerName: buyerName || 'Referred Friend',
         orderId,
         orderAmount,
@@ -107,41 +147,69 @@ export async function processReferralRewardOnOrder(
         createdAt: new Date().toISOString(),
       });
 
-      // Find user matching refCode or credit directly if refCode has user id
-      // Also write to wallet_transactions for the referrer
-      const txId = `tx_ref_${refRecordId}`;
-      await setDoc(doc(db, 'wallet_transactions', txId), {
-        id: txId,
-        userId: refCode,
-        type: 'CREDIT',
-        amount: rewardAmount,
-        title: 'Referral Cash Reward',
-        description: `₹${rewardAmount} earned for friend purchase (Order #${orderId})`,
-        category: 'referral_bonus',
-        status: 'SUCCESS',
-        orderId,
-        createdAt: new Date().toISOString(),
+      // 3. Atomically credit the Referrer's verified wallet balance in Firestore
+      if (targetReferrerId) {
+        const referrerUserRef = doc(db, 'users', targetReferrerId);
+        try {
+          await runTransaction(db, async (transaction) => {
+            const userSnap = await transaction.get(referrerUserRef);
+            if (userSnap.exists()) {
+              const uData = userSnap.data();
+              const currentBal = typeof uData.walletBalance === 'number' ? uData.walletBalance : 0;
+              const currentTotal = typeof uData.totalCashbackEarned === 'number' ? uData.totalCashbackEarned : currentBal;
+              const newBal = Math.min(MAX_WALLET_ACCUMULATION_CAP, currentBal + rewardAmount);
+              const newTotal = currentTotal + rewardAmount;
+
+              transaction.update(referrerUserRef, {
+                walletBalance: newBal,
+                totalCashbackEarned: newTotal,
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          });
+        } catch (txErr) {
+          console.warn('[ReferralEngine] User transaction notice:', txErr);
+        }
+
+        // 4. Create immutable wallet_transactions log for Referrer
+        const txDocRef = doc(db, 'wallet_transactions', `tx_ref_${orderId}`);
+        await setDoc(txDocRef, {
+          id: `tx_ref_${orderId}`,
+          userId: targetReferrerId,
+          type: 'CREDIT',
+          amount: rewardAmount,
+          title: 'Referral Order Cash Reward',
+          description: `₹${rewardAmount} credited! Friend (${buyerName || 'Shopper'}) placed Order #${orderId}`,
+          category: 'referral_bonus',
+          status: 'SUCCESS',
+          orderId,
+          verifiedOrderAmount: orderAmount,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    // 5. Update local wallet if the referrer matches active local session
+    if (targetReferrerId) {
+      const currentCached = getLocalWalletCache(targetReferrerId);
+      const newBal = Math.min(MAX_WALLET_ACCUMULATION_CAP, (currentCached.walletBalance || 0) + rewardAmount);
+      setLocalWalletCache(targetReferrerId, {
+        walletBalance: newBal,
+        totalCashbackEarned: (currentCached.totalCashbackEarned || 0) + rewardAmount,
       });
     }
 
-    // Update local wallet if the current active session matches
-    const currentCached = getLocalWalletCache(refCode);
-    const newBal = (currentCached.walletBalance || 0) + rewardAmount;
-    setLocalWalletCache(refCode, {
-      walletBalance: newBal,
-      totalCashbackEarned: (currentCached.totalCashbackEarned || 0) + rewardAmount,
-    });
-
-    // Clear stored referrer after successful reward to avoid duplicate payout
+    // 6. Clear tracked referral data after successful reward to avoid duplicate payouts
     try {
-      localStorage.removeItem(REFERRER_STORAGE_KEY);
+      localStorage.removeItem(REFERRER_CODE_STORAGE_KEY);
+      localStorage.removeItem(REFERRER_UID_STORAGE_KEY);
     } catch {
       // ignore
     }
 
     return { success: true, rewardedAmount: rewardAmount, referrerCode: refCode };
   } catch (err) {
-    console.warn('Referral reward process notice:', err);
-    return { success: true, rewardedAmount: rewardAmount, referrerCode: refCode };
+    console.warn('Referral reward process error:', err);
+    return { success: false, rewardedAmount: 0, referrerCode: refCode };
   }
 }

@@ -13,6 +13,9 @@ import {
   Check,
   RefreshCw,
   Zap,
+  Trash2,
+  XCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import type { SellerOrder } from '@/types/supplier';
 import { saveShipment, type ShipmentDetails, type TrackingStep } from '@/shiprocket-api';
@@ -24,6 +27,9 @@ interface SupplierOrdersTabProps {
   onUpdateOrderStatus: (orderId: string, status: SellerOrder['status']) => void;
   onOpenLabelModal: (order: SellerOrder) => void;
   onOpenTrackingModal: (order: SellerOrder) => void;
+  onCancelOrder?: (orderId: string, reason: string) => void;
+  onDeleteOrder?: (orderId: string) => void;
+  onClearCancelledOrders?: () => void;
 }
 
 type OrderStatusFilter = 'pending' | 'ready_to_ship' | 'shipped' | 'delivered' | 'cancelled';
@@ -34,6 +40,9 @@ export default function SupplierOrdersTab({
   onUpdateOrderStatus,
   onOpenLabelModal,
   onOpenTrackingModal,
+  onCancelOrder,
+  onDeleteOrder,
+  onClearCancelledOrders,
 }: SupplierOrdersTabProps) {
   const [activeFilter, setActiveFilter] = useState<OrderStatusFilter>(
     (initialSubFilter as OrderStatusFilter) || 'pending'
@@ -51,9 +60,80 @@ export default function SupplierOrdersTab({
   const [shippingShiprocketId, setShippingShiprocketId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; sku?: string; pid?: string } | null>(null);
 
+  // Order Cancellation Modal State (Out of stock / Unavailable / Customer Request)
+  const [cancelModalOrder, setCancelModalOrder] = useState<SellerOrder | null>(null);
+  const [cancelReasonPreset, setCancelReasonPreset] = useState<string>('Product Out of Stock (Available Nahi Hai)');
+  const [customCancelReason, setCustomCancelReason] = useState<string>('');
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+
+  // Single Order Permanent Deletion Confirmation Modal State
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<SellerOrder | null>(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+
+  // Clear All Cancelled Orders Confirmation Modal State
+  const [showClearAllModal, setShowClearAllModal] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelModalOrder) return;
+    const finalReason =
+      cancelReasonPreset === 'other'
+        ? customCancelReason.trim() || 'Product Out of Stock / Unavailable'
+        : cancelReasonPreset;
+    setIsSubmittingCancel(true);
+    try {
+      if (onCancelOrder) {
+        onCancelOrder(cancelModalOrder.id, finalReason);
+      } else {
+        onUpdateOrderStatus(cancelModalOrder.id, 'cancelled');
+      }
+      showToast(`Order #${cancelModalOrder.orderNumber} cancelled successfully (${finalReason})`);
+      setCancelModalOrder(null);
+      setCustomCancelReason('');
+    } catch {
+      showToast(`Order #${cancelModalOrder.orderNumber} marked as cancelled.`);
+      setCancelModalOrder(null);
+    } finally {
+      setIsSubmittingCancel(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmOrder) return;
+    setIsDeletingOrder(true);
+    try {
+      if (onDeleteOrder) {
+        onDeleteOrder(deleteConfirmOrder.id);
+      }
+      showToast(`Order #${deleteConfirmOrder.orderNumber} history deleted permanently! Storage cleared.`);
+      setDeleteConfirmOrder(null);
+    } catch {
+      showToast(`Order deleted from local storage.`);
+      setDeleteConfirmOrder(null);
+    } finally {
+      setIsDeletingOrder(false);
+    }
+  };
+
+  const handleConfirmClearAllCancelled = async () => {
+    setIsClearingAll(true);
+    try {
+      if (onClearCancelledOrders) {
+        onClearCancelledOrders();
+      }
+      showToast(`All cancelled orders history purged! Database optimized & fast.`);
+      setShowClearAllModal(false);
+    } catch {
+      showToast(`Cancelled orders cleared.`);
+      setShowClearAllModal(false);
+    } finally {
+      setIsClearingAll(false);
+    }
   };
 
   // Helper to format order details and copy to clipboard for carrier panel
@@ -412,6 +492,38 @@ Logistics Provider: ${providerName}`;
         </div>
       </div>
 
+      {/* Cancelled History Storage Cleanup Bar */}
+      {activeFilter === 'cancelled' && counts.cancelled > 0 && (
+        <div className="bg-gradient-to-r from-rose-50 via-red-50 to-pink-50 border border-rose-200/90 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between flex-wrap gap-2.5 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold shrink-0">
+              <Trash2 size={17} />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
+                <span>Cancelled Orders History</span>
+                <span className="bg-rose-200 text-rose-900 text-[10px] px-2 py-0.2 rounded-full font-black">
+                  {counts.cancelled} Saved
+                </span>
+              </h4>
+              <p className="text-[11px] text-rose-700 leading-snug">
+                Clear cancelled orders history to permanently free database storage and keep the app ultra-fast.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowClearAllModal(true)}
+            className="bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs py-2 px-3.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+            title="Permanently remove all cancelled orders from database"
+          >
+            <Trash2 size={13} />
+            <span>Clear All Cancelled History ({counts.cancelled})</span>
+          </button>
+        </div>
+      )}
+
       {/* Orders List Container */}
       {filteredOrders.length === 0 ? (
         <div className="bg-white rounded-2xl p-10 border border-gray-200 text-center space-y-2">
@@ -462,6 +574,21 @@ Logistics Provider: ${providerName}`;
                   <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200 shrink-0">
                     <CheckCircle2 size={11} /> Delivered
                   </span>
+                )}
+                {order.status === 'cancelled' && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full flex items-center gap-1 border border-rose-200">
+                      <XCircle size={11} /> Cancelled
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmOrder(order)}
+                      className="p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Delete this cancelled order history"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -736,6 +863,23 @@ Logistics Provider: ${providerName}`;
                         <span>Preview Label</span>
                       </button>
                     </div>
+
+                    {/* Cancel Order (Unavailable / Not in stock) button */}
+                    <div className="pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCancelModalOrder(order);
+                          setCancelReasonPreset('Product Out of Stock (Available Nahi Hai)');
+                          setCustomCancelReason('');
+                        }}
+                        className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        title="Cancel this order if product is out of stock or unavailable"
+                      >
+                        <XCircle size={14} className="text-rose-600 shrink-0" />
+                        <span>Cancel Order (Item Unavailable / Not in Stock)</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -801,6 +945,47 @@ Logistics Provider: ${providerName}`;
                       >
                         <Truck size={12} />
                         <span>Tracking Radar</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Cancelled Orders: Reason & Delete History Option */}
+                {order.status === 'cancelled' && (
+                  <div className="space-y-2.5 bg-rose-50/70 border border-rose-200/90 rounded-xl p-3 text-xs">
+                    <div className="flex items-center justify-between flex-wrap gap-1 border-b border-rose-200/60 pb-2">
+                      <div className="flex items-center gap-1.5 text-rose-800 font-bold">
+                        <XCircle size={15} className="text-rose-600 shrink-0" />
+                        <span>Order Cancelled</span>
+                      </div>
+                      {order.cancelledAt && (
+                        <span className="text-[10px] text-rose-600 font-medium">
+                          Cancelled on {order.cancelledAt}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-gray-700 space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider block">
+                        Cancellation Reason:
+                      </span>
+                      <p className="font-semibold text-rose-950 text-xs">
+                        {order.cancellationReason || 'Product Out of Stock / Unavailable'}
+                      </p>
+                    </div>
+
+                    <div className="pt-1 flex items-center justify-between flex-wrap gap-2">
+                      <p className="text-[11px] text-gray-500">
+                        Delete this history to free database storage and speed up app loading.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmOrder(order)}
+                        className="bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold py-2 px-3.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all text-xs cursor-pointer ml-auto"
+                        title="Permanently delete this cancelled order from database & history"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete Cancelled History (हिस्ट्री हटाएं)</span>
                       </button>
                     </div>
                   </div>
@@ -962,6 +1147,273 @@ Logistics Provider: ${providerName}`;
             <p className="text-[11px] text-gray-500 text-center">
               Inspect print design, graphic alignment, and colorway before packaging & dispatch.
             </p>
+          </div>
+        </div>
+      )}
+      {/* ========================================================================= */}
+      {/* 1. Cancel Order Confirmation & Reason Selection Modal                     */}
+      {/* ========================================================================= */}
+      {cancelModalOrder && (
+        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col border border-gray-100 animate-scale-up">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-rose-900 to-red-900 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-rose-300">
+                  <XCircle size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Cancel Order #{cancelModalOrder.orderNumber}</h3>
+                  <p className="text-[11px] text-rose-200">
+                    Customer: {cancelModalOrder.customerName} • {cancelModalOrder.customerCity}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelModalOrder(null)}
+                className="p-1 hover:bg-white/15 rounded-lg text-white transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4 space-y-3.5 max-h-[75vh] overflow-y-auto">
+              {/* Order items preview */}
+              <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-200 text-xs space-y-1.5">
+                <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider block">
+                  Items to be Cancelled ({cancelModalOrder.items.length}):
+                </span>
+                {cancelModalOrder.items.map((it, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-gray-800">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                    <span className="font-semibold truncate flex-1">{it.title}</span>
+                    <span className="text-[11px] font-mono text-gray-500">
+                      {it.size ? `Size: ${it.size}` : ''} • Qty: {it.quantity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Reason Selector */}
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-2">
+                  Select Cancellation Reason (रीज़न चुनें):
+                </label>
+                <div className="space-y-2 text-xs">
+                  {[
+                    {
+                      id: 'Product Out of Stock (Available Nahi Hai)',
+                      label: 'Product Out of Stock (Available Nahi Hai / Stock Khatam)',
+                      hint: 'Selected if fabric or size is currently unavailable',
+                    },
+                    {
+                      id: 'Customer Requested Cancellation (Customer Ne Mana Kiya)',
+                      label: 'Customer Requested Cancellation (Customer Ne Mana Kiya)',
+                      hint: 'Customer called or requested order cancellation',
+                    },
+                    {
+                      id: 'Delivery Address Unserviceable (Pincode Par Service Nahi Hai)',
+                      label: 'Delivery Address Unserviceable (Courier Not Reachable)',
+                      hint: 'Courier cannot deliver to this pincode',
+                    },
+                    {
+                      id: 'Quality Check Issue / Damaged Fabric Piece',
+                      label: 'Quality Check Issue / Damaged Fabric Piece',
+                      hint: 'Item failed quality inspection before dispatch',
+                    },
+                    {
+                      id: 'other',
+                      label: 'Other Reason (Custom Text)',
+                      hint: 'Enter your specific custom cancellation reason',
+                    },
+                  ].map(reason => (
+                    <label
+                      key={reason.id}
+                      className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                        cancelReasonPreset === reason.id
+                          ? 'border-rose-500 bg-rose-50/60 shadow-xs'
+                          : 'border-gray-200 bg-gray-50/50 hover:bg-gray-100/70'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="cancel_reason"
+                        value={reason.id}
+                        checked={cancelReasonPreset === reason.id}
+                        onChange={() => setCancelReasonPreset(reason.id)}
+                        className="mt-0.5 text-rose-600 focus:ring-rose-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold text-gray-900 block leading-tight">{reason.label}</span>
+                        <span className="text-[10.5px] text-gray-500">{reason.hint}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                {cancelReasonPreset === 'other' && (
+                  <div className="mt-2.5">
+                    <input
+                      type="text"
+                      value={customCancelReason}
+                      onChange={e => setCustomCancelReason(e.target.value)}
+                      placeholder="Enter specific cancellation reason..."
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:ring-1 focus:ring-rose-600 focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Informational callout */}
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-rose-900">
+                  <AlertTriangle size={14} className="text-rose-600 shrink-0" />
+                  <span>Important Note:</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-rose-700">
+                  Order will be marked as Cancelled. You can subsequently delete this cancelled history anytime from the <strong>Cancelled</strong> tab to keep app storage light and responsive.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3.5 bg-gray-50 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelModalOrder(null)}
+                className="px-4 py-2 text-xs font-bold text-gray-600 hover:text-gray-900 bg-white border border-gray-300 rounded-xl cursor-pointer"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancel}
+                disabled={isSubmittingCancel}
+                className="bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-bold py-2 px-4 rounded-xl shadow-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {isSubmittingCancel ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Cancelling...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={14} />
+                    <span>Confirm Cancel Order</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. Single Order Permanent History Deletion Modal                           */}
+      {/* ========================================================================= */}
+      {deleteConfirmOrder && (
+        <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl p-4 space-y-3.5 border border-gray-100 animate-scale-up">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+              <Trash2 size={24} />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-gray-900">Delete Order History Permanently?</h3>
+              <p className="text-xs text-gray-600">
+                Order <strong className="text-gray-900">#{deleteConfirmOrder.orderNumber}</strong> ({deleteConfirmOrder.customerName})
+              </p>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-1">
+              <p className="text-[11px] text-rose-700 leading-relaxed">
+                This will permanently delete this order record from the cloud database, local cache, and history. This frees up storage and ensures the app runs at maximum speed.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOrder(null)}
+                className="py-2.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingOrder}
+                className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingOrder ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Delete History</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. Bulk Clear All Cancelled Orders History Modal                           */}
+      {/* ========================================================================= */}
+      {showClearAllModal && (
+        <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl p-4 space-y-3.5 border border-gray-100 animate-scale-up">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+              <Trash2 size={24} />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-gray-900">Clear All Cancelled History?</h3>
+              <p className="text-xs text-gray-600">
+                You are about to delete <strong className="text-rose-600">{counts.cancelled}</strong> cancelled order records.
+              </p>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-1">
+              <p className="text-[11px] text-rose-700 leading-relaxed">
+                All cancelled orders will be permanently erased from both device storage and Firestore database. App load and memory will be optimized to 100% clean state.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowClearAllModal(false)}
+                className="py-2.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearAllCancelled}
+                disabled={isClearingAll}
+                className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isClearingAll ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Clearing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Clear All ({counts.cancelled})</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

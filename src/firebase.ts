@@ -559,9 +559,9 @@ export async function saveProductToFirestore(product: Product | SellerProduct): 
     image_url: finalImages[0],
     rating: typeof product.rating === 'number' ? product.rating : 4.2,
     ratingCount: ('salesCount' in product ? product.salesCount : product.ratingCount) || 0,
-    brand: product.brand || 'AKSelling',
-    inStock: 'stock' in product ? (product.stock > 0 || product.status === 'live') : (product.inStock ?? true),
-    delivery: ('delivery' in product ? product.delivery : null) || 'Free delivery by tomorrow',
+    inStock: 'status' in product
+      ? (product.status === 'live' || (typeof product.stock === 'number' && product.stock > 0))
+      : (product.inStock ?? (typeof product.stock === 'number' ? product.stock > 0 : true)),
     updatedAt: new Date().toISOString(),
   };
 
@@ -833,9 +833,12 @@ export interface FirestoreOrder {
   payment_verified_at?: string;
   status: string;
   created_at: string;
-  updated_at?: string;
   awb_code?: string;
   courier_name?: string;
+  tracking_url?: string;
+  spin_discount_applied?: number;
+  cancellation_reason?: string;
+  cancelled_at?: string;
 }
 
 export function subscribeOrders(
@@ -936,6 +939,132 @@ export async function updateOrderStatusInFirestore(
     });
   } catch (err) {
     handleFirestoreError(err, 'updateOrderStatusInFirestore');
+  }
+}
+
+/**
+ * Permanently deletes an order from Firestore and removes from local storage caches
+ * to keep memory footprint light and app performance fast.
+ */
+export async function deleteOrderFromFirestore(orderId: string): Promise<void> {
+  if (!orderId) return;
+
+  // 1. Sync deletion to server API if available
+  try {
+    fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+  } catch {
+    // silent
+  }
+
+  // 2. Remove from local storage supplier orders and customer placed orders
+  try {
+    const suppRaw = localStorage.getItem('akselling_supplier_orders');
+    if (suppRaw) {
+      const suppParsed = JSON.parse(suppRaw);
+      if (Array.isArray(suppParsed)) {
+        const filtered = suppParsed.filter(
+          (o: { id?: string; orderNumber?: string }) =>
+            o.id !== orderId &&
+            o.orderNumber !== orderId &&
+            String(o.id || '').toLowerCase() !== String(orderId).toLowerCase()
+        );
+        localStorage.setItem('akselling_supplier_orders', JSON.stringify(filtered));
+      }
+    }
+
+    const localRaw = localStorage.getItem('akselling_local_orders');
+    if (localRaw) {
+      const localParsed = JSON.parse(localRaw);
+      if (Array.isArray(localParsed)) {
+        const filtered = localParsed.filter(
+          (o: { id?: string; orderNumber?: string }) =>
+            o.id !== orderId &&
+            o.orderNumber !== orderId &&
+            String(o.id || '').toLowerCase() !== String(orderId).toLowerCase()
+        );
+        localStorage.setItem('akselling_local_orders', JSON.stringify(filtered));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Delete permanently from Firestore
+  try {
+    const docRef = doc(db, 'orders', orderId);
+    await deleteDoc(docRef).catch(() => {});
+  } catch (err) {
+    console.warn('Firestore order deletion notice:', err);
+  }
+
+  // 4. Notify all tabs & components
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('akselling_orders_updated', {
+        detail: { deletedOrderId: orderId },
+      })
+    );
+  }
+}
+
+export async function clearAllCancelledOrdersFromFirestore(cancelledOrderIds?: string[]): Promise<void> {
+  // 1. Call server API to purge from disk
+  try {
+    fetch('/api/orders/clear-cancelled', { method: 'POST' }).catch(() => {});
+  } catch {
+    // silent
+  }
+
+  // 2. Clean from local storage caches
+  try {
+    const suppRaw = localStorage.getItem('akselling_supplier_orders');
+    if (suppRaw) {
+      const suppParsed = JSON.parse(suppRaw);
+      if (Array.isArray(suppParsed)) {
+        const filtered = suppParsed.filter((o: { status?: string }) => {
+          const st = (o.status || '').toLowerCase();
+          return st !== 'cancelled' && st !== 'canceled';
+        });
+        localStorage.setItem('akselling_supplier_orders', JSON.stringify(filtered));
+      }
+    }
+
+    const localRaw = localStorage.getItem('akselling_local_orders');
+    if (localRaw) {
+      const localParsed = JSON.parse(localRaw);
+      if (Array.isArray(localParsed)) {
+        const filtered = localParsed.filter((o: { status?: string }) => {
+          const st = (o.status || '').toLowerCase();
+          return st !== 'cancelled' && st !== 'canceled';
+        });
+        localStorage.setItem('akselling_local_orders', JSON.stringify(filtered));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Delete each document from Firestore
+  if (Array.isArray(cancelledOrderIds) && cancelledOrderIds.length > 0) {
+    for (const id of cancelledOrderIds) {
+      try {
+        const docRef = doc(db, 'orders', id);
+        await deleteDoc(docRef).catch(() => {});
+      } catch {
+        // silent
+      }
+    }
+  }
+
+  // 4. Notify all tabs & components
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('akselling_orders_updated', {
+        detail: { clearCancelled: true },
+      })
+    );
   }
 }
 
