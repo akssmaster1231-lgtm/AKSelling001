@@ -41,7 +41,7 @@ export const STREAK_REWARDS = [
   { day: 4, label: 'Day 4', rewardType: 'coins', amount: 80, description: '80 Shopping Coins' },
   { day: 5, label: 'Day 5', rewardType: 'spin', amount: 1, bonusCoins: 50, description: '1x Free Lucky Spin + 50 Coins' },
   { day: 6, label: 'Day 6', rewardType: 'coins', amount: 100, description: '100 Shopping Coins (= ₹5 Cash)' },
-  { day: 7, label: 'Day 7', rewardType: 'jackpot', amount: 10, bonusCoins: 100, description: '₹10 Cash Jackpot + 100 Coins!' },
+  { day: 7, label: 'Day 7', rewardType: 'coins', amount: 200, description: '200 Shopping Coins Jackpot (= ₹10 Cash Value)!' },
 ];
 
 export function getTodayDateString(): string {
@@ -315,8 +315,23 @@ export function redeemCoinsToCash(
     totalCashbackEarned: (wallet.totalCashbackEarned || 0) + cashAmount,
   });
 
-  // Record transaction in Firestore
+  // Record transaction & update user balance in Firestore for real-time consistency
   if (userId && userId !== 'guest' && isFirebaseConfigured) {
+    const userRef = doc(db, 'users', userId);
+    updateDoc(userRef, {
+      walletBalance: newBal,
+      coinsBalance: remainingCoins,
+      totalCashbackEarned: (wallet.totalCashbackEarned || 0) + cashAmount,
+      updatedAt: new Date().toISOString(),
+    }).catch(() => {
+      setDoc(userRef, {
+        walletBalance: newBal,
+        coinsBalance: remainingCoins,
+        totalCashbackEarned: (wallet.totalCashbackEarned || 0) + cashAmount,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
+    });
+
     const txId = `tx_coins_${Date.now()}`;
     setDoc(doc(db, 'wallet_transactions', txId), {
       id: txId,

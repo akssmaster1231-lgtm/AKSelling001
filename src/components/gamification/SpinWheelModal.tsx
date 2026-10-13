@@ -14,8 +14,9 @@ import {
   deductSpinChance,
   setActiveSpinDiscount,
   getTimeUntilNextSpin,
+  getStreakData,
+  saveStreakData,
 } from '@/utils/gamificationService';
-import { setLocalWalletCache, getLocalWalletCache } from '@/utils/walletService';
 import { useAuth } from '@/auth-context';
 
 interface SpinWheelModalProps {
@@ -31,7 +32,7 @@ interface WheelSegment {
   subLabel: string;
   color: string;
   textColor: string;
-  rewardType: 'cash' | 'discount' | 'voucher';
+  rewardType: 'discount' | 'voucher' | 'coins';
   amount: number;
   couponCode?: string;
 }
@@ -39,9 +40,9 @@ interface WheelSegment {
 const WHEEL_SEGMENTS: WheelSegment[] = [
   { id: 'seg_1', label: '10% OFF', subLabel: 'Sitewide', color: '#8B5CF6', textColor: '#FFFFFF', rewardType: 'discount', amount: 10, couponCode: 'SPIN10' },
   { id: 'seg_2', label: '15% OFF', subLabel: 'Coupon', color: '#10B981', textColor: '#FFFFFF', rewardType: 'discount', amount: 15, couponCode: 'SPIN15' },
-  { id: 'seg_3', label: '₹25 Cash', subLabel: 'Wallet', color: '#F59E0B', textColor: '#1E293B', rewardType: 'cash', amount: 25 },
+  { id: 'seg_3', label: '50 Coins', subLabel: 'Shopping Coins', color: '#F59E0B', textColor: '#1E293B', rewardType: 'coins', amount: 50 },
   { id: 'seg_4', label: '20% OFF', subLabel: 'Checkout', color: '#06B6D4', textColor: '#FFFFFF', rewardType: 'discount', amount: 20, couponCode: 'SPIN20' },
-  { id: 'seg_5', label: '₹30 Cash', subLabel: 'Wallet', color: '#EC4899', textColor: '#FFFFFF', rewardType: 'cash', amount: 30 },
+  { id: 'seg_5', label: '100 Coins', subLabel: '(= ₹5 Cash)', color: '#EC4899', textColor: '#FFFFFF', rewardType: 'coins', amount: 100 },
   { id: 'seg_6', label: '25% OFF', subLabel: 'Super Deal', color: '#6366F1', textColor: '#FFFFFF', rewardType: 'discount', amount: 25, couponCode: 'SPIN25' },
   { id: 'seg_7', label: '₹50 Voucher', subLabel: 'On Orders', color: '#EF4444', textColor: '#FFFFFF', rewardType: 'voucher', amount: 50, couponCode: 'FLAT50' },
   { id: 'seg_8', label: '30% JACKPOT', subLabel: 'Max Save', color: '#FBBF24', textColor: '#0F172A', rewardType: 'discount', amount: 30, couponCode: 'SPIN30' },
@@ -149,16 +150,15 @@ export default function SpinWheelModal({ isOpen, onClose, onUseCoupon, onShopCou
         }
       }
 
-      // If reward is cash, add to Cash Wallet balance with connected transaction record
-      if (targetSegment.rewardType === 'cash') {
+      // If reward is coins, add to Shopping Coins Balance strictly
+      if (targetSegment.rewardType === 'coins') {
         const uid = user?.id || 'guest';
-        const wallet = getLocalWalletCache(uid);
-        const newBal = wallet.walletBalance + targetSegment.amount;
-        setLocalWalletCache(uid, {
-          walletBalance: newBal,
-          totalCashbackEarned: wallet.totalCashbackEarned + targetSegment.amount,
-        });
-        window.dispatchEvent(new Event('akselling_wallet_updated'));
+        const streak = getStreakData();
+        saveStreakData({
+          ...streak,
+          coinsBalance: (streak.coinsBalance || 0) + targetSegment.amount,
+          totalCoinsEarned: (streak.totalCoinsEarned || 0) + targetSegment.amount,
+        }, uid);
       }
     }, 4000);
   };

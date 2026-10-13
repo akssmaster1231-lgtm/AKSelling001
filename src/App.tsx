@@ -62,7 +62,7 @@ function AppContent() {
   const [showOrders, setShowOrders] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminInitialTab, setAdminInitialTab] = useState<
-    'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay' | 'shipping' | undefined
+    'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay' | 'shipping' | 'security' | undefined
   >(undefined);
   const [showNotifications, setShowNotifications] = useState(false);
   const [buyNowProduct, setBuyNowProduct] = useState<Product | null>(null);

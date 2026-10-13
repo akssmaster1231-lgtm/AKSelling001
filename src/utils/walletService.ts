@@ -35,7 +35,14 @@ export function getLocalWalletCache(userId: string): {
   try {
     const raw = localStorage.getItem(`${WALLET_LOCAL_STORAGE_PREFIX}${userId}`);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      return {
+        walletBalance: typeof parsed.walletBalance === 'number' ? parsed.walletBalance : SIGNUP_BONUS_FLAT,
+        totalCashbackEarned: typeof parsed.totalCashbackEarned === 'number' ? parsed.totalCashbackEarned : SIGNUP_BONUS_FLAT,
+        signupBonusClaimed: Boolean(parsed.signupBonusClaimed),
+        successfulOrdersCount: typeof parsed.successfulOrdersCount === 'number' ? parsed.successfulOrdersCount : 0,
+        milestoneBonusClaimed: Boolean(parsed.milestoneBonusClaimed),
+      };
     }
   } catch {
     // fallback
@@ -43,7 +50,7 @@ export function getLocalWalletCache(userId: string): {
   return {
     walletBalance: SIGNUP_BONUS_FLAT,
     totalCashbackEarned: SIGNUP_BONUS_FLAT,
-    signupBonusClaimed: true,
+    signupBonusClaimed: false,
     successfulOrdersCount: 0,
     milestoneBonusClaimed: false,
   };
@@ -69,7 +76,7 @@ export function setLocalWalletCache(
 
 /**
  * 1. User Wallet Initialization (Instant Sign-Up Bonus ₹30)
- * On first login/sign-up, ₹30 is credited instantly into the user's wallet.
+ * On first login/sign-up, ₹30 is credited once into the user's wallet.
  * Subsequent rewards and credits are strictly earned from confirmed, successful product payments.
  */
 export async function initializeUserWallet(
@@ -91,7 +98,7 @@ export async function initializeUserWallet(
   try {
     if (!isFirebaseConfigured) {
       const cached = getLocalWalletCache(userId);
-      const balance = cached.walletBalance > 0 ? cached.walletBalance : SIGNUP_BONUS_FLAT;
+      const balance = cached.signupBonusClaimed ? cached.walletBalance : SIGNUP_BONUS_FLAT;
       setLocalWalletCache(userId, {
         walletBalance: balance,
         totalCashbackEarned: Math.max(cached.totalCashbackEarned, balance),
@@ -100,7 +107,7 @@ export async function initializeUserWallet(
       });
       return {
         walletBalance: balance,
-        isFirstBonusCredited: true,
+        isFirstBonusCredited: !cached.signupBonusClaimed,
         successfulOrdersCount: cached.successfulOrdersCount || 0,
       };
     }
@@ -393,6 +400,15 @@ export async function submitWithdrawalRequest(params: {
   if (!userId || userId === 'guest') {
     return { success: false, requestId: '', error: 'User is not logged in.' };
   }
+
+  // Strict Payout Limit Validation: Minimum ₹100, Maximum ₹500
+  if (isNaN(amount) || amount < MIN_WITHDRAWAL_AMOUNT) {
+    return { success: false, requestId: '', error: `Minimum withdrawal amount is ₹${MIN_WITHDRAWAL_AMOUNT}.` };
+  }
+  if (amount > MAX_WALLET_ACCUMULATION_CAP) {
+    return { success: false, requestId: '', error: `Maximum withdrawal limit is ₹${MAX_WALLET_ACCUMULATION_CAP}.` };
+  }
+
   const requestId = `WR_${Date.now()}_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
   const now = new Date().toISOString();
 
@@ -423,9 +439,27 @@ export async function submitWithdrawalRequest(params: {
 
   try {
     if (isFirebaseConfigured) {
+      // 1. Atomically deduct the withdrawal amount from the user's verified balance
+      const userDocRef = doc(db, 'users', userId);
+      await runTransaction(db, async (tx) => {
+        const uSnap = await tx.get(userDocRef);
+        if (uSnap.exists()) {
+          const currentBal = typeof uSnap.data().walletBalance === 'number' ? uSnap.data().walletBalance : 0;
+          if (currentBal < amount) {
+            throw new Error(`Insufficient wallet balance. You have ₹${currentBal}, but requested ₹${amount}.`);
+          }
+          const nextBal = Math.max(0, Math.round((currentBal - amount) * 100) / 100);
+          tx.update(userDocRef, {
+            walletBalance: nextBal,
+            updatedAt: now,
+          });
+        }
+      });
+
+      // 2. Create the withdrawal request doc in Firestore
       await setDoc(doc(db, 'withdrawal_requests', requestId), requestDoc);
 
-      // Record pending DEBIT in wallet_transactions
+      // 3. Record pending DEBIT in wallet_transactions (Immutable audit trail)
       await setDoc(doc(db, 'wallet_transactions', `tx_${requestId}`), {
         id: `tx_${requestId}`,
         userId,
@@ -440,6 +474,11 @@ export async function submitWithdrawalRequest(params: {
         createdAt: now,
       });
     }
+
+    // Deduct from local cache and fire event for sub-millisecond UI consistency
+    const cached = getLocalWalletCache(userId);
+    const newLocalBal = Math.max(0, Math.round((cached.walletBalance - amount) * 100) / 100);
+    setLocalWalletCache(userId, { walletBalance: newLocalBal });
 
     // Save to local fallback cache
     try {
@@ -560,7 +599,6 @@ export async function settleWithdrawalRequest(params: {
   const finalUtr = adminUtr?.trim() || `UPI/2026/${Date.now().toString().slice(-8)}`;
 
   try {
-    let targetUserId = '';
     let settledRequest: WithdrawalRequest | null = null;
 
     if (isFirebaseConfigured) {
@@ -569,7 +607,6 @@ export async function settleWithdrawalRequest(params: {
 
       if (reqSnap.exists()) {
         const data = reqSnap.data() as WithdrawalRequest;
-        targetUserId = data.userId;
         settledRequest = {
           ...data,
           status: 'COMPLETED',
@@ -588,18 +625,7 @@ export async function settleWithdrawalRequest(params: {
           adminNotes: adminNotes || '',
         });
 
-        // Reset user's wallet balance strictly back to zero upon manual admin settlement
-        if (targetUserId) {
-          const userDocRef = doc(db, 'users', targetUserId);
-          await updateDoc(userDocRef, {
-            walletBalance: 0,
-            updatedAt: settledAt,
-          }).catch(async () => {
-            await setDoc(userDocRef, { walletBalance: 0, updatedAt: settledAt }, { merge: true });
-          });
-        }
-
-        // Update transaction log
+        // Update transaction log to SUCCESS with UTR & Parchi
         const txDocRef = doc(db, 'wallet_transactions', `tx_${requestId}`);
         await updateDoc(txDocRef, {
           status: 'SUCCESS',
@@ -608,10 +634,6 @@ export async function settleWithdrawalRequest(params: {
           description: `Paid manually by Admin via UPI/Bank • Official Parchi: ${parchiNumber}`,
         }).catch(() => {});
       }
-    }
-
-    if (targetUserId) {
-      setLocalWalletCache(targetUserId, { walletBalance: 0 });
     }
 
     return {
@@ -629,6 +651,69 @@ export async function settleWithdrawalRequest(params: {
       utr: '',
       error: msg,
     };
+  }
+}
+
+/**
+ * Admin Reject Withdrawal Request:
+ * Refunds the held cash amount back into the user's verified wallet balance.
+ */
+export async function rejectWithdrawalRequest(params: {
+  requestId: string;
+  reason?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const { requestId, reason } = params;
+  const rejectedAt = new Date().toISOString();
+
+  try {
+    if (isFirebaseConfigured) {
+      const reqDocRef = doc(db, 'withdrawal_requests', requestId);
+      const reqSnap = await getDoc(reqDocRef);
+
+      if (reqSnap.exists()) {
+        const data = reqSnap.data() as WithdrawalRequest;
+        const refundAmount = data.amount;
+        const targetUserId = data.userId;
+
+        await updateDoc(reqDocRef, {
+          status: 'REJECTED',
+          rejectedAt,
+          adminNotes: reason || 'Request declined by Admin',
+        });
+
+        // Refund the amount back to user's wallet
+        if (targetUserId) {
+          const userDocRef = doc(db, 'users', targetUserId);
+          await runTransaction(db, async (tx) => {
+            const uSnap = await tx.get(userDocRef);
+            if (uSnap.exists()) {
+              const current = typeof uSnap.data().walletBalance === 'number' ? uSnap.data().walletBalance : 0;
+              tx.update(userDocRef, {
+                walletBalance: Math.min(MAX_WALLET_ACCUMULATION_CAP, current + refundAmount),
+                updatedAt: rejectedAt,
+              });
+            }
+          });
+
+          const cached = getLocalWalletCache(targetUserId);
+          setLocalWalletCache(targetUserId, {
+            walletBalance: Math.min(MAX_WALLET_ACCUMULATION_CAP, cached.walletBalance + refundAmount),
+          });
+        }
+
+        // Update transaction status to FAILED
+        const txDocRef = doc(db, 'wallet_transactions', `tx_${requestId}`);
+        await updateDoc(txDocRef, {
+          status: 'FAILED',
+          description: `Withdrawal declined: ${reason || 'Invalid bank or UPI details'}. Amount refunded.`,
+        }).catch(() => {});
+      }
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    console.warn('rejectWithdrawalRequest notice:', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to reject request' };
   }
 }
 

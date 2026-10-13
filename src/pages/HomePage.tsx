@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ChevronRight, Gift, Calendar, Trophy, ShoppingBag, Zap } from 'lucide-react';
-import { products as fallbackProducts, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, DisplayDeduplicator, banners as defaultBanners } from '@/data';
+import { products as fallbackProducts, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, banners as defaultBanners } from '@/data';
 import { subscribeProducts, getCachedProducts, subscribeCategories } from '@/firebase';
 import { fetchBanners } from '@/banner-api';
 import { useI18n } from '@/i18n';
@@ -133,85 +133,90 @@ export default function HomePage({
     categoryShelves,
     exploreCatalogProducts,
   } = useMemo(() => {
-    const dedup = new DisplayDeduplicator();
-    const isCompactCatalog = allProducts.length <= 8;
+    // Helper to always ensure at least targetCount (4) unique products per section
+    const getPaddedSelection = (primaryList: Product[], targetCount = 4): Product[] => {
+      if (allProducts.length === 0) return [];
+      const result: Product[] = [];
+      const seenIds = new Set<string>();
 
-    // 1. Limited Flash Drop (Exclusive 2 products if compact, 3 if larger)
-    const flashPool = allProducts.filter(p => (p.discount && p.discount >= 20) || p.price <= 599);
-    const flash = dedup.filterAndMark(flashPool.length > 0 ? flashPool : allProducts, isCompactCatalog ? 2 : 3);
-
-    // 2. Pure 180 GSM Bio-Wash Cotton Showcase
-    let cotton: Product[] = [];
-    if (!isCompactCatalog) {
-      const cottonPool = allProducts.filter(p =>
-        !dedup.isDisplayed(p) && (
-          p.fabric?.toLowerCase().includes('cotton') ||
-          p.fabric?.toLowerCase().includes('180') ||
-          p.title?.toLowerCase().includes('cotton') ||
-          p.tags?.some(t => t.toLowerCase().includes('cotton'))
-        )
-      );
-      cotton = dedup.filterAndMark(cottonPool, 4);
-    }
-
-    // 3. Fresh Drops & New Arrivals
-    let fresh: Product[] = [];
-    if (!isCompactCatalog) {
-      fresh = dedup.filterAndMark(allProducts, 4);
-    }
-
-    // 4. Trending Products
-    let trending: Product[] = [];
-    if (!isCompactCatalog) {
-      const sortedPool = [...allProducts].sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
-      trending = dedup.filterAndMark(sortedPool, 4);
-    }
-
-    // 5. Streetwear Luxe Showcase
-    let streetwear: Product[] = [];
-    if (!isCompactCatalog) {
-      const streetwearPool = allProducts.filter(p =>
-        !dedup.isDisplayed(p) && (
-          p.title?.toLowerCase().includes('oversized') ||
-          p.title?.toLowerCase().includes('heavy') ||
-          p.fitType?.toLowerCase().includes('oversized') ||
-          p.description?.toLowerCase().includes('streetwear')
-        )
-      );
-      streetwear = dedup.filterAndMark(streetwearPool, 4);
-    }
-
-    // 6. Category Shelves
-    const shelves: { category: Category; products: Product[] }[] = [];
-    if (!isCompactCatalog) {
-      for (const cat of activeCategories) {
-        if (cat.id === 'all') continue;
-        const catRemaining = allProducts.filter(p => {
-          if (dedup.isDisplayed(p)) return false;
-          const pCat = (p.category || '').toLowerCase().trim();
-          const cId = cat.id.toLowerCase().trim();
-          const cName = cat.name.toLowerCase().trim();
-          return (
-            pCat === cId ||
-            pCat === cName ||
-            (cId === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion' || pCat.includes('apparel'))) ||
-            (cId === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing' || pCat.includes('apparel')))
-          );
-        });
-
-        const shelfProds = dedup.filterAndMark(catRemaining, 4);
-        if (shelfProds.length > 0) {
-          shelves.push({
-            category: cat,
-            products: shelfProds,
-          });
+      for (const p of primaryList) {
+        if (!seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          result.push(p);
+          if (result.length >= targetCount) break;
         }
+      }
+
+      if (result.length < targetCount && allProducts.length >= targetCount) {
+        for (const p of allProducts) {
+          if (!seenIds.has(p.id)) {
+            seenIds.add(p.id);
+            result.push(p);
+            if (result.length >= targetCount) break;
+          }
+        }
+      }
+
+      return result;
+    };
+
+    // 1. Limited Flash Drop (Always exactly 4 products for 2x2 grid)
+    const flashPool = allProducts.filter(p => (p.discount && p.discount >= 20) || p.price <= 599);
+    const flash = getPaddedSelection(flashPool.length > 0 ? flashPool : allProducts, 4);
+
+    // 2. Pure 180 GSM Bio-Wash Cotton Showcase (Always 4 products)
+    const cottonPool = allProducts.filter(p =>
+      p.fabric?.toLowerCase().includes('cotton') ||
+      p.fabric?.toLowerCase().includes('180') ||
+      p.title?.toLowerCase().includes('cotton') ||
+      p.tags?.some(t => t.toLowerCase().includes('cotton'))
+    );
+    const cotton = getPaddedSelection(cottonPool.length > 0 ? cottonPool : allProducts, 4);
+
+    // 3. Fresh Drops & New Arrivals (Always 4 products)
+    const freshReversed = [...allProducts].reverse();
+    const fresh = getPaddedSelection(freshReversed, 4);
+
+    // 4. Trending Products (Always 4 products)
+    const sortedPool = [...allProducts].sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
+    const trending = getPaddedSelection(sortedPool, 4);
+
+    // 5. Streetwear Luxe Showcase (Always 4 products)
+    const streetwearPool = allProducts.filter(p =>
+      p.title?.toLowerCase().includes('oversized') ||
+      p.title?.toLowerCase().includes('heavy') ||
+      p.fitType?.toLowerCase().includes('oversized') ||
+      p.description?.toLowerCase().includes('streetwear')
+    );
+    const streetwear = getPaddedSelection(streetwearPool.length > 0 ? streetwearPool : allProducts, 4);
+
+    // 6. Category Shelves (Each shelf gets 4 products)
+    const shelves: { category: Category; products: Product[] }[] = [];
+    for (const cat of activeCategories) {
+      if (cat.id === 'all') continue;
+      const catRemaining = allProducts.filter(p => {
+        const pCat = (p.category || '').toLowerCase().trim();
+        const cId = cat.id.toLowerCase().trim();
+        const cName = cat.name.toLowerCase().trim();
+        return (
+          pCat === cId ||
+          pCat === cName ||
+          (cId === 'fashion' && (pCat === 'apparel-manufacturing' || pCat === 'fashion' || pCat.includes('apparel'))) ||
+          (cId === 'apparel-manufacturing' && (pCat === 'fashion' || pCat === 'apparel-manufacturing' || pCat.includes('apparel')))
+        );
+      });
+
+      const shelfProds = getPaddedSelection(catRemaining, 4);
+      if (shelfProds.length > 0) {
+        shelves.push({
+          category: cat,
+          products: shelfProds,
+        });
       }
     }
 
     // 7. Explore Catalog - Ensure all products are prominently accessible
-    const remaining = allProducts.filter(p => !dedup.isDisplayed(p));
-    const exploreList = remaining.length > 0 ? remaining : allProducts;
+    const exploreList = allProducts;
 
     return {
       flashDropProducts: flash,

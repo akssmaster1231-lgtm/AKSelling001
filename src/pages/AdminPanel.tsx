@@ -32,7 +32,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { useAuth } from '@/auth-context';
-import { isVerifiedOwnerAdmin, OWNER_ADMIN_EMAIL, ADMIN_MASTER_PASSCODE } from '@/utils/sellerWhitelist';
+import { isVerifiedOwnerAdmin, OWNER_ADMIN_EMAIL } from '@/utils/sellerWhitelist';
 import { compressImageFile } from '@/utils/imageCompressor';
 import { fetchAllBanners, addBanner, deleteBanner, updateBanner, type MasterBanner } from '@/banner-api';
 import { AdminWithdrawalManager } from '@/components/AdminWithdrawalManager';
@@ -42,6 +42,13 @@ import { AdminPriceListManager } from '@/components/admin/AdminPriceListManager'
 import { AdminVideoReelsManager } from '@/components/admin/AdminVideoReelsManager';
 import { AdminPaymentLedger } from '@/components/admin/AdminPaymentLedger';
 import AdminShippingLogistics from '@/components/admin/AdminShippingLogistics';
+import AdminSecuritySettings from '@/components/admin/AdminSecuritySettings';
+import {
+  verifyAdminPassword,
+  lockAdminPanelSession,
+  isCustomPasswordSet,
+  subscribeAdminSecurityPassword,
+} from '@/utils/adminSecurity';
 import { getAllCategories, fetchProducts, formatPrice, DEFAULT_PRODUCT_PLACEHOLDER } from '@/data';
 import {
   saveCategoryToFirestore,
@@ -62,7 +69,7 @@ import { lookupPincode } from '@/utils/pincode';
 
 interface AdminPanelProps {
   onBack: () => void;
-  initialTab?: 'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay' | 'shipping';
+  initialTab?: 'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay' | 'shipping' | 'security';
 }
 
 const SAMPLE_BANNER_PRESETS = [
@@ -99,27 +106,25 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
   // Security Passcode Protection (Owner Master Control)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return (
-        sessionStorage.getItem('akselling_admin_unlocked') === 'true' ||
-        localStorage.getItem('akselling_admin_unlocked') === 'true'
-      );
+      return sessionStorage.getItem('akselling_admin_unlocked') === 'true';
     }
     return false;
   });
 
-  // Auto-unlock immediately if logged in user is verified owner
+  const [hasCustomPassword, setHasCustomPassword] = useState<boolean>(() => isCustomPasswordSet());
+
+  // Listen for real-time password updates from Firestore / localStorage
   useEffect(() => {
-    if (isOwner && !isAuthenticated) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('akselling_admin_unlocked', 'true');
-      localStorage.setItem('akselling_admin_unlocked', 'true');
-    }
-  }, [isOwner, isAuthenticated]);
+    const unsub = subscribeAdminSecurityPassword(() => {
+      setHasCustomPassword(isCustomPasswordSet());
+    });
+    return () => unsub();
+  }, []);
 
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay' | 'shipping'>(initialTab || 'categories');
+  const [adminTab, setAdminTab] = useState<'categories' | 'banners' | 'products' | 'price_list' | 'ledger' | 'payouts' | 'direct_upi' | 'videos' | 'razorpay' | 'shipping' | 'security'>(initialTab || 'categories');
 
   // Categories State & Management
   const [categoriesList, setCategoriesList] = useState<Category[]>(() => getAllCategories());
@@ -231,51 +236,24 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
     };
   }, [isOwner]);
 
-  // 1-Click Instant Owner Activation Handler (Fully unlocks Admin Panel & syncs Owner account)
-  const handleInstantOwnerActivate = async () => {
-    try {
-      if (signInWithDirectCredentials) {
-        await signInWithDirectCredentials('Anoj Kumar Yadav', '+919999999999', OWNER_ADMIN_EMAIL);
-      }
-      setIsAuthenticated(true);
-      sessionStorage.setItem('akselling_admin_unlocked', 'true');
-      localStorage.setItem('akselling_admin_unlocked', 'true');
-      localStorage.setItem('akselling_is_seller', 'true');
-      localStorage.setItem(
-        'akselling_active_seller',
-        JSON.stringify({
-          businessName: 'AKSelling Enterprise Hub',
-          ownerName: 'Anoj Kumar Yadav',
-          phone: '+919999999999',
-          email: OWNER_ADMIN_EMAIL,
-          isWhitelisted: true,
-          verified: true,
-        })
-      );
-      setPinError(false);
-    } catch {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('akselling_admin_unlocked', 'true');
-      localStorage.setItem('akselling_admin_unlocked', 'true');
-    }
-  };
-
-  // Permanent Admin Master Passcode Verification Handler for Owner (anojkumaryadav7290@gmail.com)
+  // Admin Password Verification Handler (requires strictly valid password)
   const handleVerifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPin = pinInput.trim();
-    const isMasterMatch =
-      cleanPin === ADMIN_MASTER_PASSCODE ||
-      cleanPin.toLowerCase() === 'admin' ||
-      cleanPin.toLowerCase() === 'akselling' ||
-      cleanPin === '1234' ||
-      cleanPin === '123456' ||
-      cleanPin === '7290' ||
-      cleanPin.toLowerCase() === 'anojkumar' ||
-      cleanPin.toLowerCase() === 'owner';
+    if (!cleanPin) return;
 
-    if (isMasterMatch) {
-      await handleInstantOwnerActivate();
+    if (verifyAdminPassword(cleanPin)) {
+      if (signInWithDirectCredentials && !user) {
+        try {
+          await signInWithDirectCredentials('Anoj Kumar Yadav', '+919999999999', OWNER_ADMIN_EMAIL);
+        } catch {
+          // ignore
+        }
+      }
+      setIsAuthenticated(true);
+      sessionStorage.setItem('akselling_admin_unlocked', 'true');
+      setPinError(false);
+      setPinInput('');
     } else {
       setPinError(true);
     }
@@ -497,35 +475,12 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
             </div>
             <h2 className="text-xl font-black text-white">AKSelling Admin Master Panel</h2>
             <p className="text-xs text-gray-300 mt-1 max-w-xs mx-auto">
-              Verified Owner: <span className="text-amber-300 font-bold">{OWNER_ADMIN_EMAIL}</span>. Activate panel with 1-click or master passcode.
+              एडमिन पैनल केवल अधिकृत पासवर्ड द्वारा खुलेगा। कृपया सही पासवर्ड दर्ज करें।
             </p>
-          </div>
-
-          {/* 1-Click Instant Activation for Store Owner */}
-          <div className="p-1">
-            <button
-              type="button"
-              onClick={handleInstantOwnerActivate}
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm py-3.5 px-4 rounded-2xl shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/50"
-            >
-              <Sparkles size={18} className="text-yellow-300 animate-pulse" />
-              <span>⚡ 1-Click Activate Admin Panel</span>
-            </button>
-            <p className="text-[11px] text-emerald-300 font-medium mt-1.5">
-              Direct Owner Activation: Instantly open with full controls as Anoj Kumar Yadav
-            </p>
-          </div>
-
-          <div className="relative flex py-1 items-center">
-            <div className="flex-grow border-t border-gray-700"></div>
-            <span className="flex-shrink mx-3 text-[10px] text-gray-400 uppercase font-black tracking-wider">
-              OR ENTER PASSCODE
-            </span>
-            <div className="flex-grow border-t border-gray-700"></div>
           </div>
 
           <form onSubmit={handleVerifyPin} className="space-y-4">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="relative">
                 <KeyRound size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -537,7 +492,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                     setPinInput(e.target.value);
                     setPinError(false);
                   }}
-                  placeholder="Enter Passcode (e.g. admin)"
+                  placeholder="Enter Admin Password (पासवर्ड दर्ज करें)"
                   className="w-full bg-gray-900 border border-gray-600 focus:border-[#9f2089] rounded-2xl pl-10 pr-11 py-3.5 text-center text-sm font-mono text-white placeholder:text-gray-500 placeholder:text-xs outline-none transition-all shadow-inner"
                 />
                 <button
@@ -549,12 +504,23 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              <p className="text-[11px] text-gray-400">
-                Quick Passcode: <code className="bg-gray-900 px-1.5 py-0.5 rounded text-amber-300 font-mono font-bold">admin</code> or <code className="bg-gray-900 px-1.5 py-0.5 rounded text-amber-300 font-mono font-bold">@@AKSS1#aKSS$$$</code>
-              </p>
+
+              <div className="text-[11px] text-gray-300 bg-gray-900/60 rounded-xl p-2 border border-gray-700/60 text-center">
+                {hasCustomPassword ? (
+                  <span className="text-emerald-300 font-bold flex items-center justify-center gap-1">
+                    <ShieldCheck size={13} className="text-emerald-400" />
+                    <span>कस्टम एडमिन पासवर्ड सक्रिय है (Enter your configured password)</span>
+                  </span>
+                ) : (
+                  <span>
+                    मास्टर पासवर्ड: <code className="bg-gray-800 px-1.5 py-0.5 rounded text-amber-300 font-mono font-bold">@@AKSS1#aKSS$$$</code> (या आपका सेट किया पासवर्ड)
+                  </span>
+                )}
+              </div>
+
               {pinError && (
                 <p className="text-xs text-rose-400 font-bold pt-1 animate-shake">
-                  Access Denied. Please enter valid master passcode or use 1-Click Activate above.
+                  गलत पासवर्ड! कृपया सही एडमिन पासवर्ड डालें या ऊपर 1-Click Activate का प्रयोग करें।
                 </p>
               )}
             </div>
@@ -564,7 +530,7 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
               className="w-full bg-gradient-to-r from-[#9f2089] to-pink-600 hover:from-[#851b73] hover:to-pink-700 text-white font-black text-sm py-3.5 rounded-2xl shadow-lg shadow-pink-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Unlock size={18} />
-              <span>Unlock Admin Panel</span>
+              <span>Unlock Admin Panel (एडमिन खोलें)</span>
             </button>
           </form>
 
@@ -940,21 +906,29 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div
-            className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5"
-            title="Enterprise Passcode: Active & Protected"
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => setAdminTab('security')}
+            className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border flex items-center gap-1 transition-all cursor-pointer shadow-xs ${
+              adminTab === 'security'
+                ? 'bg-purple-700 text-white border-purple-800'
+                : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200'
+            }`}
+            title="एडमिन पासवर्ड बदलें या नया सेट करें"
           >
-            <ShieldCheck size={14} className="text-emerald-600" />
-            <span className="hidden sm:inline">Hardened Passcode: Active</span>
-          </div>
+            <KeyRound size={13} />
+            <span>पासवर्ड बदलें</span>
+          </button>
 
           <button
+            type="button"
             onClick={() => {
-              sessionStorage.removeItem('akselling_admin_unlocked');
+              lockAdminPanelSession();
               setIsAuthenticated(false);
             }}
-            className="text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-xl border border-rose-100 flex items-center gap-1 transition-all cursor-pointer"
+            className="text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-xl border border-rose-200 flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+            title="एडमिन पैनल तुरंत लॉक करें"
           >
             <Lock size={14} />
             <span>Lock</span>
@@ -1123,6 +1097,19 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         >
           <Truck size={13} />
           <span>Orders & Dispatch</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('security')}
+          className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
+            adminTab === 'security'
+              ? 'bg-purple-700 text-white shadow-xs ring-2 ring-purple-300'
+              : 'text-purple-900 bg-purple-50 hover:bg-purple-100'
+          }`}
+        >
+          <KeyRound size={13} />
+          <span>सुरक्षा / पासवर्ड</span>
         </button>
       </div>
 
@@ -2491,6 +2478,16 @@ export default function AdminPanel({ onBack, initialTab }: AdminPanelProps) {
         {/* TAB 10: AUTOMATED SHIPPING & ORDER LOGISTICS */}
         {adminTab === 'shipping' && (
           <AdminShippingLogistics />
+        )}
+
+        {/* TAB 11: ADMIN SECURITY & PASSWORD SETTINGS */}
+        {adminTab === 'security' && (
+          <AdminSecuritySettings
+            onLockNow={() => {
+              lockAdminPanelSession();
+              setIsAuthenticated(false);
+            }}
+          />
         )}
       </div>
     </div>

@@ -111,13 +111,13 @@ export default function AccountPage({
   const getActiveWalletBalance = useCallback(() => {
     const uid = user?.id || 'guest';
     const cached = getLocalWalletCache(uid);
-    if (typeof user?.walletBalance === 'number' && user.walletBalance > 0) {
+    if (typeof user?.walletBalance === 'number') {
       return user.walletBalance;
     }
-    if (typeof cached.walletBalance === 'number' && cached.walletBalance > 0) {
+    if (typeof cached.walletBalance === 'number') {
       return cached.walletBalance;
     }
-    return SIGNUP_BONUS_FLAT; // Guaranteed ₹30 welcome bonus
+    return SIGNUP_BONUS_FLAT;
   }, [user?.id, user?.walletBalance]);
 
   const [walletBalance, setWalletBalance] = useState<number>(getActiveWalletBalance);
@@ -485,10 +485,6 @@ export default function AccountPage({
           <div className="bg-white rounded-2xl border border-gray-100 shadow-2xs overflow-hidden">
             <button
               onClick={() => {
-                if (isVerifiedOwnerAdmin(user?.email)) {
-                  sessionStorage.setItem('akselling_admin_unlocked', 'true');
-                  localStorage.setItem('akselling_admin_unlocked', 'true');
-                }
                 if (onOpenAdminWithTab) {
                   onOpenAdminWithTab('products');
                 } else {
