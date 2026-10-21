@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, Gift, Calendar, Trophy, ShoppingBag, Zap } from 'lucide-react';
+import { ChevronRight, Gift, Calendar, Trophy, ShoppingBag, Zap, Sparkles } from 'lucide-react';
 import { products as fallbackProducts, getAllCategories, fetchProducts, formatPrice, deduplicateProducts, banners as defaultBanners } from '@/data';
 import { subscribeProducts, getCachedProducts, subscribeCategories } from '@/firebase';
 import { fetchBanners } from '@/banner-api';
@@ -11,6 +11,7 @@ import FlashDropSection from '@/components/flash-drop/FlashDropSection';
 import { CottonShowcaseBox, StreetwearShowcaseBox, PrintingShowcaseBox } from '@/components/FeaturedShowcaseBoxes';
 import BannerCarousel from '@/components/BannerCarousel';
 import UrgencyTimerBar from '@/components/UrgencyTimerBar';
+import CustomApparelStudioModal from '@/components/custom-studio/CustomApparelStudioModal';
 
 interface HomePageProps {
   searchQuery: string;
@@ -36,6 +37,7 @@ export default function HomePage({
   const [activeCategories, setActiveCategories] = useState<Category[]>(() => getAllCategories());
   const [loading, setLoading] = useState(() => getCachedProducts().length === 0);
   const [bannersList, setBannersList] = useState<Banner[]>(() => defaultBanners);
+  const [showCustomStudio, setShowCustomStudio] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -147,7 +149,7 @@ export default function HomePage({
         }
       }
 
-      if (result.length < targetCount && allProducts.length >= targetCount) {
+      if (result.length < targetCount) {
         for (const p of allProducts) {
           if (!seenIds.has(p.id)) {
             seenIds.add(p.id);
@@ -155,6 +157,18 @@ export default function HomePage({
             if (result.length >= targetCount) break;
           }
         }
+      }
+
+      // Guarantee at least targetCount (4) products in the box
+      const pool = primaryList.length > 0 ? primaryList : allProducts;
+      let padIdx = 0;
+      while (result.length < targetCount && pool.length > 0) {
+        const item = pool[padIdx % pool.length];
+        result.push({
+          ...item,
+          id: `${item.id}-shelfpad-${result.length}`,
+        });
+        padIdx++;
       }
 
       return result;
@@ -373,6 +387,40 @@ export default function HomePage({
               <span className="text-[11px] font-black text-slate-900 block leading-tight truncate">Spin & Win</span>
               <span className="text-[10px] font-bold text-purple-700">Win Up to ₹200</span>
             </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Custom Text & 50+ Fonts Studio + Virtual Try-On Banner */}
+      <div className="mt-3 px-3">
+        <div
+          onClick={() => setShowCustomStudio(true)}
+          className="bg-gradient-to-r from-slate-950 via-[#1b365d] to-slate-900 rounded-2xl p-3.5 text-white shadow-md border border-amber-400/40 flex items-center justify-between gap-3 cursor-pointer hover:border-amber-400/80 transition-all active:scale-[0.99] group relative overflow-hidden"
+        >
+          <div className="flex items-center gap-3 min-w-0 z-10">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-400 to-orange-500 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0 group-hover:scale-105 transition-transform">
+              <Sparkles size={22} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs sm:text-sm font-black tracking-tight text-white uppercase">
+                  Custom Apparel & 50+ Fonts Studio
+                </span>
+                <span className="bg-amber-400 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                  300 DPI DTF
+                </span>
+              </div>
+              <p className="text-[11px] text-blue-200 mt-0.5 truncate">
+                Type your name in stylish cursive/streetwear • 📸 Try on your selfie live
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl shadow-md shrink-0 z-10 transition-transform group-hover:translate-x-0.5 cursor-pointer flex items-center gap-1"
+          >
+            <span>Open Studio</span>
+            <ChevronRight size={14} />
           </button>
         </div>
       </div>
@@ -737,6 +785,17 @@ export default function HomePage({
             </div>
           )}
         </>
+      )}
+
+      {/* Custom Apparel Print & Virtual Try-On Studio Modal */}
+      {showCustomStudio && (
+        <CustomApparelStudioModal
+          isOpen={showCustomStudio}
+          onClose={() => setShowCustomStudio(false)}
+          onBuyCustomTshirt={(customProd) => {
+            onProductClick(customProd);
+          }}
+        />
       )}
     </div>
   );

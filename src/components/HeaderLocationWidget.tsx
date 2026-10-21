@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, ChevronDown, X, Check, Loader2 } from 'lucide-react';
+import { MapPin, ChevronDown, X, Check, Loader2, Navigation } from 'lucide-react';
 import { lookupPincode, getStoredDeliveryLocation, setStoredDeliveryLocation, type PincodeInfo } from '@/utils/pincode';
+import InteractiveMapAddressPicker, { type SelectedMapAddress } from '@/components/address/InteractiveMapAddressPicker';
 import { useAuth } from '@/auth-context';
 
 export default function HeaderLocationWidget() {
@@ -11,6 +12,36 @@ export default function HeaderLocationWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [previewInfo, setPreviewInfo] = useState<PincodeInfo | null>(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+
+  const handleSelectMapAddress = async (addr: SelectedMapAddress) => {
+    if (addr.pincode) {
+      try {
+        const info = await lookupPincode(addr.pincode);
+        if (info) {
+          setLocation(info);
+          setStoredDeliveryLocation(info);
+        } else {
+          const customInfo: PincodeInfo = {
+            pincode: addr.pincode,
+            city: addr.city,
+            state: addr.state,
+            district: addr.city,
+            officeName: addr.street || addr.city,
+            deliveryAvailable: true,
+            codAvailable: true,
+            estimatedDays: 2,
+          };
+          setLocation(customInfo);
+          setStoredDeliveryLocation(customInfo);
+        }
+      } catch {
+        // silent
+      }
+    }
+    setShowMapPicker(false);
+    setIsOpen(false);
+  };
 
   // Sync if saved address exists in user profile
   useEffect(() => {
@@ -150,6 +181,26 @@ export default function HeaderLocationWidget() {
                 Enter your pincode to check product availability and accurate delivery timelines for your area.
               </p>
 
+              {/* Interactive Map & GPS Button */}
+              <button
+                type="button"
+                onClick={() => setShowMapPicker(true)}
+                className="w-full bg-gradient-to-r from-slate-950 via-[#1b365d] to-slate-900 text-white rounded-xl p-2.5 flex items-center justify-between shadow-xs border border-blue-400/30 hover:border-blue-400 transition-all text-xs font-bold cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0">
+                    <Navigation size={14} />
+                  </div>
+                  <div className="text-left">
+                    <span className="block leading-tight text-white font-extrabold">Use Interactive Map & GPS</span>
+                    <span className="text-[10px] text-blue-200">Auto-detect accurate location</span>
+                  </div>
+                </div>
+                <span className="text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-md">
+                  Pick Spot
+                </span>
+              </button>
+
               {/* Pincode Input Box */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
@@ -261,6 +312,17 @@ export default function HeaderLocationWidget() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Interactive Map & GPS Auto-Address Detection Modal */}
+      {showMapPicker && (
+        <InteractiveMapAddressPicker
+          initialPincode={location.pincode}
+          initialCity={location.city}
+          initialState={location.state}
+          onSelectAddress={handleSelectMapAddress}
+          onClose={() => setShowMapPicker(false)}
+        />
       )}
     </>
   );

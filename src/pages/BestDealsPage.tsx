@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Flame, ArrowUpDown, Zap, CheckCircle2, ShieldCheck, ChevronLeft, Sparkles } from 'lucide-react';
 import { subscribeProducts, getCachedProducts } from '@/firebase';
 import { fetchProducts, products as fallbackProducts, deduplicateProducts } from '@/data';
-import type { Product } from '@/types';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
+import { updateDynamicSeo } from '@/components/seo/SeoHeadManager';
 
 interface BestDealsPageProps {
   onProductClick: (product: Product) => void;
@@ -21,6 +21,7 @@ export default function BestDealsPage({ onProductClick, onNavigateHome }: BestDe
 
   // Real-time synchronization (Fixed: mounted once with stable subscription)
   useEffect(() => {
+    updateDynamicSeo('deals');
     let isMounted = true;
     if (dbProducts.length === 0) {
       setLoading(true);

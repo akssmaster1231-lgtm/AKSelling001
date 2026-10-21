@@ -36,7 +36,9 @@ import {
   ArrowUpRight,
   Coins,
   Sparkles,
+  Navigation,
 } from 'lucide-react';
+import InteractiveMapAddressPicker, { type SelectedMapAddress } from '@/components/address/InteractiveMapAddressPicker';
 import { useAuth, type AddressEntry, type CardEntry } from '@/auth-context';
 import { useCart } from '@/cart-context';
 import { useI18n, type Language } from '@/i18n';
@@ -907,6 +909,7 @@ function AddressesScreen({
   removeAddress: (id: string) => Promise<void>;
 }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [form, setForm] = useState({ label: 'Home', name: '', phone: '', address: '', city: '', pincode: '' });
 
   const handleAdd = async () => {
@@ -916,8 +919,46 @@ function AddressesScreen({
     setForm({ label: 'Home', name: '', phone: '', address: '', city: '', pincode: '' });
   };
 
+  const handleSelectMapAddress = (mapAddr: SelectedMapAddress) => {
+    const fullStreet = [mapAddr.houseNo, mapAddr.street, mapAddr.landmark ? `Near ${mapAddr.landmark}` : '']
+      .filter(Boolean)
+      .join(', ');
+
+    setForm((prev) => ({
+      ...prev,
+      name: mapAddr.name || prev.name,
+      phone: mapAddr.phone || prev.phone,
+      label: mapAddr.addressType || prev.label || 'Home',
+      address: fullStreet || prev.address,
+      city: mapAddr.city || prev.city,
+      pincode: mapAddr.pincode || prev.pincode,
+    }));
+    setShowAdd(true);
+  };
+
   return (
     <div className="space-y-3">
+      {/* Interactive Map Quick Action Banner */}
+      <div className="bg-gradient-to-r from-slate-950 via-[#1b365d] to-slate-900 rounded-2xl p-3 text-white shadow-md border border-blue-400/30 flex items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shrink-0 shadow-inner">
+            <MapPin size={20} className="fill-amber-400 text-slate-950" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-xs font-black tracking-tight text-white uppercase block">Interactive Map & GPS Pin</span>
+            <p className="text-[11px] text-blue-200 truncate">Pick exact doorstep on map</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowMapPicker(true)}
+          className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 active:scale-95 text-slate-950 font-black text-xs px-3 py-2 rounded-xl shadow-md transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
+        >
+          <Navigation size={13} />
+          <span>Pick on Map</span>
+        </button>
+      </div>
+
       {profile.addresses.length === 0 && !showAdd && (
         <EmptyState icon={<MapPin size={40} />} text="No saved addresses yet" />
       )}
@@ -1037,6 +1078,17 @@ function AddressesScreen({
         >
           <Plus size={18} /> Add New Address
         </button>
+      )}
+
+      {/* Interactive Map & GPS Auto-Address Detection Modal */}
+      {showMapPicker && (
+        <InteractiveMapAddressPicker
+          initialPincode={form.pincode}
+          initialAddress={form.address}
+          initialCity={form.city}
+          onSelectAddress={handleSelectMapAddress}
+          onClose={() => setShowMapPicker(false)}
+        />
       )}
     </div>
   );

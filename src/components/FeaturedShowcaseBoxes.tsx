@@ -17,7 +17,18 @@ export const CottonShowcaseBox: React.FC<ShowcaseBoxProps> = ({
   onProductClick,
   className = '',
 }) => {
-  const cottonItems = products;
+  const cottonItems = React.useMemo(() => {
+    if (!products || products.length === 0) return [];
+    if (products.length >= 4) return products;
+    const items = [...products];
+    let i = 0;
+    while (items.length < 4 && products.length > 0) {
+      const p = products[i % products.length];
+      items.push({ ...p, id: `${p.id}-cotton-pad-${items.length}` });
+      i++;
+    }
+    return items;
+  }, [products]);
 
   if (cottonItems.length === 0) return null;
 
@@ -109,7 +120,18 @@ export const StreetwearShowcaseBox: React.FC<ShowcaseBoxProps> = ({
   onProductClick,
   className = '',
 }) => {
-  const streetwearItems = products;
+  const streetwearItems = React.useMemo(() => {
+    if (!products || products.length === 0) return [];
+    if (products.length >= 4) return products;
+    const items = [...products];
+    let i = 0;
+    while (items.length < 4 && products.length > 0) {
+      const p = products[i % products.length];
+      items.push({ ...p, id: `${p.id}-street-pad-${items.length}` });
+      i++;
+    }
+    return items;
+  }, [products]);
 
   if (streetwearItems.length === 0) return null;
 
@@ -215,7 +237,16 @@ export const PrintingShowcaseBox: React.FC<ShowcaseBoxProps> = ({
             t.toLowerCase().includes('graphic')
         )
     );
-    return (matched.length >= 2 ? matched : products.slice(2)).slice(0, 12);
+    const pool = matched.length >= 2 ? matched : products;
+    if (pool.length === 0) return [];
+    const items = [...pool];
+    let i = 0;
+    while (items.length < 4 && pool.length > 0) {
+      const p = pool[i % pool.length];
+      items.push({ ...p, id: `${p.id}-print-pad-${items.length}` });
+      i++;
+    }
+    return items.slice(0, 12);
   }, [products]);
 
   if (printItems.length === 0) return null;

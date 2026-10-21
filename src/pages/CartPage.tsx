@@ -39,6 +39,8 @@ import { processReferralRewardOnOrder } from '@/utils/referralService';
 import { MilestoneCelebrationModal } from '@/components/MilestoneCelebrationModal';
 import { ScratchCardModal } from '@/components/ScratchCardModal';
 import TrustBadges from '@/components/trust/TrustBadges';
+import InteractiveMapAddressPicker, { type SelectedMapAddress } from '@/components/address/InteractiveMapAddressPicker';
+import InteractiveAddressManagerModal from '@/components/address/InteractiveAddressManagerModal';
 import type { Product, CartItem } from '@/types';
 
 interface CartPageProps {
@@ -75,6 +77,8 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
   const [isAddingNewAddress, setIsAddingNewAddress] = useState(false);
   const [saveAddressToProfile, setSaveAddressToProfile] = useState(true);
   const [isPaymentAuthorizing, setIsPaymentAuthorizing] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [showAddressManagerModal, setShowAddressManagerModal] = useState(false);
 
   const [form, setForm] = useState({
     name: user?.name || '',
@@ -145,6 +149,76 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
       }
     } else {
       setPincodeSuccess('');
+    }
+  };
+
+  const handleSelectMapAddress = async (mapAddr: SelectedMapAddress) => {
+    setForm((prev) => ({
+      ...prev,
+      name: mapAddr.name || prev.name,
+      phone: mapAddr.phone || prev.phone,
+      houseNo: mapAddr.houseNo || prev.houseNo,
+      street: mapAddr.street || prev.street,
+      landmark: mapAddr.landmark || prev.landmark,
+      city: mapAddr.city || prev.city,
+      state: mapAddr.state || prev.state,
+      pincode: mapAddr.pincode || prev.pincode,
+      addressType: mapAddr.addressType || prev.addressType,
+    }));
+    setIsAddingNewAddress(false);
+    setSelectedAddressId(null);
+
+    // Save to user addresses for persistence
+    if (addAddress) {
+      try {
+        await addAddress({
+          name: mapAddr.name || form.name || 'Recipient',
+          phone: mapAddr.phone || form.phone,
+          label: mapAddr.addressType,
+          address: `${mapAddr.houseNo ? mapAddr.houseNo + ', ' : ''}${mapAddr.street}${mapAddr.landmark ? ', Near ' + mapAddr.landmark : ''}`,
+          city: mapAddr.city,
+          pincode: mapAddr.pincode,
+        });
+      } catch (err) {
+        console.warn('Failed to save to profile addresses:', err);
+      }
+    }
+
+    if (mapAddr.pincode) {
+      handlePincodeChange(mapAddr.pincode);
+    }
+  };
+
+  const handleAddressSelectedFromManager = (addr: {
+    id?: string;
+    name: string;
+    phone: string;
+    houseNo: string;
+    street: string;
+    landmark?: string;
+    city: string;
+    state: string;
+    pincode: string;
+    addressType: 'Home' | 'Work' | 'Other';
+  }) => {
+    setForm((prev) => ({
+      ...prev,
+      name: addr.name || prev.name,
+      phone: addr.phone || prev.phone,
+      houseNo: addr.houseNo || prev.houseNo,
+      street: addr.street || prev.street,
+      landmark: addr.landmark || prev.landmark,
+      city: addr.city || prev.city,
+      state: addr.state || prev.state,
+      pincode: addr.pincode || prev.pincode,
+      addressType: addr.addressType || prev.addressType,
+    }));
+    if (addr.id) {
+      setSelectedAddressId(addr.id);
+      setIsAddingNewAddress(false);
+    }
+    if (addr.pincode) {
+      handlePincodeChange(addr.pincode);
     }
   };
 
@@ -575,6 +649,64 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
               <span className="text-[11px] font-semibold text-flipkart-600 bg-flipkart-50 px-2.5 py-1 rounded-full">
                 Step 1 of 2
               </span>
+            </div>
+
+            {/* Active Delivery Address Card with prominent CHANGE Button */}
+            <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white rounded-2xl p-3.5 border border-blue-200/80 flex items-start justify-between gap-2.5 shadow-2xs">
+              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-flipkart-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                  <MapPin size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Deliver to:</span>
+                    <span className="text-xs sm:text-sm font-black text-gray-900 truncate">
+                      {form.name || user?.name || 'Set Delivery Recipient'}
+                    </span>
+                    <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-white border border-gray-200 text-gray-700 uppercase">
+                      {form.addressType || 'Home'}
+                    </span>
+                    {form.phone && (
+                      <span className="text-xs text-gray-500 font-semibold">• +91 {form.phone}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1 line-clamp-2 leading-relaxed">
+                    {[form.houseNo, form.street, form.landmark, form.city, form.state ? `${form.state} - ${form.pincode}` : form.pincode].filter(Boolean).join(', ') || 'No address added yet. Use map or saved addresses below.'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddressManagerModal(true)}
+                className="bg-white hover:bg-flipkart-50 text-flipkart-600 hover:text-flipkart-700 font-black text-xs px-3 py-1.5 rounded-xl border border-flipkart-200 transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95"
+              >
+                Change
+              </button>
+            </div>
+
+            {/* Interactive Map & GPS Auto-Address Action Banner */}
+            <div className="bg-gradient-to-r from-slate-950 via-[#1b365d] to-slate-900 rounded-2xl p-3 text-white shadow-md border border-blue-400/30 flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shrink-0 shadow-inner">
+                  <MapPin size={20} className="fill-amber-400 text-slate-950" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-black tracking-tight text-white uppercase">Instant Map & Pin Drop</span>
+                    <span className="bg-emerald-500 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full">GPS FREE</span>
+                  </div>
+                  <p className="text-[11px] text-blue-200 truncate">Select exact spot on interactive map</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMapPicker(true)}
+                className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 active:scale-95 text-slate-950 font-black text-xs px-3 py-2 rounded-xl shadow-md transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
+              >
+                <Navigation size={13} />
+                <span>Select on Map</span>
+              </button>
             </div>
 
             {/* Real Saved Addresses from User Profile */}
@@ -1320,6 +1452,40 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
           </div>
           <TrustBadges variant="checkout" className="mt-3" />
         </div>
+      )}
+
+      {/* Interactive Address Manager Modal */}
+      <InteractiveAddressManagerModal
+        isOpen={showAddressManagerModal}
+        onClose={() => setShowAddressManagerModal(false)}
+        addresses={user?.addresses || []}
+        selectedAddressId={selectedAddressId}
+        currentAddressSummary={{
+          name: form.name,
+          phone: form.phone,
+          houseNo: form.houseNo,
+          street: form.street,
+          city: form.city,
+          state: form.state,
+          pincode: form.pincode,
+          addressType: form.addressType,
+        }}
+        onSelectAddress={handleAddressSelectedFromManager}
+        onAddNewAddressToProfile={addAddress}
+      />
+
+      {/* Interactive Map & GPS Auto-Address Detection Modal */}
+      {showMapPicker && (
+        <InteractiveMapAddressPicker
+          initialName={form.name || user?.name || ''}
+          initialPhone={form.phone || user?.phone || ''}
+          initialPincode={form.pincode}
+          initialAddress={form.houseNo || form.street}
+          initialCity={form.city}
+          initialState={form.state}
+          onSelectAddress={handleSelectMapAddress}
+          onClose={() => setShowMapPicker(false)}
+        />
       )}
     </div>
   );

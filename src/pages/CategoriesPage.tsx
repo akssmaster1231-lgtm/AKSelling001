@@ -5,6 +5,7 @@ import { subscribeCategories, subscribeProducts } from '@/firebase';
 import type { Product, Category } from '@/types';
 import ProductCard, { ProductCardSkeleton } from '@/components/ProductCard';
 import CategoryIcon from '@/components/CategoryIcon';
+import { updateDynamicSeo } from '@/components/seo/SeoHeadManager';
 
 interface CategoriesPageProps {
   onProductClick: (product: Product) => void;
@@ -41,6 +42,10 @@ export default function CategoriesPage({ onProductClick, initialCategory }: Cate
 
   useEffect(() => {
     let cancelled = false;
+    const activeCatObj = allCategories.find((c) => c.id === selectedCategory);
+    const catName = activeCatObj?.name || selectedCategory;
+    updateDynamicSeo({ pageView: 'category', category: catName });
+
     const loadCategoryProducts = async () => {
       setLoading(true);
       const data = await fetchProductsByCategory(selectedCategory);

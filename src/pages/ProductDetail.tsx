@@ -12,6 +12,7 @@ import {
   Check,
   Ruler,
   X,
+  Sparkles,
 } from 'lucide-react';
 import type { Product } from '@/types';
 import { formatPrice, formatCount } from '@/data';
@@ -30,6 +31,8 @@ import TrustBadges from '@/components/trust/TrustBadges';
 import ProductReviewsSection from '@/components/reviews/ProductReviewsSection';
 import UrgencyTimerBar from '@/components/UrgencyTimerBar';
 import EffectivePriceCalculator from '@/components/EffectivePriceCalculator';
+import CustomApparelStudioModal from '@/components/custom-studio/CustomApparelStudioModal';
+import { updateDynamicSeo } from '@/components/seo/SeoHeadManager';
 
 interface ProductDetailProps {
   product: Product;
@@ -41,8 +44,12 @@ interface ProductDetailProps {
 export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }: ProductDetailProps) {
   const sizeSelectorRef = useRef<HTMLDivElement>(null);
   const [dynamicRating, setDynamicRating] = useState(() => calculateProductDynamicRating(product));
+  const [showCustomStudio, setShowCustomStudio] = useState(false);
 
   useEffect(() => {
+    if (product) {
+      updateDynamicSeo(product);
+    }
     setDynamicRating(calculateProductDynamicRating(product));
     const handleReviewsUpdated = (e: Event) => {
       const custom = e as CustomEvent<{ productId?: string }>;
@@ -203,6 +210,33 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
       {/* Live Flipkart-Style Ticking Urgency Countdown Bar Directly Below Image */}
       <div className="px-3 pt-2">
         <UrgencyTimerBar variant="productDetail" />
+      </div>
+
+      {/* Custom Text Print & Virtual Try-On Banner */}
+      <div className="px-3 pt-2">
+        <div
+          onClick={() => setShowCustomStudio(true)}
+          className="bg-gradient-to-r from-slate-950 via-[#1b365d] to-slate-900 rounded-2xl p-3 text-white shadow-md border border-amber-400/30 flex items-center justify-between gap-2.5 cursor-pointer hover:border-amber-400/60 transition-all active:scale-[0.99] group"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-400 to-orange-500 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0 group-hover:scale-105 transition-transform">
+              <Sparkles size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-black tracking-tight text-white uppercase">Custom Name & 50+ Fonts</span>
+                <span className="bg-amber-400 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full">300 DPI</span>
+              </div>
+              <p className="text-[11px] text-blue-200 truncate">📸 Virtual Try-On on your selfie before buying</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-3 py-1.5 rounded-xl shadow-md shrink-0 transition-transform group-hover:translate-x-0.5 cursor-pointer"
+          >
+            Try Studio →
+          </button>
+        </div>
       </div>
 
       {/* Product Info */}
@@ -664,6 +698,18 @@ export default function ProductDetail({ product, onBack, onBuyNow, onGoToCart }:
         onClose={() => setShowShareModal(false)}
         product={product}
       />
+
+      {/* Custom Text Print & Virtual Try-On Studio Modal */}
+      {showCustomStudio && (
+        <CustomApparelStudioModal
+          isOpen={showCustomStudio}
+          onClose={() => setShowCustomStudio(false)}
+          baseProduct={product}
+          onBuyCustomTshirt={(customProd) => {
+            onBuyNow(customProd, selectedSize, selectedColor);
+          }}
+        />
+      )}
     </div>
   );
 }
