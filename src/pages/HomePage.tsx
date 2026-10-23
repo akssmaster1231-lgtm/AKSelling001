@@ -17,6 +17,7 @@ interface HomePageProps {
   searchQuery: string;
   onProductClick: (product: Product) => void;
   onCategoryClick: (categoryId: string) => void;
+  onBuyNow?: (product: Product, size?: string, color?: string) => void;
   onNavigateDeals?: () => void;
   onBecomeSeller?: () => void;
   onOpenStreak?: () => void;
@@ -27,6 +28,7 @@ export default function HomePage({
   searchQuery,
   onProductClick,
   onCategoryClick,
+  onBuyNow,
   onNavigateDeals,
   onBecomeSeller,
   onOpenStreak,
@@ -793,7 +795,11 @@ export default function HomePage({
           isOpen={showCustomStudio}
           onClose={() => setShowCustomStudio(false)}
           onBuyCustomTshirt={(customProd) => {
-            onProductClick(customProd);
+            if (onBuyNow) {
+              onBuyNow(customProd, 'L', customProd.colors?.[0] || 'Jet Black (180 GSM)');
+            } else {
+              onProductClick(customProd);
+            }
           }}
         />
       )}

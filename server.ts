@@ -3590,8 +3590,134 @@ Customer context: ${JSON.stringify(customerContext || {})}`;
   });
 
   // -------------------------------------------------------------
-  // VITE DEV SERVER / STATIC ASSET SERVING
+  // OPENAI CHATGPT APPAREL SLOGAN & TEXT GENERATOR
   // -------------------------------------------------------------
+  function getCuratedSlogansByTopic(topic: string) {
+    const t = topic.toLowerCase();
+    if (t.includes('gym') || t.includes('fit') || t.includes('workout') || t.includes('muscle') || t.includes('iron')) {
+      return [
+        { slogan: 'BEAST MODE: ON', subtext: 'RELENTLESS WORKOUT ETHIC • 5:00 AM CLUB', category: 'gym', mood: 'Hardcore Gym', recommendedFont: 'anton' },
+        { slogan: 'IRON WILL', subtext: 'DISCIPLINE OVER MOTIVATION • HEAVYWEIGHT 240 GSM', category: 'gym', mood: 'Deadlift Power', recommendedFont: 'varsity_block' },
+        { slogan: 'NO PAIN NO GAIN', subtext: 'SUFFER TODAY • DOMINATE TOMORROW', category: 'gym', mood: 'Unstoppable', recommendedFont: 'bungee' },
+        { slogan: 'SHREDDED SOUL', subtext: 'SCULPTED IN SILENCE • RESPECT THE PROCESS', category: 'gym', mood: 'Aesthetics', recommendedFont: 'cinzel' },
+        { slogan: '1 MORE REP', subtext: 'WHEN YOUR MIND QUITS • YOUR HEART CONTINUES', category: 'gym', mood: 'Grit', recommendedFont: 'bebas_neue' },
+      ];
+    }
+    if (t.includes('hindi') || t.includes('swag') || t.includes('desi') || t.includes('banna') || t.includes('rajput')) {
+      return [
+        { slogan: 'BANNA HUKUM', subtext: 'RAJPUTANA BLOODLINE • ROYALTY SINCE 1540', category: 'banna', mood: 'Royal Rajputana', recommendedFont: 'cinzel' },
+        { slogan: 'DESI KALAKAAR', subtext: 'INDORE TO THE WORLD • RAW STREET CULTURE', category: 'desi', mood: 'Gully Swag', recommendedFont: 'permanent_marker' },
+        { slogan: 'APNA TIME AAYEGA', subtext: 'HUSTLE IN SILENCE • LET SUCCESS ROAR', category: 'desi', mood: 'Underdog Motivation', recommendedFont: 'anton' },
+        { slogan: 'INDORI BHIYA', subtext: 'POHA JALEBI & CHAI SPECIALIST • 56 DUKAAN', category: 'desi', mood: 'Indore Pride', recommendedFont: 'shrikhand' },
+        { slogan: 'GABRU YAAR', subtext: 'DIL DA NI MAADA • PUNJAB HERITAGE', category: 'desi', mood: 'Lionheart', recommendedFont: 'bebas_neue' },
+      ];
+    }
+    if (t.includes('anime') || t.includes('manga') || t.includes('naruto') || t.includes('saiyan') || t.includes('otaku')) {
+      return [
+        { slogan: 'AKATSUKI ROGUE', subtext: 'KNOW PAIN • FEEL PAIN • CRIMSON CLOUD', category: 'anime', mood: 'Shinobi', recommendedFont: 'audiowide' },
+        { slogan: 'SAIYAN MODE 9000', subtext: 'BEYOND LIMITS • BRED TO CONQUER', category: 'anime', mood: 'Over 9000', recommendedFont: 'faster_one' },
+        { slogan: 'ARISE MONARCH', subtext: 'SHADOW ARMY COMMANDER • S-RANK DUNGEON', category: 'anime', mood: 'Solo Hunter', recommendedFont: 'orbitron' },
+        { slogan: 'HASHIRA FLAME', subtext: 'BREATH OF SUNLIGHT • TOTAL CONCENTRATION', category: 'anime', mood: 'Demon Slayer', recommendedFont: 'cinzel' },
+        { slogan: 'TOKYO SHINIGAMI', subtext: 'DEATH NOTE RECORD • REAPER OF SPIRITS', category: 'anime', mood: 'Dark Manga', recommendedFont: 'russo_one' },
+      ];
+    }
+    if (t.includes('bike') || t.includes('ride') || t.includes('bullet') || t.includes('moto') || t.includes('speed')) {
+      return [
+        { slogan: 'BORN TO RIDE', subtext: 'TWO WHEELS MOVE THE SOUL • ENDLESS HIGHWAY', category: 'biker', mood: 'Free Soul', recommendedFont: 'lobster' },
+        { slogan: 'DUG DUG 350', subtext: 'MADE LIKE A GUN • LADAKH EXPEDITION READY', category: 'biker', mood: 'Bullet Thump', recommendedFont: 'bebas_neue' },
+        { slogan: 'CAFE RACER', subtext: 'TON UP SPEED SHOP • ACE CAFE LONDON 1960', category: 'biker', mood: 'Speed Club', recommendedFont: 'faster_one' },
+        { slogan: 'THROTTLE THERAPY', subtext: 'HEAL THROUGH WIND NOISE • CHAT LESS RIDE MORE', category: 'biker', mood: 'Zen Rider', recommendedFont: 'caveat' },
+        { slogan: 'OUTLAW NOMAD', subtext: 'BROTHERHOOD OF THE ROAD • LEATHER & CHROME', category: 'biker', mood: 'Nomad', recommendedFont: 'russo_one' },
+      ];
+    }
+    if (t.includes('mahakal') || t.includes('shiva') || t.includes('ram') || t.includes('god') || t.includes('bhakti')) {
+      return [
+        { slogan: 'महाकाल', subtext: 'काल के भी काल महाकाल • KAAL BHAIRAV KASHI', category: 'devotional', mood: 'Rudra Shiva', recommendedFont: 'russo_one' },
+        { slogan: 'HAR HAR MAHADEV', subtext: 'ETERNAL SPIRIT • KEDARNATH TO SOMNATH', category: 'devotional', mood: 'Devotional Power', recommendedFont: 'anton' },
+        { slogan: 'JAI SHREE RAM', subtext: 'मर्यादा पुरुषोत्तम • AYODHYA DHAM PRIDE', category: 'devotional', mood: 'Ram Bhakti', recommendedFont: 'bebas_neue' },
+        { slogan: 'OM NAMAH SHIVAYA', subtext: '108 MEDITATIVE CHANTS • INNER TRANSCENDENCE', category: 'devotional', mood: 'Meditative', recommendedFont: 'great_vibes' },
+        { slogan: 'RUDRA SHAKTI', subtext: 'UNLEASH THE FIRE OF TRANSFORMATION', category: 'devotional', mood: 'Cosmic Power', recommendedFont: 'orbitron' },
+      ];
+    }
+    return [
+      { slogan: 'TOKYO 99', subtext: 'SHIBUYA DISTRICT • NIGHT CITY PROTOCOL', category: 'streetwear', mood: 'Cyberpunk', recommendedFont: 'bungee' },
+      { slogan: 'HUMAN ERROR', subtext: 'SERIAL NO: 4902-8819-AKY • 100% COMBED COTTON', category: 'minimal', mood: 'Industrial Aesthetic', recommendedFont: 'anton' },
+      { slogan: 'ACID WAVE', subtext: 'SYNTHETIC DREAMS & NOISE • CHEMICAL BALANCE', category: 'streetwear', mood: 'Acid Rave', recommendedFont: 'righteous' },
+      { slogan: 'STAY HUMBLE', subtext: 'LET ACTIONS PROVE YOUR WORTH • ZERO PRIDE', category: 'minimal', mood: 'Quiet Luxury', recommendedFont: 'montserrat_extrabold' },
+      { slogan: 'UNSTOPPABLE', subtext: 'RESIST MEDIOCRITY • INDORE FACTORY DIRECT', category: 'streetwear', mood: 'Urban Rebel', recommendedFont: 'permanent_marker' },
+    ];
+  }
+
+  app.post('/api/ai/slogan-generator', async (req, res) => {
+    try {
+      const { topic, mood, count = 5 } = req.body;
+      const cleanTopic = String(topic || mood || 'Streetwear Attitude').trim();
+      const apiKey = process.env.OPENAI_API_KEY || process.env.CHATGPT_API_KEY || '';
+
+      if (apiKey && apiKey !== 'your_openai_api_key_here' && apiKey.startsWith('sk-')) {
+        try {
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              response_format: { type: 'json_object' },
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'You are an elite high-fashion streetwear and custom T-shirt typography copywriter for AKSelling apparel brand in India. Generate 5 punchy, viral slogans and matching subtexts for apparel printing based on the topic. Return valid JSON matching schema: { "slogans": [ { "slogan": "string (1-4 words all-caps)", "subtext": "string (supporting aesthetic quote or est year)", "category": "string", "mood": "string", "recommendedFont": "string (one of: bebas_neue, anton, pacifico, great_vibes, russo_one, cinzel, orbitron, permanent_marker)" } ] }',
+                },
+                {
+                  role: 'user',
+                  content: `Generate ${count} killer T-shirt slogans and subtexts for topic: "${cleanTopic}"`,
+                },
+              ],
+              temperature: 0.85,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content;
+            if (content) {
+              const parsed = JSON.parse(content);
+              if (Array.isArray(parsed.slogans) && parsed.slogans.length > 0) {
+                return res.json({ success: true, slogans: parsed.slogans, source: 'openai' });
+              }
+            }
+          } else {
+            const errData = await response.text();
+            console.warn('[OpenAI Slogan] API response not ok, falling back:', errData);
+          }
+        } catch (openAiErr) {
+          console.warn('[OpenAI Slogan] Network exception, falling back:', openAiErr);
+        }
+      }
+
+      // High quality curated generator fallback
+      const curatedSlogans = getCuratedSlogansByTopic(cleanTopic);
+      res.json({ success: true, slogans: curatedSlogans, source: 'curated' });
+    } catch (err: unknown) {
+      console.error('Slogan generator error:', err);
+      const msg = err instanceof Error ? err.message : 'Error generating slogans';
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // CANVA CONNECT CONFIG ENDPOINT
+  // -------------------------------------------------------------
+  app.get('/api/canva/config', (_req, res) => {
+    const rawKey = process.env.CANVA_CLIENT_ID || process.env.VITE_CANVA_CLIENT_ID || '';
+    res.json({
+      clientId: rawKey || 'canva_default_demo_client_id',
+      isConfigured: Boolean(rawKey && rawKey !== 'your_canva_client_id_here'),
+    });
+  });
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

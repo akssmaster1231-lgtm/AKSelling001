@@ -513,6 +513,7 @@ function AppContent() {
               searchQuery={searchQuery}
               onProductClick={handleProductClick}
               onCategoryClick={handleCategoryClick}
+              onBuyNow={handleInitiateBuyNow}
               onNavigateDeals={() => setActiveTab('deals')}
               onBecomeSeller={handleOpenSellerMode}
               onOpenStreak={() => setShowStreakModal(true)}
