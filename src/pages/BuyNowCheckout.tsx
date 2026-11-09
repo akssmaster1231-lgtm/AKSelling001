@@ -266,15 +266,29 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
     };
   }, []);
 
+  // Diwali Festive Coupon State (Code SHUBHLAXMI or DIWALI2026)
+  const [appliedDiwaliCoupon, setAppliedDiwaliCoupon] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem('akselling_diwali_applied_coupon');
+      return saved === 'false' ? null : 'SHUBHLAXMI';
+    } catch {
+      return 'SHUBHLAXMI';
+    }
+  });
+
+  const diwaliDiscountAmount = (appliedDiwaliCoupon === 'SHUBHLAXMI' || appliedDiwaliCoupon === 'DIWALI2026')
+    ? Math.round((product.price * quantity * 20) / 100)
+    : 0;
+
   const spinDiscountAmount = spinDiscount && spinDiscount.discountPercent > 0
     ? Math.round((product.price * quantity * spinDiscount.discountPercent) / 100)
     : 0;
 
   const groupDiscount = activeGroupBuy ? Math.round((product.price * quantity * 15) / 100) : 0;
   const baseTotalAmount = product.price * quantity;
-  const totalAmount = Math.max(1, baseTotalAmount - groupDiscount - spinDiscountAmount);
+  const totalAmount = Math.max(1, baseTotalAmount - groupDiscount - spinDiscountAmount - diwaliDiscountAmount);
   const mrpTotal = product.mrp * quantity;
-  const discount = (mrpTotal - baseTotalAmount) + groupDiscount + spinDiscountAmount;
+  const discount = (mrpTotal - baseTotalAmount) + groupDiscount + spinDiscountAmount + diwaliDiscountAmount;
   // Immutable Flat Delivery Charge: ₹30
   const deliveryFee = 30;
 
@@ -1398,6 +1412,25 @@ export default function BuyNowCheckout({ product, quantity, selectedSize, select
               <div className="p-4 space-y-2.5">
                 <Row label={`${t('price')} (${quantity} item)`} value={formatPrice(mrpTotal)} />
                 <Row label={t('discount')} value={`- ${formatPrice(discount)}`} color="text-success-500" />
+                {diwaliDiscountAmount > 0 && (
+                  <div className="flex justify-between items-center text-xs font-bold text-amber-950 bg-gradient-to-r from-amber-100 via-yellow-100 to-amber-200 px-2.5 py-1.5 rounded-lg border border-amber-300">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-sm">🪔</span>
+                      <span>दीवाली महा धमाका छूट ({appliedDiwaliCoupon} • 20% EXTRA OFF + Free Gift Box)</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-amber-900">- {formatPrice(diwaliDiscountAmount)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAppliedDiwaliCoupon(null)}
+                        className="text-[10px] text-amber-850 hover:text-red-700 underline cursor-pointer"
+                        title="Remove coupon"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {spinDiscountAmount > 0 && (
                   <div className="flex justify-between items-center text-xs font-bold text-amber-900 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-200">
                     <span className="flex items-center gap-1.5">

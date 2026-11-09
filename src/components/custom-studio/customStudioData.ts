@@ -207,6 +207,38 @@ export const FONT_COLLECTION: FontDefinition[] = [
  * Covering Devotional, Streetwear, Rajputana/Desi, Anime, Gym, Biker, Luxury, Music, Retro, and Minimalist.
  */
 export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
+  // ================= 0. DIWALI SPECIAL EDITION =================
+  {
+    id: 'shubh_deepavali_gold',
+    name: 'Shubh Deepavali Golden Diya',
+    category: 'Devotional',
+    badge: '🪔 DIWALI SPECIAL',
+    iconSymbol: '🪔',
+    defaultText: 'शुभ दीपावली',
+    subText: 'FESTIVAL OF LIGHTS • 2026 GOLD EDITION',
+    svgDecorTop: '✨ ॐ महालक्ष्म्यै नमः • शुभ दीपावली ✨',
+    svgDecorBottom: '|| तमसो मा ज्योतिर्गमय || LIGHT OVER DARKNESS',
+    recommendedFontId: 'russo_one',
+    suggestedInkColor: '#EAB308',
+    suggestedGarmentColorId: 'black',
+    tagline: 'Divine Lakshmi Diya motif with 300 DPI metallic gold foil DTF print',
+  },
+  {
+    id: 'diwali_patakha_swag',
+    name: 'Diwali Patakha Swag',
+    category: 'Desi Swag',
+    badge: '💥 1000 WATT',
+    iconSymbol: '💥',
+    defaultText: 'FULL PATAKHA',
+    subText: '100% INDORI SWAG • 1000 WATT DHAMAKA',
+    svgDecorTop: '/// FESTIVE EXPLOSION EDITION ///',
+    svgDecorBottom: 'HIGH VOLTAGE CELEBRATION • NO SILENCE',
+    recommendedFontId: 'anton',
+    suggestedInkColor: '#F97316',
+    suggestedGarmentColorId: 'black',
+    tagline: 'High-energy cracker explosion typography for Diwali street party',
+  },
+
   // ================= 1. DEVOTIONAL & SPIRITUAL (6 Designs) =================
   {
     id: 'mahakal_trishul',

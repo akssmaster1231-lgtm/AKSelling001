@@ -203,24 +203,31 @@ export default function Header({
 
   return (
     <>
-      <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-900 via-[#1b365d] to-slate-900 shadow-md w-full border-b border-slate-800/80">
+      <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-950 via-[#1b365d] to-slate-950 shadow-md w-full border-b border-amber-400/40">
         <div className="w-full max-w-md mx-auto px-3 pt-2 pb-2.5">
           {/* Top Row: Logo & Location & Action Buttons */}
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-2 min-w-0">
               <button onClick={onNavigateHome} className="flex items-center gap-1.5 shrink-0 group text-left" id="header-logo-btn">
-                <img
-                  src="/ak_brand_logo.jpg"
-                  alt="AKSelling"
-                  className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-amber-400/50 shadow-xs group-hover:border-amber-300 transition-all shrink-0"
-                />
+                <div className="relative">
+                  <img
+                    src="/ak_brand_logo.jpg"
+                    alt="AKSelling"
+                    className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-amber-400/50 shadow-xs group-hover:border-amber-300 transition-all shrink-0"
+                  />
+                  <span className="absolute -top-1.5 -right-1.5 text-xs drop-shadow-md select-none animate-bounce" style={{ animationDuration: '2.5s' }}>
+                    🪔
+                  </span>
+                </div>
                 <div className="flex flex-col leading-tight">
                   <span className="text-base font-black text-white tracking-tight drop-shadow-xs flex items-center gap-0.5">
                     AK<span className="text-amber-400 group-hover:text-yellow-300 transition-colors">Selling</span>
                   </span>
-                  <span className="text-[9px] font-extrabold text-amber-300/90 tracking-wider uppercase">
-                    AKSelling Store
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] font-extrabold text-amber-300/90 tracking-wider uppercase">
+                      AKSelling Store
+                    </span>
+                  </div>
                 </div>
               </button>
               <HeaderLocationWidget />

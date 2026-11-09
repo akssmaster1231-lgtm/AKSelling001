@@ -36,6 +36,7 @@ import EdgeSwipeBackContainer from '@/components/navigation/EdgeSwipeBackContain
 import { PWAInstallBanner } from '@/components/pwa/PWAInstallBanner';
 import { WhatsAppFloatingButton } from '@/components/support/WhatsAppFloatingButton';
 import SeoHeadManager from '@/components/seo/SeoHeadManager';
+import DiwaliFestiveOverlay from '@/components/diwali/DiwaliFestiveOverlay';
 
 function AppContent() {
   const { user, authInitialized } = useAuth();
@@ -723,6 +724,9 @@ function AppContent() {
 
       {/* Official WhatsApp Floating Support Button */}
       <WhatsAppFloatingButton />
+
+      {/* Diwali Festive Golden Rain & Fireworks Overlay */}
+      <DiwaliFestiveOverlay />
       </div>
     </div>
     </EdgeSwipeBackContainer>

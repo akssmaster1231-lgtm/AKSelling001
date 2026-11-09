@@ -250,7 +250,9 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
     ? Math.round((effectiveCartTotal * spinDiscount.discountPercent) / 100)
     : 0;
 
-  const subtotalAfterSpinDiscount = Math.max(1, effectiveCartTotal - spinDiscountAmount);
+  const diwaliDiscountAmount = Math.round((effectiveCartTotal * 20) / 100);
+
+  const subtotalAfterSpinDiscount = Math.max(1, effectiveCartTotal - spinDiscountAmount - diwaliDiscountAmount);
   const totalAmount = subtotalAfterSpinDiscount + deliveryFee;
 
   // Wallet Rewards Balance & Redemption (Retaining ₹30+ Welcome Rewards & Earned Cashback)
@@ -1079,6 +1081,15 @@ export default function CartPage({ onProductClick, onContinueShopping, onBuyNow,
             <div className="p-4 space-y-2.5">
               <PriceRow label={`Price (${cartCount} items)`} value={formatPrice(mrpTotal)} />
               <PriceRow label="Discount" value={`- ${formatPrice(discount)}`} color="text-success-500" />
+              {diwaliDiscountAmount > 0 && (
+                <div className="flex justify-between items-center text-xs font-bold text-amber-950 bg-gradient-to-r from-amber-100 via-yellow-100 to-amber-200 px-2.5 py-1.5 rounded-lg border border-amber-300">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-sm">🪔</span>
+                    <span>दीवाली महा धमाका छूट (SHUBHLAXMI • 20% EXTRA OFF + Free Gift Box)</span>
+                  </span>
+                  <span className="font-black text-amber-900">- {formatPrice(diwaliDiscountAmount)}</span>
+                </div>
+              )}
               {spinDiscountAmount > 0 && (
                 <div className="flex justify-between items-center text-xs font-bold text-amber-900 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-200">
                   <span className="flex items-center gap-1.5">

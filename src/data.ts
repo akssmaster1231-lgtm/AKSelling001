@@ -399,11 +399,11 @@ export function getAllCategories(): Category[] {
 export const banners: Banner[] = [
   {
     id: 'b1',
-    title: 'BIG FESTIVE PRICE DROP • 50%–80% OFF',
-    subtitle: 'Extra ₹50 Off via Wallet + 5% UPI Instant Discount • 180 GSM Bio-Wash Streetwear Tees from ₹299',
-    cta: 'Grab Deal Now',
-    image: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=1200&q=80',
-    gradient: 'from-slate-950 via-[#1b365d] to-slate-900',
+    title: '🪔 SHUBH DEEPAVALI • BIG DIWALI DHAMAKA 80% OFF',
+    subtitle: 'Flat 20% Extra with Code SHUBHLAXMI • Free Diwali Gift Box on Every Order • Pure Combed Cotton from ₹299',
+    cta: 'Claim Diwali Deal 🪔',
+    image: 'https://images.unsplash.com/photo-1605647540924-852290f6b0d5?auto=format&fit=crop&w=1200&q=80',
+    gradient: 'from-amber-600 via-orange-600 to-rose-900',
   },
   {
     id: 'b2',

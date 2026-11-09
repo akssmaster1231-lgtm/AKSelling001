@@ -12,6 +12,7 @@ import { CottonShowcaseBox, StreetwearShowcaseBox, PrintingShowcaseBox } from '@
 import BannerCarousel from '@/components/BannerCarousel';
 import UrgencyTimerBar from '@/components/UrgencyTimerBar';
 import CustomApparelStudioModal from '@/components/custom-studio/CustomApparelStudioModal';
+import Diwali3DShowcaseCard from '@/components/diwali/Diwali3DShowcaseCard';
 
 interface HomePageProps {
   searchQuery: string;
@@ -349,6 +350,14 @@ export default function HomePage({
 
   return (
     <div className="pb-4 w-full overflow-x-hidden touch-scroll-container">
+      {/* 🪔 3D DIWALI SHOWCASE VIDEO WALL & CRACKER LAUNCHER 🪔 */}
+      <div className="px-3 pt-3">
+        <Diwali3DShowcaseCard
+          onExploreFestiveDeals={onNavigateDeals}
+          onOpenCustomStudio={() => setShowCustomStudio(true)}
+        />
+      </div>
+
       {/* High-Quality Promotional Banners & Posters (Official AKSelling Carousel) */}
       <div className="px-3 pt-3">
         <BannerCarousel banners={bannersList} onBannerClick={handleBannerClick} />
